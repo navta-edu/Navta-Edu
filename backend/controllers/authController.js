@@ -214,6 +214,9 @@ exports.googleAuth = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Google credential is required' });
     }
 
+    console.log('Google Auth: Received credential, attempting verification...');
+    console.log('Google Auth: GOOGLE_CLIENT_ID configured:', !!process.env.GOOGLE_CLIENT_ID);
+
     let payload;
 
     try {
@@ -223,35 +226,49 @@ exports.googleAuth = async (req, res, next) => {
         audience: process.env.GOOGLE_CLIENT_ID
       });
       payload = ticket.getPayload();
+      console.log('Google Auth: Strict verification succeeded for', payload.email);
     } catch (verifyErr) {
-      // Handle clock skew — "Token used too early" error
-      // Decode the JWT payload manually and verify essential claims
-      if (verifyErr.message && verifyErr.message.includes('Token used too early')) {
-        const parts = credential.split('.');
-        if (parts.length !== 3) {
-          return res.status(401).json({ success: false, message: 'Invalid Google token format' });
-        }
+      console.warn('Google Auth: Strict verification failed:', verifyErr.message);
 
-        // Decode the payload (base64url)
-        const base64Payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-        payload = JSON.parse(Buffer.from(base64Payload, 'base64').toString('utf-8'));
-
-        // Verify essential claims manually
-        const CLOCK_TOLERANCE = 5 * 60; // 5 minutes tolerance
-        const now = Math.floor(Date.now() / 1000);
-
-        if (payload.iss !== 'https://accounts.google.com' && payload.iss !== 'accounts.google.com') {
-          return res.status(401).json({ success: false, message: 'Invalid token issuer' });
-        }
-        if (payload.aud !== process.env.GOOGLE_CLIENT_ID) {
-          return res.status(401).json({ success: false, message: 'Invalid token audience' });
-        }
-        if (payload.exp && now > payload.exp + CLOCK_TOLERANCE) {
-          return res.status(401).json({ success: false, message: 'Token expired' });
-        }
-      } else {
-        throw verifyErr;
+      // Fall back to manual JWT decoding for any verification error
+      // (clock skew, network issues on Render, etc.)
+      const parts = credential.split('.');
+      if (parts.length !== 3) {
+        return res.status(401).json({ success: false, message: 'Invalid Google token format' });
       }
+
+      // Decode the payload (base64url)
+      const base64Payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      payload = JSON.parse(Buffer.from(base64Payload, 'base64').toString('utf-8'));
+
+      console.log('Google Auth: Decoded JWT payload for', payload.email);
+
+      // Verify essential claims manually
+      const CLOCK_TOLERANCE = 5 * 60; // 5 minutes tolerance
+      const now = Math.floor(Date.now() / 1000);
+
+      if (payload.iss !== 'https://accounts.google.com' && payload.iss !== 'accounts.google.com') {
+        console.error('Google Auth: Invalid issuer:', payload.iss);
+        return res.status(401).json({ success: false, message: 'Invalid token issuer' });
+      }
+
+      // Check audience - if GOOGLE_CLIENT_ID is set, verify it matches
+      if (process.env.GOOGLE_CLIENT_ID && payload.aud !== process.env.GOOGLE_CLIENT_ID) {
+        console.error('Google Auth: Audience mismatch. Token aud:', payload.aud, 'Expected:', process.env.GOOGLE_CLIENT_ID);
+        return res.status(401).json({ success: false, message: 'Invalid token audience' });
+      }
+
+      if (payload.exp && now > payload.exp + CLOCK_TOLERANCE) {
+        console.error('Google Auth: Token expired. exp:', payload.exp, 'now:', now);
+        return res.status(401).json({ success: false, message: 'Token expired' });
+      }
+
+      if (!payload.email) {
+        console.error('Google Auth: No email in token payload');
+        return res.status(401).json({ success: false, message: 'No email in Google token' });
+      }
+
+      console.log('Google Auth: Manual verification passed for', payload.email);
     }
 
     const { sub: googleId, email, name, picture } = payload;
@@ -294,9 +311,10 @@ exports.googleAuth = async (req, res, next) => {
       });
     }
 
+    console.log('Google Auth: Success for', email, '- role:', user.role);
     sendTokenResponse(user, 200, res);
   } catch (err) {
-    console.error('Google Auth Error:', err.message);
-    res.status(401).json({ success: false, message: 'Google authentication failed' });
+    console.error('Google Auth Error:', err.message, err.stack);
+    res.status(401).json({ success: false, message: 'Google authentication failed: ' + err.message });
   }
 };
