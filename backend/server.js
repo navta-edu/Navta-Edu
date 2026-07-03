@@ -14,10 +14,18 @@ app.use(cors({
   origin: [
     'https://navta.vercel.app',
     'http://localhost:5173',
+    'http://localhost:5174',
     'http://localhost:3000'
   ],
   credentials: true
 }));
+
+// Set Cross-Origin-Opener-Policy to allow Google OAuth popups
+app.use((req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  next();
+});
+
 app.use(express.json());
 
 // Dev logging middleware
