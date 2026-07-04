@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Build output
+frontend/dist/
+frontend/.vite/
+
+# Environment variables
+backend/.env
+.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Temp scripts
+fix_colors.ps1
+test_backend.ps1
+backend_out.txt
+backend_err.txt

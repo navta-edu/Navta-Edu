@@ -1,0 +1,18 @@
+{
+  "name": "navta",
+  "version": "1.0.0",
+  "description": "Navta - Modern Educational Platform for Students and Teachers",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "start:backend": "cd backend && npm start",
+    "build:frontend": "cd frontend && npm run build",
+    "seed": "cd backend && npm run seed",
+    "install:all": "cd frontend && npm install && cd ../backend && npm install",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
+  },
+  "author": "Navta Team",
+  "license": "ISC"
+}
