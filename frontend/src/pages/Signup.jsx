@@ -32,6 +32,8 @@ export default function Signup() {
       navigate('/admin');
     } else if (user.role === 'teacher') {
       navigate('/teacher');
+    } else if (user.role === 'external_teacher') {
+      navigate('/external-teacher');
     } else {
       navigate('/dashboard');
     }

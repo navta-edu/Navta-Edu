@@ -17,6 +17,7 @@ import Unauthorized from './pages/Unauthorized';
 // Private Pages
 import StudentDashboard from './pages/StudentDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
+import ExternalTeacherDashboard from './pages/ExternalTeacherDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import NotesPage from './pages/NotesPage';
 import PYQPage from './pages/PYQPage';
@@ -116,13 +117,18 @@ export default function App() {
               <Route path="/teacher" element={<TeacherDashboard />} />
             </Route>
 
+            {/* External Teacher only pages */}
+            <Route element={<RoleGuard allowedRoles={['external_teacher']} />}>
+              <Route path="/external-teacher" element={<ExternalTeacherDashboard />} />
+            </Route>
+
             {/* Admin only pages */}
             <Route element={<RoleGuard allowedRoles={['admin']} />}>
               <Route path="/admin" element={<AdminDashboard />} />
             </Route>
 
-            {/* Shared Secure Pages (Student + Teacher + Admin) */}
-            <Route element={<RoleGuard allowedRoles={['student', 'teacher', 'admin']} />}>
+            {/* Shared Secure Pages (Student + Teacher + Admin + External Teacher) */}
+            <Route element={<RoleGuard allowedRoles={['student', 'teacher', 'admin', 'external_teacher']} />}>
               <Route path="/notes" element={<NotesPage />} />
               <Route path="/pyqs" element={<PYQPage />} />
               <Route path="/assessments" element={<AssessmentPage />} />

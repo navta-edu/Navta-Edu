@@ -96,10 +96,10 @@ export default function AssessmentPage() {
     }
   };
 
-  const handleOptionSelect = (qId, optIdx) => {
+  const handleAnswerChange = (qId, answer) => {
     setSelectedOptions({
       ...selectedOptions,
-      [qId]: optIdx
+      [qId]: answer
     });
   };
 
@@ -123,10 +123,19 @@ export default function AssessmentPage() {
   const submitTestAnswers = async () => {
     if (timerIntervalId) clearInterval(timerIntervalId);
     
-    const formattedAnswers = activeTest.questions.map((q) => ({
-      questionId: q._id,
-      selectedOption: selectedOptions[q._id] !== undefined ? selectedOptions[q._id] : null
-    }));
+    const formattedAnswers = activeTest.questions.map((q) => {
+      const ans = selectedOptions[q._id];
+      if (q.questionType && q.questionType !== 'mcq') {
+        return {
+          questionId: q._id,
+          textAnswer: ans || ''
+        };
+      }
+      return {
+        questionId: q._id,
+        selectedOption: ans !== undefined ? ans : null
+      };
+    });
 
     const timeTaken = (activeTest.duration * 60) - timeLeft;
 
@@ -200,27 +209,45 @@ export default function AssessmentPage() {
           </h3>
 
           <div className="space-y-3">
-            {currentQuestion.options.map((opt, idx) => {
-              const isSelected = selectedOptions[currentQuestion._id] === idx;
-              return (
-                <button
-                  key={idx}
-                  onClick={() => handleOptionSelect(currentQuestion._id, idx)}
-                  className={`w-full text-left p-4 rounded-2xl border text-sm font-semibold transition-all duration-150 flex items-center gap-3 ${
-                    isSelected
-                      ? 'bg-primary-50 dark:bg-primary-950/20 border-primary-500 text-primary-600 dark:text-primary-400 ring-2 ring-primary-500/10'
-                      : 'bg-white dark:bg-slate-950 border-slate-100 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  <span className={`w-6 h-6 flex items-center justify-center rounded-xl font-black text-xs ${
-                    isSelected ? 'bg-primary-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
-                  }`}>
-                    {String.fromCharCode(65 + idx)}
-                  </span>
-                  <span>{opt}</span>
-                </button>
-              );
-            })}
+            {(!currentQuestion.questionType || currentQuestion.questionType === 'mcq') ? (
+              currentQuestion.options.map((opt, idx) => {
+                const isSelected = selectedOptions[currentQuestion._id] === idx;
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => handleAnswerChange(currentQuestion._id, idx)}
+                    className={`w-full text-left p-4 rounded-2xl border text-sm font-semibold transition-all duration-150 flex items-center gap-3 ${
+                      isSelected
+                        ? 'bg-primary-50 dark:bg-primary-950/20 border-primary-500 text-primary-600 dark:text-primary-400 ring-2 ring-primary-500/10'
+                        : 'bg-white dark:bg-slate-950 border-slate-100 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <span className={`w-6 h-6 flex items-center justify-center rounded-xl font-black text-xs ${
+                      isSelected ? 'bg-primary-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                    }`}>
+                      {String.fromCharCode(65 + idx)}
+                    </span>
+                    <span>{opt}</span>
+                  </button>
+                );
+              })
+            ) : currentQuestion.questionType === 'short' ? (
+              <input
+                type="text"
+                value={selectedOptions[currentQuestion._id] || ''}
+                onChange={(e) => handleAnswerChange(currentQuestion._id, e.target.value)}
+                placeholder="Type your short answer here..."
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+              />
+            ) : (
+              <textarea
+                rows="4"
+                value={selectedOptions[currentQuestion._id] || ''}
+                onChange={(e) => handleAnswerChange(currentQuestion._id, e.target.value)}
+                placeholder="Type your detailed answer here..."
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+              />
+            )}
           </div>
         </Card>
 
@@ -324,28 +351,45 @@ export default function AssessmentPage() {
                   </span>
                 </div>
 
-                {/* Options List */}
-                <div className="grid md:grid-cols-2 gap-3 mt-4">
-                  {q.options.map((opt, oIdx) => {
-                    const isCorrectOption = q.correctOption === oIdx;
-                    const isUserChoice = userAnswer?.selectedOption === oIdx;
-                    
-                    let borderStyles = 'border-slate-100 dark:border-slate-800/40 bg-slate-50/50 dark:bg-slate-950/20 text-slate-600 dark:text-slate-400';
-                    if (isCorrectOption) {
-                      borderStyles = 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 font-bold';
-                    } else if (isUserChoice && !isCorrect) {
-                      borderStyles = 'border-rose-500 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 font-bold';
-                    }
+                {/* Options / Text Answer List */}
+                {(!q.questionType || q.questionType === 'mcq') ? (
+                  <div className="grid md:grid-cols-2 gap-3 mt-4">
+                    {q.options.map((opt, oIdx) => {
+                      const isCorrectOption = q.correctOption === oIdx;
+                      const isUserChoice = userAnswer?.selectedOption === oIdx;
+                      
+                      let borderStyles = 'border-slate-100 dark:border-slate-800/40 bg-slate-50/50 dark:bg-slate-950/20 text-slate-600 dark:text-slate-400';
+                      if (isCorrectOption) {
+                        borderStyles = 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 font-bold';
+                      } else if (isUserChoice && !isCorrect) {
+                        borderStyles = 'border-rose-500 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 font-bold';
+                      }
 
-                    return (
-                      <div key={oIdx} className={`p-3.5 rounded-xl border text-xs flex items-center justify-between ${borderStyles}`}>
-                        <span>{opt}</span>
-                        {isCorrectOption && <Check className="w-4 h-4 text-emerald-500" />}
-                        {isUserChoice && !isCorrect && <X className="w-4 h-4 text-rose-500" />}
-                      </div>
-                    );
-                  })}
-                </div>
+                      return (
+                        <div key={oIdx} className={`p-3.5 rounded-xl border text-xs flex items-center justify-between ${borderStyles}`}>
+                          <span>{opt}</span>
+                          {isCorrectOption && <Check className="w-4 h-4 text-emerald-500" />}
+                          {isUserChoice && !isCorrect && <X className="w-4 h-4 text-rose-500" />}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="grid md:grid-cols-2 gap-3 mt-4">
+                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                      <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-2">Your Answer</p>
+                      <p className={`text-sm ${isCorrect ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-700 dark:text-slate-300'}`}>
+                        {userAnswer?.textAnswer || <span className="text-slate-400 italic">No answer provided</span>}
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20">
+                      <p className="text-[10px] uppercase font-bold tracking-wider text-emerald-600/70 dark:text-emerald-400/70 mb-2">Correct Answer / Keywords</p>
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                        {q.correctAnswer}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Explanatory notes */}
                 {q.explanation && (

@@ -99,9 +99,11 @@ exports.createTest = async (req, res) => {
       const question = await Question.create({
         subject: subjectId,
         chapter: chapterId || null,
+        questionType: q.questionType || 'mcq',
         text: q.text,
         options: q.options,
         correctOption: q.correctOption,
+        correctAnswer: q.correctAnswer,
         explanation: q.explanation || '',
         difficulty: q.difficulty || 'medium'
       });

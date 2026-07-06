@@ -23,14 +23,29 @@ exports.submitTest = async (req, res) => {
     let correctCount = 0;
     const gradedAnswers = test.questions.map((q) => {
       const submitted = answers.find(a => a.questionId === q._id.toString());
-      const selectedOption = submitted ? submitted.selectedOption : null;
-      const isCorrect = selectedOption !== null && selectedOption === q.correctOption;
+      
+      let isCorrect = false;
+      let selectedOption = null;
+      let textAnswer = null;
+
+      if (submitted) {
+        if (q.questionType === 'mcq') {
+          selectedOption = submitted.selectedOption;
+          isCorrect = selectedOption !== null && selectedOption === q.correctOption;
+        } else {
+          textAnswer = submitted.textAnswer || '';
+          if (q.correctAnswer && textAnswer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()) {
+            isCorrect = true;
+          }
+        }
+      }
       
       if (isCorrect) correctCount++;
 
       return {
         question: q._id,
         selectedOption,
+        textAnswer,
         isCorrect
       };
     });

@@ -92,7 +92,7 @@ export default function AdminDashboard() {
   const [quizDuration, setQuizDuration] = useState('');
   const [quizPass, setQuizPass] = useState('');
   const [quizQuestions, setQuizQuestions] = useState([
-    { text: '', options: ['', '', '', ''], correctOption: 0, explanation: '' }
+    { questionType: 'mcq', text: '', options: ['', '', '', ''], correctOption: 0, correctAnswer: '', explanation: '' }
   ]);
 
   const fetchData = async () => {
@@ -377,7 +377,7 @@ export default function AdminDashboard() {
   };
 
   const addQuestionField = () => {
-    setQuizQuestions([...quizQuestions, { text: '', options: ['', '', '', ''], correctOption: 0, explanation: '' }]);
+    setQuizQuestions([...quizQuestions, { questionType: 'mcq', text: '', options: ['', '', '', ''], correctOption: 0, correctAnswer: '', explanation: '' }]);
   };
 
   const handleCreateQuiz = async (e) => {
@@ -396,7 +396,7 @@ export default function AdminDashboard() {
       alert('Interactive Quiz created successfully!');
       setQuizTitle('');
       setQuizDesc('');
-      setQuizQuestions([{ text: '', options: ['', '', '', ''], correctOption: 0, explanation: '' }]);
+      setQuizQuestions([{ questionType: 'mcq', text: '', options: ['', '', '', ''], correctOption: 0, correctAnswer: '', explanation: '' }]);
     } catch (err) {
       alert(err.message);
     }
@@ -542,6 +542,7 @@ export default function AdminDashboard() {
                   <select value={uRole} onChange={(e) => setURole(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none">
                     <option value="student">Student</option>
                     <option value="teacher">Teacher</option>
+                    <option value="external_teacher">External Teacher</option>
                     <option value="admin">Admin</option>
                   </select>
                 </div>
@@ -569,9 +570,9 @@ export default function AdminDashboard() {
                     <td className="py-3.5">{u.email}</td>
                     <td className="py-3.5 capitalize">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        u.role === 'admin' ? 'bg-rose-50 text-rose-600' : u.role === 'teacher' ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600'
+                        u.role === 'admin' ? 'bg-rose-50 text-rose-600' : u.role === 'teacher' ? 'bg-indigo-50 text-indigo-600' : u.role === 'external_teacher' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
                       }`}>
-                        {u.role}
+                        {u.role.replace('_', ' ')}
                       </span>
                     </td>
                     <td className="py-3.5">
@@ -1059,26 +1060,55 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-4">
-                    {q.options.map((opt, optIdx) => (
-                      <div key={optIdx} className="flex items-center gap-3">
-                        <input
-                          type="radio"
-                          name={`correctOpt-${qIdx}`}
-                          checked={q.correctOption === optIdx}
-                          onChange={() => handleQuizQuestionChange(qIdx, 'correctOption', optIdx)}
-                          className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
-                        />
-                        <input
-                          type="text"
-                          required
-                          value={opt}
-                          onChange={(e) => handleQuizQuestionChange(qIdx, 'options', e.target.value, optIdx)}
-                          placeholder={`Option ${optIdx + 1}`}
-                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
-                        />
-                      </div>
-                    ))}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Question Type</label>
+                      <select
+                        value={q.questionType || 'mcq'}
+                        onChange={(e) => handleQuizQuestionChange(qIdx, 'questionType', e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                      >
+                        <option value="mcq">Multiple Choice</option>
+                        <option value="short">Short Answer</option>
+                        <option value="long">Long Answer</option>
+                      </select>
+                    </div>
                   </div>
+
+                  {(!q.questionType || q.questionType === 'mcq') ? (
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {q.options.map((opt, optIdx) => (
+                        <div key={optIdx} className="flex items-center gap-3">
+                          <input
+                            type="radio"
+                            name={`correctOpt-${qIdx}`}
+                            checked={q.correctOption === optIdx}
+                            onChange={() => handleQuizQuestionChange(qIdx, 'correctOption', optIdx)}
+                            className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                          />
+                          <input
+                            type="text"
+                            required
+                            value={opt}
+                            onChange={(e) => handleQuizQuestionChange(qIdx, 'options', e.target.value, optIdx)}
+                            placeholder={`Option ${optIdx + 1}`}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Correct Answer / Keyword(s)</label>
+                      <textarea
+                        required
+                        rows="2"
+                        value={q.correctAnswer || ''}
+                        onChange={(e) => handleQuizQuestionChange(qIdx, 'correctAnswer', e.target.value)}
+                        placeholder="Enter the exact answer expected..."
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                      />
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Explanation (Optional)</label>

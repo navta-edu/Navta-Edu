@@ -57,6 +57,14 @@ const seedData = async () => {
       isVerified: true
     });
 
+    const externalTeacherUser = await User.create({
+      name: 'Prof. Guest',
+      email: 'external@navta.com',
+      password: 'password123',
+      role: 'external_teacher',
+      isVerified: true
+    });
+
     const studentUser = await User.create({
       name: 'John Doe',
       email: 'student@navta.com',

@@ -51,7 +51,7 @@ export default function TeacherDashboard() {
   const [quizDuration, setQuizDuration] = useState('10');
   const [quizPass, setQuizPass] = useState('40');
   const [quizQuestions, setQuizQuestions] = useState([
-    { text: '', options: ['', '', '', ''], correctOption: 0, explanation: '' }
+    { questionType: 'mcq', text: '', options: ['', '', '', ''], correctOption: 0, correctAnswer: '', explanation: '' }
   ]);
 
   // Question Form
@@ -176,7 +176,7 @@ export default function TeacherDashboard() {
   };
 
   const addQuestionField = () => {
-    setQuizQuestions([...quizQuestions, { text: '', options: ['', '', '', ''], correctOption: 0, explanation: '' }]);
+    setQuizQuestions([...quizQuestions, { questionType: 'mcq', text: '', options: ['', '', '', ''], correctOption: 0, correctAnswer: '', explanation: '' }]);
   };
 
   const handleCreateQuiz = async (e) => {
@@ -195,7 +195,7 @@ export default function TeacherDashboard() {
       alert('Interactive Quiz created successfully!');
       setQuizTitle('');
       setQuizDesc('');
-      setQuizQuestions([{ text: '', options: ['', '', '', ''], correctOption: 0, explanation: '' }]);
+      setQuizQuestions([{ questionType: 'mcq', text: '', options: ['', '', '', ''], correctOption: 0, correctAnswer: '', explanation: '' }]);
       fetchMetrics();
     } catch (err) {
       alert(err.message);
@@ -690,36 +690,58 @@ export default function TeacherDashboard() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {q.options.map((opt, oIdx) => (
-                      <div key={oIdx}>
-                        <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Option {String.fromCharCode(65 + oIdx)}</label>
-                        <input
-                          type="text"
-                          required
-                          value={opt}
-                          onChange={(e) => handleQuizQuestionChange(qIdx, 'options', e.target.value, oIdx)}
-                          placeholder={`Option ${oIdx + 1}`}
-                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Correct Answer Index</label>
+                      <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Question Type</label>
                       <select
-                        value={q.correctOption}
-                        onChange={(e) => handleQuizQuestionChange(qIdx, 'correctOption', e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                        value={q.questionType || 'mcq'}
+                        onChange={(e) => handleQuizQuestionChange(qIdx, 'questionType', e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
                       >
-                        <option value="0">Option A</option>
-                        <option value="1">Option B</option>
-                        <option value="2">Option C</option>
-                        <option value="3">Option D</option>
+                        <option value="mcq">Multiple Choice</option>
+                        <option value="short">Short Answer</option>
+                        <option value="long">Long Answer</option>
                       </select>
                     </div>
+                  </div>
+
+                  {(!q.questionType || q.questionType === 'mcq') ? (
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {q.options.map((opt, optIdx) => (
+                        <div key={optIdx} className="flex items-center gap-3">
+                          <input
+                            type="radio"
+                            name={`correctOpt-${qIdx}`}
+                            checked={q.correctOption === optIdx}
+                            onChange={() => handleQuizQuestionChange(qIdx, 'correctOption', optIdx)}
+                            className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                          />
+                          <input
+                            type="text"
+                            required
+                            value={opt}
+                            onChange={(e) => handleQuizQuestionChange(qIdx, 'options', e.target.value, optIdx)}
+                            placeholder={`Option ${optIdx + 1}`}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Correct Answer / Keyword(s)</label>
+                      <textarea
+                        required
+                        rows="2"
+                        value={q.correctAnswer || ''}
+                        onChange={(e) => handleQuizQuestionChange(qIdx, 'correctAnswer', e.target.value)}
+                        placeholder="Enter the exact answer expected..."
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
 
                     <div>
                       <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Explanation Description</label>

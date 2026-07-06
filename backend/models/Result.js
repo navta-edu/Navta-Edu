@@ -15,6 +15,7 @@ const ResultSchema = new mongoose.Schema({
     {
       question: { type: mongoose.Schema.ObjectId, ref: 'Question' },
       selectedOption: { type: Number }, // index chosen, or null if skipped
+      textAnswer: { type: String }, // text for short/long questions
       isCorrect: { type: Boolean }
     }
   ],

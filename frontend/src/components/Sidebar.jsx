@@ -41,6 +41,15 @@ export default function Sidebar() {
     { to: '/settings', label: 'Settings', icon: Settings }
   ];
 
+  // External Teacher Links
+  const externalTeacherLinks = [
+    { to: '/external-teacher', label: 'Overview', icon: LayoutDashboard },
+    { to: '/notes', label: 'Study Notes', icon: BookOpen },
+    { to: '/pyqs', label: 'PYQ Papers', icon: FileText },
+    { to: '/assessments', label: 'Assessments', icon: ClipboardCheck },
+    { to: '/settings', label: 'Settings', icon: Settings }
+  ];
+
   const adminLinks = [
     { to: '/admin', label: 'Platform Stats', icon: LayoutDashboard },
     { to: '/admin', label: 'User Audits', icon: Users, hash: '#users' },
@@ -52,6 +61,7 @@ export default function Sidebar() {
   const getLinks = () => {
     if (user.role === 'admin') return adminLinks;
     if (user.role === 'teacher') return teacherLinks;
+    if (user.role === 'external_teacher') return externalTeacherLinks;
     return studentLinks;
   };
 
@@ -69,7 +79,7 @@ export default function Sidebar() {
             isActive = location.pathname === link.to && location.hash === link.hash;
           } else {
             // For dashboard/admin base routes, active only if no hash
-            if (link.to === '/admin' || link.to === '/dashboard' || link.to === '/teacher') {
+            if (link.to === '/admin' || link.to === '/dashboard' || link.to === '/teacher' || link.to === '/external-teacher') {
               isActive = location.pathname === link.to && !location.hash;
             } else {
               isActive = location.pathname.startsWith(link.to);
