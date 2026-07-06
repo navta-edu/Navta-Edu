@@ -14,7 +14,11 @@ import {
   Trash2,
   Check,
   X,
-  BookOpen
+  BookOpen,
+  PlusCircle,
+  FileText,
+  HelpCircle,
+  Upload
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -71,6 +75,26 @@ export default function AdminDashboard() {
   const [noteContent, setNoteContent] = useState('');
   const [notePdf, setNotePdf] = useState('');
 
+  // Chapter Form
+  const [chapterTitle, setChapterTitle] = useState('');
+  const [chapterNum, setChapterNum] = useState('');
+  const [chapterDesc, setChapterDesc] = useState('');
+
+  // PYQ Form
+  const [pyqYear, setPyqYear] = useState('');
+  const [pyqExam, setPyqExam] = useState('');
+  const [pyqTitle, setPyqTitle] = useState('');
+  const [pyqPdf, setPyqPdf] = useState('');
+
+  // Quiz Form
+  const [quizTitle, setQuizTitle] = useState('');
+  const [quizDesc, setQuizDesc] = useState('');
+  const [quizDuration, setQuizDuration] = useState('');
+  const [quizPass, setQuizPass] = useState('');
+  const [quizQuestions, setQuizQuestions] = useState([
+    { text: '', options: ['', '', '', ''], correctOption: 0, explanation: '' }
+  ]);
+
   const fetchData = async () => {
     try {
       const statsRes = await adminAPI.getDashboardStats();
@@ -121,7 +145,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const hash = location.hash.replace('#', '');
-    if (hash && ['stats', 'users', 'studyMaterial', 'reward', 'questions', 'note'].includes(hash)) {
+    if (hash && ['stats', 'users', 'studyMaterial', 'reward', 'questions', 'note', 'chapter', 'pyq', 'quiz'].includes(hash)) {
       setActiveSection(hash);
     } else if (!hash) {
       setActiveSection('stats');
@@ -298,6 +322,86 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleAddChapter = async (e) => {
+    e.preventDefault();
+    if (!selectedSubject) {
+      alert('Please select a subject first.');
+      return;
+    }
+    try {
+      await adminAPI.createChapter({
+        subjectId: selectedSubject,
+        title: chapterTitle,
+        chapterNumber: Number(chapterNum),
+        description: chapterDesc
+      });
+      alert('Chapter created successfully!');
+      setChapterTitle('');
+      setChapterNum('');
+      setChapterDesc('');
+      fetchData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleAddPYQ = async (e) => {
+    e.preventDefault();
+    try {
+      await adminAPI.createPYQ({
+        subjectId: selectedSubject,
+        chapterId: selectedChapter || undefined,
+        year: pyqYear,
+        examName: pyqExam,
+        title: pyqTitle,
+        pdfUrl: pyqPdf
+      });
+      alert('PYQ paper added successfully!');
+      setPyqYear('');
+      setPyqExam('');
+      setPyqTitle('');
+      setPyqPdf('');
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleQuizQuestionChange = (index, field, value, optIdx = null) => {
+    const updated = [...quizQuestions];
+    if (optIdx !== null) {
+      updated[index].options[optIdx] = value;
+    } else {
+      updated[index][field] = value;
+    }
+    setQuizQuestions(updated);
+  };
+
+  const addQuestionField = () => {
+    setQuizQuestions([...quizQuestions, { text: '', options: ['', '', '', ''], correctOption: 0, explanation: '' }]);
+  };
+
+  const handleCreateQuiz = async (e) => {
+    e.preventDefault();
+    try {
+      await adminAPI.createTest({
+        title: quizTitle,
+        description: quizDesc,
+        subjectId: selectedSubject,
+        chapterId: selectedChapter || undefined,
+        duration: quizDuration,
+        type: 'Quiz',
+        questions: quizQuestions,
+        passingScore: quizPass
+      });
+      alert('Interactive Quiz created successfully!');
+      setQuizTitle('');
+      setQuizDesc('');
+      setQuizQuestions([{ text: '', options: ['', '', '', ''], correctOption: 0, explanation: '' }]);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-[80vh] items-center justify-center">
@@ -349,7 +453,10 @@ export default function AdminDashboard() {
           { id: 'stats', label: 'Overview Metrics', icon: TrendingUp },
           { id: 'users', label: 'User Auditing', icon: Users },
           { id: 'studyMaterial', label: 'Study Material', icon: BookOpen },
+          { id: 'chapter', label: 'Add Chapter', icon: PlusCircle },
           { id: 'note', label: 'Upload Note', icon: BookOpen },
+          { id: 'pyq', label: 'Upload PYQ Paper', icon: FileText },
+          { id: 'quiz', label: 'Build Quiz', icon: HelpCircle },
           { id: 'reward', label: 'Reward Catalog', icon: Award },
           { id: 'questions', label: 'Question Bank', icon: PlusSquare }
         ].map((tab) => {
@@ -637,6 +744,63 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Chapter Upload Tab */}
+      {activeSection === 'chapter' && (
+        <Card title="Create New Chapter Module" subtitle="Chapters organize course content and exams">
+          <form onSubmit={handleAddChapter} className="space-y-4 mt-4 max-w-xl">
+            <div>
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Select Subject</label>
+              <select
+                value={selectedSubject}
+                onChange={(e) => setSelectedSubject(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+              >
+                {subjects.map(s => <option key={s._id || s.id} value={s._id || s.id}>{s.name} ({s.code})</option>)}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2">
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Chapter Title</label>
+                <input
+                  type="text"
+                  required
+                  value={chapterTitle}
+                  onChange={(e) => setChapterTitle(e.target.value)}
+                  placeholder="e.g. Laws of Motion"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Number</label>
+                <input
+                  type="number"
+                  required
+                  value={chapterNum}
+                  onChange={(e) => setChapterNum(e.target.value)}
+                  placeholder="e.g. 1"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Description Summary</label>
+              <textarea
+                required
+                rows="3"
+                value={chapterDesc}
+                onChange={(e) => setChapterDesc(e.target.value)}
+                placeholder="Give a brief summary of what this chapter covers..."
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+              />
+            </div>
+
+            <Button type="submit" icon={PlusCircle}>Create Chapter</Button>
+          </form>
+        </Card>
+      )}
+
       {/* Note Upload Tab */}
       {activeSection === 'note' && (
         <Card title="Upload Study Note Material" subtitle="Upload reference text summaries and PDF attachments">
@@ -702,6 +866,251 @@ export default function AdminDashboard() {
             </div>
 
             <Button type="submit" icon={BookOpen}>Publish Note to Chapter</Button>
+          </form>
+        </Card>
+      )}
+
+      {/* PYQ Upload Tab */}
+      {activeSection === 'pyq' && (
+        <Card title="Upload Past Year Exam Paper (PYQ)" subtitle="Provide question sheets from past CBSE, JEE, or NEET examinations">
+          <form onSubmit={handleAddPYQ} className="space-y-4 mt-4 max-w-xl">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Subject</label>
+                <select
+                  value={selectedSubject}
+                  onChange={(e) => setSelectedSubject(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                >
+                  {subjects.map(s => <option key={s._id || s.id} value={s._id || s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Chapter Link (Optional)</label>
+                <select
+                  value={selectedChapter}
+                  onChange={(e) => setSelectedChapter(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                >
+                  <option value="">None (Subject-wide paper)</option>
+                  {chapters.map(c => <option key={c._id || c.id} value={c._id || c.id}>Ch {c.chapterNumber}: {c.title}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Exam Year</label>
+                <input
+                  type="number"
+                  required
+                  value={pyqYear}
+                  onChange={(e) => setPyqYear(e.target.value)}
+                  placeholder="e.g. 2024"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Exam Board / Name</label>
+                <input
+                  type="text"
+                  required
+                  value={pyqExam}
+                  onChange={(e) => setPyqExam(e.target.value)}
+                  placeholder="e.g. CBSE Boards, JEE Mains"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Paper Title</label>
+              <input
+                type="text"
+                required
+                value={pyqTitle}
+                onChange={(e) => setPyqTitle(e.target.value)}
+                placeholder="e.g. CBSE Chemistry XII 2024 Final Paper"
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Paper PDF Link</label>
+              <input
+                type="url"
+                required
+                value={pyqPdf}
+                onChange={(e) => setPyqPdf(e.target.value)}
+                placeholder="https://example.com/pyq.pdf"
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+              />
+            </div>
+
+            <Button type="submit" icon={Upload}>Upload PYQ paper</Button>
+          </form>
+        </Card>
+      )}
+
+      {/* Quiz Creator Tab */}
+      {activeSection === 'quiz' && (
+        <Card title="Build Interactive Assessment Quiz" subtitle="Add multiple-choice questions with answer keys and timers">
+          <form onSubmit={handleCreateQuiz} className="space-y-6 mt-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Subject</label>
+                  <select
+                    value={selectedSubject}
+                    onChange={(e) => setSelectedSubject(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                  >
+                    {subjects.map(s => <option key={s._id || s.id} value={s._id || s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Quiz Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={quizTitle}
+                    onChange={(e) => setQuizTitle(e.target.value)}
+                    placeholder="e.g. Laws of Motion Quiz"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Chapter Link</label>
+                  <select
+                    value={selectedChapter}
+                    onChange={(e) => setSelectedChapter(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                  >
+                    <option value="">None (Subject-wide Quiz)</option>
+                    {chapters.map(c => <option key={c._id || c.id} value={c._id || c.id}>Ch {c.chapterNumber}: {c.title}</option>)}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Duration (Minutes)</label>
+                    <input
+                      type="number"
+                      required
+                      value={quizDuration}
+                      onChange={(e) => setQuizDuration(e.target.value)}
+                      placeholder="10"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Passing Score (%)</label>
+                    <input
+                      type="number"
+                      required
+                      value={quizPass}
+                      onChange={(e) => setQuizPass(e.target.value)}
+                      placeholder="40"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Quiz Description</label>
+              <textarea
+                rows="2"
+                value={quizDesc}
+                onChange={(e) => setQuizDesc(e.target.value)}
+                placeholder="Give descriptive rules or tips for taking this assessment..."
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+              />
+            </div>
+
+            {/* Questions Builder list */}
+            <div className="space-y-6 pt-4 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex justify-between items-center">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Questions List</h3>
+                <Button variant="secondary" onClick={addQuestionField} className="px-3 py-1.5 text-xs" icon={PlusCircle}>
+                  Add Question
+                </Button>
+              </div>
+
+              {quizQuestions.map((q, qIdx) => (
+                <div key={qIdx} className="p-4 rounded-3xl bg-slate-50/50 dark:bg-slate-800/10 border border-slate-100 dark:border-slate-800/50 space-y-4">
+                  <p className="text-sm font-bold text-primary-500">Question #{qIdx + 1}</p>
+                  
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Question Text</label>
+                    <textarea
+                      required
+                      rows="2"
+                      value={q.text}
+                      onChange={(e) => handleQuizQuestionChange(qIdx, 'text', e.target.value)}
+                      placeholder="Enter question text..."
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {q.options.map((opt, optIdx) => (
+                      <div key={optIdx} className="flex items-center gap-3">
+                        <input
+                          type="radio"
+                          name={`correctOpt-${qIdx}`}
+                          checked={q.correctOption === optIdx}
+                          onChange={() => handleQuizQuestionChange(qIdx, 'correctOption', optIdx)}
+                          className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                        />
+                        <input
+                          type="text"
+                          required
+                          value={opt}
+                          onChange={(e) => handleQuizQuestionChange(qIdx, 'options', e.target.value, optIdx)}
+                          placeholder={`Option ${optIdx + 1}`}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Explanation (Optional)</label>
+                    <input
+                      type="text"
+                      value={q.explanation}
+                      onChange={(e) => handleQuizQuestionChange(qIdx, 'explanation', e.target.value)}
+                      placeholder="Why is this the correct answer?"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                    />
+                  </div>
+
+                  {quizQuestions.length > 1 && (
+                    <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800/50">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = [...quizQuestions];
+                          updated.splice(qIdx, 1);
+                          setQuizQuestions(updated);
+                        }}
+                        className="text-xs font-bold text-red-500 hover:text-red-700 transition-colors"
+                      >
+                        Remove Question
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <Button type="submit" icon={PlusCircle}>Compile and Save Quiz</Button>
           </form>
         </Card>
       )}

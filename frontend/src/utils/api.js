@@ -946,7 +946,10 @@ export const adminAPI = {
   getQuestions: () => executeRequest(api.get('/admin/questions'), () => mockAPI.admin.getQuestions()),
   createQuestion: (data) => executeRequest(api.post('/admin/questions', data), () => mockAPI.admin.createQuestion(data)),
   deleteQuestion: (id) => executeRequest(api.delete(`/admin/questions/${id}`), () => mockAPI.admin.deleteQuestion(id)),
-  createNote: (data) => executeRequest(api.post('/teacher/notes', data), () => mockAPI.teacher.createNote(data))
+  createNote: (data) => executeRequest(api.post('/teacher/notes', data), () => mockAPI.teacher.createNote(data)),
+  createChapter: (data) => executeRequest(api.post('/teacher/chapters', data), () => mockAPI.teacher.createChapter(data)),
+  createPYQ: (data) => executeRequest(api.post('/teacher/pyqs', data), () => mockAPI.teacher.createPYQ(data)),
+  createTest: (data) => executeRequest(api.post('/teacher/tests', data), () => mockAPI.teacher.createTest(data))
 };
 
 export default api;
