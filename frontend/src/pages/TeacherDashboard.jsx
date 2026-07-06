@@ -12,7 +12,8 @@ import {
   FileText,
   HelpCircle,
   Upload,
-  UserCheck
+  UserCheck,
+  PlusSquare
 } from 'lucide-react';
 
 export default function TeacherDashboard() {
@@ -21,7 +22,8 @@ export default function TeacherDashboard() {
   const [subjects, setSubjects] = useState([]);
   const [chapters, setChapters] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('stats'); // 'stats', 'chapter', 'note', 'pyq', 'quiz'
+  const [activeTab, setActiveTab] = useState('stats'); // 'stats', 'chapter', 'note', 'pyq', 'quiz', 'questions'
+  const [questions, setQuestions] = useState([]);
 
   // Form states
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -52,6 +54,17 @@ export default function TeacherDashboard() {
     { text: '', options: ['', '', '', ''], correctOption: 0, explanation: '' }
   ]);
 
+  // Question Form
+  const [qType, setQType] = useState('mcq');
+  const [qText, setQText] = useState('');
+  const [qSubj, setQSubj] = useState('');
+  const [qChap, setQChap] = useState('');
+  const [qOptions, setQOptions] = useState(['', '', '', '']);
+  const [qCorrectIndex, setQCorrectIndex] = useState(0);
+  const [qCorrectAnswer, setQCorrectAnswer] = useState('');
+  const [qExplanation, setQExplanation] = useState('');
+  const [qDifficulty, setQDifficulty] = useState('medium');
+
   const fetchMetrics = async () => {
     try {
       const res = await teacherAPI.getStudentMetrics();
@@ -62,6 +75,9 @@ export default function TeacherDashboard() {
       if (subs.data?.length > 0) {
         setSelectedSubject(subs.data[0]._id);
       }
+
+      const qRes = await teacherAPI.getQuestions();
+      setQuestions(qRes.data || []);
     } catch (err) {
       console.error('Failed to load metrics:', err);
     } finally {
@@ -186,6 +202,43 @@ export default function TeacherDashboard() {
     }
   };
 
+  const handleAddQuestion = async (e) => {
+    e.preventDefault();
+    try {
+      await teacherAPI.createQuestion({
+        questionType: qType,
+        text: qText,
+        subject: qSubj || undefined,
+        chapter: qChap || undefined,
+        options: qType === 'mcq' ? qOptions : undefined,
+        correctOption: qType === 'mcq' ? Number(qCorrectIndex) : undefined,
+        correctAnswer: qType !== 'mcq' ? qCorrectAnswer : undefined,
+        explanation: qExplanation,
+        difficulty: qDifficulty
+      });
+      alert('Question added successfully!');
+      setQText('');
+      setQExplanation('');
+      setQCorrectAnswer('');
+      setQOptions(['', '', '', '']);
+      setQCorrectIndex(0);
+      fetchMetrics();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteQuestion = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this question?')) return;
+    try {
+      await teacherAPI.deleteQuestion(id);
+      alert('Question deleted');
+      fetchMetrics();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-[80vh] items-center justify-center">
@@ -246,7 +299,8 @@ export default function TeacherDashboard() {
           { id: 'chapter', label: 'Add Chapter', icon: PlusCircle },
           { id: 'note', label: 'Upload Note', icon: BookOpen },
           { id: 'pyq', label: 'Upload PYQ Paper', icon: FileText },
-          { id: 'quiz', label: 'Build Quiz', icon: HelpCircle }
+          { id: 'quiz', label: 'Build Quiz', icon: HelpCircle },
+          { id: 'questions', label: 'Question Bank', icon: PlusSquare }
         ].map((tab) => {
           const Icon = tab.icon;
           return (
@@ -685,6 +739,163 @@ export default function TeacherDashboard() {
             <Button type="submit" icon={PlusCircle}>Compile and Save Quiz</Button>
           </form>
         </Card>
+      )}
+
+      {/* Question Bank Section */}
+      {activeTab === 'questions' && (
+        <div className="space-y-6">
+          <Card title="Add New Question" subtitle="Create questions to be assigned to topics or stored generally">
+            <form onSubmit={handleAddQuestion} className="space-y-4 mt-4 max-w-xl">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Question Type</label>
+                  <select
+                    value={qType}
+                    onChange={(e) => setQType(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                  >
+                    <option value="mcq">Multiple Choice</option>
+                    <option value="short">Short Answer</option>
+                    <option value="long">Long Answer</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Subject (Optional)</label>
+                  <select
+                    value={qSubj}
+                    onChange={(e) => setQSubj(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                  >
+                    <option value="">General (No Subject)</option>
+                    {subjects.map((sub) => (
+                      <option key={sub._id || sub.id} value={sub._id || sub.id}>{sub.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Question Text</label>
+                <textarea
+                  required
+                  rows="3"
+                  value={qText}
+                  onChange={(e) => setQText(e.target.value)}
+                  placeholder="Enter the question here..."
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                />
+              </div>
+
+              {qType === 'mcq' ? (
+                <div className="space-y-3 p-4 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">MCQ Options</label>
+                  {qOptions.map((opt, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="correctOpt"
+                        checked={qCorrectIndex === i}
+                        onChange={() => setQCorrectIndex(i)}
+                        className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                      />
+                      <input
+                        type="text"
+                        required
+                        value={opt}
+                        onChange={(e) => {
+                          const newOpts = [...qOptions];
+                          newOpts[i] = e.target.value;
+                          setQOptions(newOpts);
+                        }}
+                        placeholder={`Option ${i + 1}`}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                      />
+                    </div>
+                  ))}
+                  <p className="text-xs text-slate-500">Select the radio button next to the correct option.</p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Correct Answer / Marking Key</label>
+                  <textarea
+                    required
+                    rows="3"
+                    value={qCorrectAnswer}
+                    onChange={(e) => setQCorrectAnswer(e.target.value)}
+                    placeholder="Enter the expected answer or marking key..."
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Difficulty</label>
+                  <select
+                    value={qDifficulty}
+                    onChange={(e) => setQDifficulty(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                  >
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Explanation (Optional)</label>
+                <textarea
+                  rows="2"
+                  value={qExplanation}
+                  onChange={(e) => setQExplanation(e.target.value)}
+                  placeholder="Explain the answer..."
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                />
+              </div>
+
+              <Button type="submit" icon={PlusSquare}>Add Question</Button>
+            </form>
+          </Card>
+
+          <Card title="Question Bank" subtitle="Manage all created questions">
+            <div className="overflow-x-auto mt-4">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-800 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">
+                    <th className="pb-3">Type</th>
+                    <th className="pb-3">Question</th>
+                    <th className="pb-3">Subject</th>
+                    <th className="pb-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-slate-700 dark:text-slate-300">
+                  {questions.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" className="py-4 text-center text-slate-500">No questions found</td>
+                    </tr>
+                  ) : (
+                    questions.map((q) => (
+                      <tr key={q._id || q.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                        <td className="py-3 font-medium uppercase text-xs">{q.questionType || 'MCQ'}</td>
+                        <td className="py-3 truncate max-w-xs">{q.text}</td>
+                        <td className="py-3">{q.subject?.name || q.subject || 'General'}</td>
+                        <td className="py-3 text-right">
+                          <button onClick={() => handleDeleteQuestion(q._id || q.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg">
+                            <span className="sr-only">Delete</span>
+                            <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );

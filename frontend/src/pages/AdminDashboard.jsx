@@ -63,6 +63,14 @@ export default function AdminDashboard() {
   const [qExplanation, setQExplanation] = useState('');
   const [qDifficulty, setQDifficulty] = useState('medium');
 
+  // Note Form
+  const [chapters, setChapters] = useState([]);
+  const [selectedSubject, setSelectedSubject] = useState('');
+  const [selectedChapter, setSelectedChapter] = useState('');
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteContent, setNoteContent] = useState('');
+  const [notePdf, setNotePdf] = useState('');
+
   const fetchData = async () => {
     try {
       const statsRes = await adminAPI.getDashboardStats();
@@ -73,6 +81,9 @@ export default function AdminDashboard() {
       
       const subRes = await contentAPI.getSubjects();
       setSubjects(subRes.data || []);
+      if (subRes.data?.length > 0) {
+        setSelectedSubject(subRes.data[0]._id || subRes.data[0].id);
+      }
       
       const qRes = await adminAPI.getQuestions();
       setQuestions(qRes.data || []);
@@ -88,8 +99,29 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
+    const fetchChapters = async () => {
+      if (!selectedSubject) {
+        setChapters([]);
+        return;
+      }
+      try {
+        const res = await contentAPI.getChapters(selectedSubject);
+        setChapters(res.data || []);
+        if (res.data?.length > 0) {
+          setSelectedChapter(res.data[0]._id || res.data[0].id);
+        } else {
+          setSelectedChapter('');
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchChapters();
+  }, [selectedSubject]);
+
+  useEffect(() => {
     const hash = location.hash.replace('#', '');
-    if (hash && ['stats', 'users', 'studyMaterial', 'reward', 'questions'].includes(hash)) {
+    if (hash && ['stats', 'users', 'studyMaterial', 'reward', 'questions', 'note'].includes(hash)) {
       setActiveSection(hash);
     } else if (!hash) {
       setActiveSection('stats');
@@ -244,6 +276,28 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleAddNote = async (e) => {
+    e.preventDefault();
+    if (!selectedChapter) {
+      alert('Please select a subject and a chapter first.');
+      return;
+    }
+    try {
+      await adminAPI.createNote({
+        chapterId: selectedChapter,
+        title: noteTitle,
+        content: noteContent,
+        pdfUrl: notePdf
+      });
+      alert('Note uploaded successfully!');
+      setNoteTitle('');
+      setNoteContent('');
+      setNotePdf('');
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-[80vh] items-center justify-center">
@@ -295,6 +349,7 @@ export default function AdminDashboard() {
           { id: 'stats', label: 'Overview Metrics', icon: TrendingUp },
           { id: 'users', label: 'User Auditing', icon: Users },
           { id: 'studyMaterial', label: 'Study Material', icon: BookOpen },
+          { id: 'note', label: 'Upload Note', icon: BookOpen },
           { id: 'reward', label: 'Reward Catalog', icon: Award },
           { id: 'questions', label: 'Question Bank', icon: PlusSquare }
         ].map((tab) => {
@@ -580,6 +635,75 @@ export default function AdminDashboard() {
           </form>
         </Card>
         </div>
+      )}
+
+      {/* Note Upload Tab */}
+      {activeSection === 'note' && (
+        <Card title="Upload Study Note Material" subtitle="Upload reference text summaries and PDF attachments">
+          <form onSubmit={handleAddNote} className="space-y-4 mt-4 max-w-xl">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Subject</label>
+                <select
+                  value={selectedSubject}
+                  onChange={(e) => setSelectedSubject(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                >
+                  {subjects.map(s => <option key={s._id || s.id} value={s._id || s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Chapter Module</label>
+                <select
+                  value={selectedChapter}
+                  onChange={(e) => setSelectedChapter(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                  disabled={chapters.length === 0}
+                >
+                  {chapters.length === 0 && <option value="">No chapters found...</option>}
+                  {chapters.map(c => <option key={c._id || c.id} value={c._id || c.id}>{c.title}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Note Title</label>
+              <input
+                type="text"
+                required
+                value={noteTitle}
+                onChange={(e) => setNoteTitle(e.target.value)}
+                placeholder="e.g. Newton's 1st Law Details"
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Text Content Summary</label>
+              <textarea
+                required
+                rows="4"
+                value={noteContent}
+                onChange={(e) => setNoteContent(e.target.value)}
+                placeholder="Markdown or plain text summary of the topic..."
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">PDF Document Link (Optional)</label>
+              <input
+                type="url"
+                value={notePdf}
+                onChange={(e) => setNotePdf(e.target.value)}
+                placeholder="e.g. https://storage.example.com/note1.pdf"
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+              />
+            </div>
+
+            <Button type="submit" icon={BookOpen}>Publish Note to Chapter</Button>
+          </form>
+        </Card>
       )}
 
       {/* Add Reward Store Section */}

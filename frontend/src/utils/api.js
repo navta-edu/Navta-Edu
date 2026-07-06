@@ -924,7 +924,10 @@ export const teacherAPI = {
   createNote: (data) => executeRequest(api.post('/teacher/notes', data), () => mockAPI.teacher.createNote(data)),
   createPYQ: (data) => executeRequest(api.post('/teacher/pyqs', data), () => mockAPI.teacher.createPYQ(data)),
   createTest: (data) => executeRequest(api.post('/teacher/tests', data), () => mockAPI.teacher.createTest(data)),
-  getStudentMetrics: () => executeRequest(api.get('/teacher/student-metrics'), () => mockAPI.teacher.getStudentMetrics())
+  getStudentMetrics: () => executeRequest(api.get('/teacher/student-metrics'), () => mockAPI.teacher.getStudentMetrics()),
+  getQuestions: () => executeRequest(api.get('/teacher/questions'), () => mockAPI.admin.getQuestions()),
+  createQuestion: (data) => executeRequest(api.post('/teacher/questions', data), () => mockAPI.admin.createQuestion(data)),
+  deleteQuestion: (id) => executeRequest(api.delete(`/teacher/questions/${id}`), () => mockAPI.admin.deleteQuestion(id))
 };
 
 export const adminAPI = {
@@ -942,7 +945,8 @@ export const adminAPI = {
   getDashboardStats: () => executeRequest(api.get('/admin/dashboard-stats'), () => mockAPI.admin.getDashboardStats()),
   getQuestions: () => executeRequest(api.get('/admin/questions'), () => mockAPI.admin.getQuestions()),
   createQuestion: (data) => executeRequest(api.post('/admin/questions', data), () => mockAPI.admin.createQuestion(data)),
-  deleteQuestion: (id) => executeRequest(api.delete(`/admin/questions/${id}`), () => mockAPI.admin.deleteQuestion(id))
+  deleteQuestion: (id) => executeRequest(api.delete(`/admin/questions/${id}`), () => mockAPI.admin.deleteQuestion(id)),
+  createNote: (data) => executeRequest(api.post('/teacher/notes', data), () => mockAPI.teacher.createNote(data))
 };
 
 export default api;
