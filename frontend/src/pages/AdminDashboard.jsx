@@ -23,8 +23,9 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [subjects, setSubjects] = useState([]);
+  const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState('stats'); // 'stats', 'users', 'studyMaterial', 'reward'
+  const [activeSection, setActiveSection] = useState('stats'); // 'stats', 'users', 'studyMaterial', 'reward', 'questions'
   
   // Student Edit State
   const [editingStudent, setEditingStudent] = useState(null);
@@ -51,6 +52,17 @@ export default function AdminDashboard() {
   const [rewBadge, setRewBadge] = useState('star');
   const [rewType, setRewType] = useState('badge');
 
+  // Question Form
+  const [qType, setQType] = useState('mcq');
+  const [qText, setQText] = useState('');
+  const [qSubj, setQSubj] = useState('');
+  const [qChap, setQChap] = useState('');
+  const [qOptions, setQOptions] = useState(['', '', '', '']);
+  const [qCorrectIndex, setQCorrectIndex] = useState(0);
+  const [qCorrectAnswer, setQCorrectAnswer] = useState('');
+  const [qExplanation, setQExplanation] = useState('');
+  const [qDifficulty, setQDifficulty] = useState('medium');
+
   const fetchData = async () => {
     try {
       const statsRes = await adminAPI.getDashboardStats();
@@ -61,6 +73,9 @@ export default function AdminDashboard() {
       
       const subRes = await contentAPI.getSubjects();
       setSubjects(subRes.data || []);
+      
+      const qRes = await adminAPI.getQuestions();
+      setQuestions(qRes.data || []);
     } catch (err) {
       console.error('Failed to load admin dashboard:', err);
     } finally {
@@ -74,7 +89,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const hash = location.hash.replace('#', '');
-    if (hash && ['stats', 'users', 'studyMaterial', 'reward'].includes(hash)) {
+    if (hash && ['stats', 'users', 'studyMaterial', 'reward', 'questions'].includes(hash)) {
       setActiveSection(hash);
     } else if (!hash) {
       setActiveSection('stats');
@@ -192,6 +207,43 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleAddQuestion = async (e) => {
+    e.preventDefault();
+    try {
+      await adminAPI.createQuestion({
+        questionType: qType,
+        text: qText,
+        subject: qSubj || undefined,
+        chapter: qChap || undefined,
+        options: qType === 'mcq' ? qOptions : undefined,
+        correctOption: qType === 'mcq' ? Number(qCorrectIndex) : undefined,
+        correctAnswer: qType !== 'mcq' ? qCorrectAnswer : undefined,
+        explanation: qExplanation,
+        difficulty: qDifficulty
+      });
+      alert('Question added successfully!');
+      setQText('');
+      setQExplanation('');
+      setQCorrectAnswer('');
+      setQOptions(['', '', '', '']);
+      setQCorrectIndex(0);
+      fetchData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteQuestion = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this question?')) return;
+    try {
+      await adminAPI.deleteQuestion(id);
+      alert('Question deleted');
+      fetchData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-[80vh] items-center justify-center">
@@ -243,7 +295,8 @@ export default function AdminDashboard() {
           { id: 'stats', label: 'Overview Metrics', icon: TrendingUp },
           { id: 'users', label: 'User Auditing', icon: Users },
           { id: 'studyMaterial', label: 'Study Material', icon: BookOpen },
-          { id: 'reward', label: 'Reward Catalog', icon: Award }
+          { id: 'reward', label: 'Reward Catalog', icon: Award },
+          { id: 'questions', label: 'Question Bank', icon: PlusSquare }
         ].map((tab) => {
           const Icon = tab.icon;
           return (
@@ -602,6 +655,160 @@ export default function AdminDashboard() {
             <Button type="submit" icon={Award}>Create Reward Item</Button>
           </form>
         </Card>
+      )}
+
+      {/* Question Bank Section */}
+      {activeSection === 'questions' && (
+        <div className="space-y-6">
+          <Card title="Add New Question" subtitle="Create questions to be assigned to topics or stored generally">
+            <form onSubmit={handleAddQuestion} className="space-y-4 mt-4 max-w-xl">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Question Type</label>
+                  <select
+                    value={qType}
+                    onChange={(e) => setQType(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                  >
+                    <option value="mcq">Multiple Choice</option>
+                    <option value="short">Short Answer</option>
+                    <option value="long">Long Answer</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Subject (Optional)</label>
+                  <select
+                    value={qSubj}
+                    onChange={(e) => setQSubj(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                  >
+                    <option value="">General (No Subject)</option>
+                    {subjects.map((sub) => (
+                      <option key={sub._id || sub.id} value={sub._id || sub.id}>{sub.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Question Text</label>
+                <textarea
+                  required
+                  rows="3"
+                  value={qText}
+                  onChange={(e) => setQText(e.target.value)}
+                  placeholder="Enter the question here..."
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                />
+              </div>
+
+              {qType === 'mcq' ? (
+                <div className="space-y-3 p-4 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">MCQ Options</label>
+                  {qOptions.map((opt, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="correctOpt"
+                        checked={qCorrectIndex === i}
+                        onChange={() => setQCorrectIndex(i)}
+                        className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                      />
+                      <input
+                        type="text"
+                        required
+                        value={opt}
+                        onChange={(e) => {
+                          const newOpts = [...qOptions];
+                          newOpts[i] = e.target.value;
+                          setQOptions(newOpts);
+                        }}
+                        placeholder={`Option ${i + 1}`}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                      />
+                    </div>
+                  ))}
+                  <p className="text-xs text-slate-500">Select the radio button next to the correct option.</p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Correct Answer / Marking Key</label>
+                  <textarea
+                    required
+                    rows="3"
+                    value={qCorrectAnswer}
+                    onChange={(e) => setQCorrectAnswer(e.target.value)}
+                    placeholder="Enter the expected answer or marking key..."
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Difficulty</label>
+                  <select
+                    value={qDifficulty}
+                    onChange={(e) => setQDifficulty(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                  >
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Explanation (Optional)</label>
+                <textarea
+                  rows="2"
+                  value={qExplanation}
+                  onChange={(e) => setQExplanation(e.target.value)}
+                  placeholder="Explain the answer..."
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none"
+                />
+              </div>
+
+              <Button type="submit" icon={PlusSquare}>Add Question</Button>
+            </form>
+          </Card>
+
+          <Card title="Question Bank" subtitle="Manage all created questions">
+            <div className="overflow-x-auto mt-4">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-800 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">
+                    <th className="pb-3">Type</th>
+                    <th className="pb-3">Question</th>
+                    <th className="pb-3">Subject</th>
+                    <th className="pb-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-slate-700 dark:text-slate-300">
+                  {questions.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" className="py-4 text-center text-slate-500">No questions found</td>
+                    </tr>
+                  ) : (
+                    questions.map((q) => (
+                      <tr key={q._id || q.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                        <td className="py-3 font-medium uppercase text-xs">{q.questionType || 'MCQ'}</td>
+                        <td className="py-3 truncate max-w-xs">{q.text}</td>
+                        <td className="py-3">{q.subject?.name || q.subject || 'General'}</td>
+                        <td className="py-3 text-right">
+                          <button onClick={() => handleDeleteQuestion(q._id || q.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );

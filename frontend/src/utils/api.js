@@ -841,6 +841,26 @@ const mockAPI = {
         success: true,
         stats: { studentsCount, teachersCount, subjectsCount, resultsCount, rewardsCount, averageScore }
       };
+    },
+    getQuestions: async () => {
+      const db = getMockDB();
+      return { success: true, data: db.questions };
+    },
+    createQuestion: async (data) => {
+      const db = getMockDB();
+      const newQuestion = {
+        _id: 'q_' + Date.now(),
+        ...data
+      };
+      db.questions.push(newQuestion);
+      saveMockDB(db);
+      return { success: true, data: newQuestion };
+    },
+    deleteQuestion: async (id) => {
+      const db = getMockDB();
+      db.questions = db.questions.filter(q => q._id !== id);
+      saveMockDB(db);
+      return { success: true };
     }
   }
 };
@@ -919,7 +939,10 @@ export const adminAPI = {
   deleteNote: (id) => executeRequest(api.delete(`/admin/notes/${id}`), () => mockAPI.admin.deleteNote(id)),
   deletePYQ: (id) => executeRequest(api.delete(`/admin/pyqs/${id}`), () => mockAPI.admin.deletePYQ(id)),
   createReward: (data) => executeRequest(api.post('/admin/rewards', data), () => mockAPI.admin.createReward(data)),
-  getDashboardStats: () => executeRequest(api.get('/admin/dashboard-stats'), () => mockAPI.admin.getDashboardStats())
+  getDashboardStats: () => executeRequest(api.get('/admin/dashboard-stats'), () => mockAPI.admin.getDashboardStats()),
+  getQuestions: () => executeRequest(api.get('/admin/questions'), () => mockAPI.admin.getQuestions()),
+  createQuestion: (data) => executeRequest(api.post('/admin/questions', data), () => mockAPI.admin.createQuestion(data)),
+  deleteQuestion: (id) => executeRequest(api.delete(`/admin/questions/${id}`), () => mockAPI.admin.deleteQuestion(id))
 };
 
 export default api;

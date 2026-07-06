@@ -7,7 +7,7 @@ const Result = require('../models/Result');
 const Chapter = require('../models/Chapter');
 const Note = require('../models/Note');
 const PYQ = require('../models/PYQ');
-
+const Question = require('../models/Question');
 // @desc    Get all platform users
 // @route   GET /api/admin/users
 // @access  Private (Admin)
@@ -268,6 +268,73 @@ exports.getDashboardStats = async (req, res) => {
         averageScore
       }
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Get all questions
+// @route   GET /api/admin/questions
+// @access  Private (Admin)
+exports.getQuestions = async (req, res) => {
+  try {
+    const questions = await Question.find().populate('subject chapter');
+    res.status(200).json({ success: true, count: questions.length, data: questions });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Create a new question
+// @route   POST /api/admin/questions
+// @access  Private (Admin)
+exports.createQuestion = async (req, res) => {
+  try {
+    const { subject, chapter, questionType, text, options, correctOption, correctAnswer, explanation, difficulty } = req.body;
+
+    const questionData = {
+      questionType: questionType || 'mcq',
+      text,
+      explanation,
+      difficulty
+    };
+
+    if (subject) questionData.subject = subject;
+    if (chapter) questionData.chapter = chapter;
+
+    if (questionData.questionType === 'mcq') {
+      if (!options || options.length < 2) {
+        return res.status(400).json({ success: false, message: 'MCQ questions require at least 2 options.' });
+      }
+      if (correctOption === undefined || correctOption < 0) {
+        return res.status(400).json({ success: false, message: 'MCQ questions require a correctOption index.' });
+      }
+      questionData.options = options;
+      questionData.correctOption = correctOption;
+    } else {
+      if (!correctAnswer) {
+        return res.status(400).json({ success: false, message: 'Short/Long questions require a correctAnswer.' });
+      }
+      questionData.correctAnswer = correctAnswer;
+    }
+
+    const question = await Question.create(questionData);
+    res.status(201).json({ success: true, data: question });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Delete question
+// @route   DELETE /api/admin/questions/:id
+// @access  Private (Admin)
+exports.deleteQuestion = async (req, res) => {
+  try {
+    const question = await Question.findById(req.params.id);
+    if (!question) return res.status(404).json({ success: false, message: 'Question not found' });
+    
+    await Question.deleteOne({ _id: req.params.id });
+    res.status(200).json({ success: true, message: 'Question deleted successfully' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
