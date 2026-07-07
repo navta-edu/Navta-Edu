@@ -44,6 +44,26 @@ const UserSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now
+  },
+  isProfileComplete: {
+    type: Boolean,
+    default: false
+  },
+  schoolName: {
+    type: String,
+    default: ''
+  },
+  department: {
+    type: String,
+    default: ''
+  },
+  stream: {
+    type: String,
+    default: ''
+  },
+  address: {
+    type: String,
+    default: ''
   }
 });
 

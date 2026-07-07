@@ -13,6 +13,7 @@ import About from './pages/About';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Unauthorized from './pages/Unauthorized';
+import Onboarding from './pages/Onboarding';
 
 // Private Pages
 import StudentDashboard from './pages/StudentDashboard';
@@ -55,6 +56,10 @@ function DashboardLayout() {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (!user.isProfileComplete && user.role !== 'admin' && window.location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
   }
 
   return (
@@ -100,6 +105,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/unauthorized" element={<Unauthorized />} />
+            <Route path="/onboarding" element={<Onboarding />} />
           </Route>
 
           {/* Secure Dashboards and Study Areas */}

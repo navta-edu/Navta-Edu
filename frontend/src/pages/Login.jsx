@@ -18,6 +18,11 @@ export default function Login() {
   const googleInitialized = useRef(false);
 
   const navigateByRole = useCallback((user) => {
+    if (!user.isProfileComplete && user.role !== 'admin') {
+      navigate('/onboarding');
+      return;
+    }
+    
     if (user.role === 'admin') {
       navigate('/admin');
     } else if (user.role === 'teacher') {

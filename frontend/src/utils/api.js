@@ -266,8 +266,34 @@ const mockAPI = {
       return {
         success: true,
         token: 'mock_jwt_token_' + user.id,
-        user: { id: user.id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified }
+        user: { id: user.id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified, isProfileComplete: user.isProfileComplete }
       };
+    },
+    completeProfile: async (data) => {
+      const token = localStorage.getItem('token');
+      if (!token || !token.startsWith('mock_jwt_token_')) throw new Error('Not authorized');
+      const userId = token.replace('mock_jwt_token_', '');
+      
+      const db = getMockDB();
+      const user = db.users.find(u => u.id === userId);
+      if (!user) throw new Error('User not found');
+
+      if (data.role) user.role = data.role;
+      if (data.stream) user.stream = data.stream;
+      if (data.department) user.department = data.department;
+      if (data.schoolName) user.schoolName = data.schoolName;
+      if (data.address) user.address = data.address;
+      user.isProfileComplete = true;
+
+      // Ensure profile exists for the selected role
+      if (user.role === 'student' && !db.students[userId]) {
+        db.students[userId] = { user: userId, coins: 0, xp: 0, level: 1, stream: data.stream || 'General', badges: [], rewardsRedeemed: [] };
+      } else if (user.role === 'teacher' && !db.teachers[userId]) {
+        db.teachers[userId] = { user: userId, qualification: 'Qualified Educator', bio: '', subjects: [] };
+      }
+
+      saveMockDB(db);
+      return { success: true, user: { ...user } };
     }
   },
 
@@ -894,7 +920,8 @@ export const authAPI = {
   googleLogin: (credential) => executeRequest(api.post('/auth/google', { credential }), () => mockAPI.auth.googleLogin(credential)),
   getMe: () => executeRequest(api.get('/auth/me'), () => mockAPI.auth.me()),
   verifyEmail: () => executeRequest(api.post('/auth/verify-email'), () => mockAPI.auth.verifyEmail()),
-  forgotPassword: (email) => executeRequest(api.post('/auth/forgot-password', { email }), () => mockAPI.auth.forgotPassword())
+  forgotPassword: (email) => executeRequest(api.post('/auth/forgot-password', { email }), () => mockAPI.auth.forgotPassword()),
+  completeProfile: (data) => executeRequest(api.put('/auth/complete-profile', data), () => mockAPI.auth.completeProfile(data))
 };
 
 export const contentAPI = {

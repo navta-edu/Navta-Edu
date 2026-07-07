@@ -559,6 +559,8 @@ export default function AdminDashboard() {
                   <th className="pb-3">Name</th>
                   <th className="pb-3">Email</th>
                   <th className="pb-3">Role</th>
+                  <th className="pb-3 hidden md:table-cell">School/Org</th>
+                  <th className="pb-3 hidden md:table-cell">Stream/Dept</th>
                   <th className="pb-3">Verified</th>
                   <th className="pb-3 text-right">Actions</th>
                 </tr>
@@ -566,7 +568,10 @@ export default function AdminDashboard() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-slate-700 dark:text-slate-300">
                 {users.map((u) => (
                   <tr key={u._id || u.id}>
-                    <td className="py-3.5 font-semibold text-slate-900 dark:text-white">{u.name}</td>
+                    <td className="py-3.5 font-semibold text-slate-900 dark:text-white">
+                      {u.name}
+                      {!u.isProfileComplete && <span className="ml-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Incomplete</span>}
+                    </td>
                     <td className="py-3.5">{u.email}</td>
                     <td className="py-3.5 capitalize">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -574,6 +579,14 @@ export default function AdminDashboard() {
                       }`}>
                         {u.role.replace('_', ' ')}
                       </span>
+                    </td>
+                    <td className="py-3.5 hidden md:table-cell">
+                      <div className="text-xs">{u.schoolName || '-'}</div>
+                      <div className="text-[10px] text-slate-400 truncate max-w-[120px]">{u.address || ''}</div>
+                    </td>
+                    <td className="py-3.5 hidden md:table-cell text-xs">
+                      <div>{u.stream || '-'}</div>
+                      <div className="text-slate-500">{u.department || '-'}</div>
                     </td>
                     <td className="py-3.5">
                       <button

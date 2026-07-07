@@ -50,7 +50,7 @@ exports.createUser = async (req, res) => {
 // @access  Private (Admin)
 exports.updateUser = async (req, res) => {
   try {
-    const { name, role, isVerified } = req.body;
+    const { name, role, isVerified, schoolName, department, stream, address } = req.body;
     const user = await User.findById(req.params.userId);
 
     if (!user) {
@@ -58,6 +58,10 @@ exports.updateUser = async (req, res) => {
     }
 
     if (name) user.name = name;
+    if (schoolName !== undefined) user.schoolName = schoolName;
+    if (department !== undefined) user.department = department;
+    if (stream !== undefined) user.stream = stream;
+    if (address !== undefined) user.address = address;
     if (isVerified !== undefined) user.isVerified = isVerified;
     
     // If role changes, check profile creation

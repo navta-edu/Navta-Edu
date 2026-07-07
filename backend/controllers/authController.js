@@ -27,7 +27,8 @@ const sendTokenResponse = (user, statusCode, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
-      isVerified: user.isVerified
+      isVerified: user.isVerified,
+      isProfileComplete: user.isProfileComplete
     }
   });
 };
@@ -160,7 +161,8 @@ exports.getMe = async (req, res, next) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        isVerified: user.isVerified
+        isVerified: user.isVerified,
+        isProfileComplete: user.isProfileComplete
       },
       profile,
       streak
@@ -316,5 +318,48 @@ exports.googleAuth = async (req, res, next) => {
   } catch (err) {
     console.error('Google Auth Error:', err.message, err.stack);
     res.status(401).json({ success: false, message: 'Google authentication failed: ' + err.message });
+  }
+};
+
+// @desc    Complete user profile details
+// @route   PUT /api/auth/complete-profile
+// @access  Private
+exports.completeProfile = async (req, res, next) => {
+  try {
+    const { role, stream, department, schoolName, address } = req.body;
+    
+    let user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (role) user.role = role;
+    if (stream) user.stream = stream;
+    if (department) user.department = department;
+    if (schoolName) user.schoolName = schoolName;
+    if (address) user.address = address;
+
+    // Optional: Update Student/Teacher profiles if role changes
+    if (role === 'student') {
+      const existingStudent = await Student.findOne({ user: user._id });
+      if (!existingStudent) {
+        await Student.create({ user: user._id, stream: stream || 'General' });
+      } else if (stream) {
+        existingStudent.stream = stream;
+        await existingStudent.save();
+      }
+    } else if (role === 'teacher') {
+      const existingTeacher = await Teacher.findOne({ user: user._id });
+      if (!existingTeacher) {
+        await Teacher.create({ user: user._id, qualification: 'Qualified Educator', bio: '', subjects: [] });
+      }
+    }
+
+    user.isProfileComplete = true;
+    await user.save();
+
+    res.status(200).json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };
