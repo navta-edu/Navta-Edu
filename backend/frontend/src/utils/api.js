@@ -4,7 +4,7 @@ import axios from 'axios';
 const envUrl = import.meta.env.VITE_API_URL;
 const API_URL = envUrl 
   ? (envUrl.endsWith('/api') ? envUrl : `${envUrl}/api`) 
-  : 'https://navta-9.onrender.com/api';
+  : '/api';
 
 const api = axios.create({
   baseURL: API_URL,
