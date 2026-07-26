@@ -44,10 +44,11 @@ app.use("/api/teacher", require("./routes/teacherRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
 
 // Serve Frontend (Hostinger deployment)
-app.use(express.static(path.join(__dirname, "../frontend/dist")));
+// Serve Frontend (Hostinger deployment)
+app.use(express.static(path.join(__dirname, "frontend/dist")));
 
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
+  res.sendFile(path.join(__dirname, "frontend/dist/index.html"));
 });
 
 // Custom Global Error Handler Middleware
