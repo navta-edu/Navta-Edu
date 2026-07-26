@@ -6,12 +6,12 @@
   "scripts": {
     "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "cd backend && npm run dev",
+    "start": "cd backend && npm start",
     "start:backend": "cd backend && npm start",
     "build:frontend": "cd frontend && npm run build",
     "seed": "cd backend && npm run seed",
-    "install:all": "cd frontend && npm install && cd ../backend && npm install",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "install-all": "cd frontend && npm install && cd ../backend && npm install",
+    "postinstall": "npm run install-all"
   },
   "author": "Navta Team",
   "license": "ISC"
