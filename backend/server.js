@@ -13,11 +13,12 @@ const app = express();
 // Middleware
 app.use(cors({
   origin: [
-    'https://navta.vercel.app',
-    'https://navta-edu.vercel.app',
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:3000'
+    "https://navta.in",
+    "https://www.navta.in",
+
+    // Local development
+    "http://localhost:5173",
+    "http://localhost:3000"
   ],
   credentials: true
 }));
