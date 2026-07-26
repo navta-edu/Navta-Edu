@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
+const path = require("path");
 const connectDB = require("./config/db");
 
 // Connect to Database
@@ -41,14 +42,14 @@ app.use("/api/student", require("./routes/studentRoutes"));
 app.use("/api/teacher", require("./routes/teacherRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
 
-// Basic health check route
-app.get("/", (req, res) => {
-  res.json({ message: "Welcome to Navta Educational Platform API" });
-});
+// Serve Frontend (Hostinger deployment)
+app.use(express.static(path.join(__dirname, "../frontend/dist")));
 
-// Custom 404 Route handler
-app.use((req, res, next) => {
-  res.status(404).json({ success: false, message: "API endpoint not found" });
+app.get("*", (req, res) => {
+  if (req.originalUrl.startsWith("/api")) {
+    return res.status(404).json({ success: false, message: "API endpoint not found" });
+  }
+  res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
 });
 
 // Custom Global Error Handler Middleware
