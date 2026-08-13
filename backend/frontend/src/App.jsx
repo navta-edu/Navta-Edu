@@ -137,7 +137,7 @@ export default function App() {
             <Route element={<RoleGuard allowedRoles={['student', 'teacher', 'admin', 'external_teacher']} />}>
               <Route path="/notes" element={<NotesPage />} />
               <Route path="/pyqs" element={<PYQPage />} />
-              <Route path="/navta-test" element={<NavtaTestPage />} />
+              <Route path="/navta-test" element={<NavtaTestPage />} /> // navta test route
               <Route path="/assessments" element={<AssessmentPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/settings" element={<SettingsPage />} />
