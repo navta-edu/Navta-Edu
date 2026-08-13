@@ -20,6 +20,7 @@ import StudentDashboard from './pages/StudentDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
 import ExternalTeacherDashboard from './pages/ExternalTeacherDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import NavtaTestPage from './pages/NavtaTestPage';
 import NotesPage from './pages/NotesPage';
 import PYQPage from './pages/PYQPage';
 import AssessmentPage from './pages/AssessmentPage';
