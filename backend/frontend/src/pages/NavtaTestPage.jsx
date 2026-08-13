@@ -65,6 +65,46 @@ const PREPARATION_OPTIONS = {
   },
 };
 
+const BIOLOGY_CLASSES = {
+  "Class 11": [
+    "The Living World",
+    "Biological Classification",
+    "Plant Kingdom",
+    "Animal Kingdom",
+    "Morphology of Flowering Plants",
+    "Anatomy of Flowering Plants",
+    "Structural Organisation in Animals",
+    "Cell: The Unit of Life",
+    "Biomolecules",
+    "Cell Cycle and Cell Division",
+    "Photosynthesis in Higher Plants",
+    "Respiration in Plants",
+    "Plant Growth and Development",
+    "Breathing and Exchange of Gases",
+    "Body Fluids and Circulation",
+    "Excretory Products and their Elimination",
+    "Locomotion and Movement",
+    "Neural Control and Coordination",
+    "Chemical Coordination and Integration",
+  ],
+
+  "Class 12": [
+    "Sexual Reproduction in Flowering Plants",
+    "Human Reproduction",
+    "Reproductive Health",
+    "Principles of Inheritance and Variation",
+    "Molecular Basis of Inheritance",
+    "Evolution",
+    "Human Health and Disease",
+    "Microbes in Human Welfare",
+    "Biotechnology: Principles and Processes",
+    "Biotechnology and its Applications",
+    "Organisms and Populations",
+    "Ecosystem",
+    "Biodiversity and Conservation",
+  ],
+};
+
 const SUBJECTS = {
   Physics: {
     chapters: [
@@ -102,20 +142,45 @@ const SUBJECTS = {
       "Statistics",
     ],
   },
-  Biology: {
+Biology: {
   chapters: [
+    // Class 11 Biology
+    "Class 11 Biology",
     "The Living World",
     "Biological Classification",
     "Plant Kingdom",
     "Animal Kingdom",
-    "Cell Structure and Function",
+    "Morphology of Flowering Plants",
+    "Anatomy of Flowering Plants",
+    "Structural Organisation in Animals",
+    "Cell: The Unit of Life",
     "Biomolecules",
-    "Human Physiology",
-    "Plant Physiology",
-    "Reproduction",
-    "Genetics and Evolution",
-    "Ecology",
+    "Cell Cycle and Cell Division",
+    "Photosynthesis in Higher Plants",
+    "Respiration in Plants",
+    "Plant Growth and Development",
+    "Breathing and Exchange of Gases",
+    "Body Fluids and Circulation",
+    "Excretory Products and their Elimination",
+    "Locomotion and Movement",
+    "Neural Control and Coordination",
+    "Chemical Coordination and Integration",
+
+    // Class 12 Biology
+    "Class 12 Biology",
+    "Sexual Reproduction in Flowering Plants",
+    "Human Reproduction",
+    "Reproductive Health",
+    "Principles of Inheritance and Variation",
+    "Molecular Basis of Inheritance",
+    "Evolution",
     "Human Health and Disease",
+    "Microbes in Human Welfare",
+    "Biotechnology: Principles and Processes",
+    "Biotechnology and its Applications",
+    "Organisms and Populations",
+    "Ecosystem",
+    "Biodiversity and Conservation",
   ],
 },
 };
@@ -350,6 +415,7 @@ export default function NavtaTestPage() {
   const [step, setStep] = useState("subject");
   const [subject, setSubject] = useState("");
   const [preparation, setPreparation] = useState("");
+  const [biologyClass, setBiologyClass] = useState("");
   const [chapter, setChapter] = useState("");
   const [difficulty, setDifficulty] = useState("");
   const [questions, setQuestions] = useState([]);
@@ -496,10 +562,15 @@ if (step === "preparation") {
         {Object.entries(options).map(([key, option]) => (
           <button
             key={key}
-            onClick={() => {
-              setPreparation(key);
-              setStep("chapter");
-            }}
+onClick={() => {
+  setPreparation(key);
+
+  if (subject === "Biology") {
+    setStep("biologyClass");
+  } else {
+    setStep("chapter");
+  }
+}}
             style={styles.preparationCard}
           >
             <div style={styles.preparationIcon}>
@@ -521,6 +592,58 @@ if (step === "preparation") {
 }
   
   if (step === "chapter") {
+<h1 style={styles.title}>
+  {subject}
+</h1>
+
+<p style={styles.subtitle}>
+  {subject === "Biology"
+    ? `${preparation} → ${biologyClass}`
+    : `${preparation} Preparation`}
+</p>
+        </div>
+
+        <button
+          onClick={() => {
+            setPreparation("");
+            setBiologyClass("");
+            setStep("preparation");
+          }}
+          style={styles.backButton}
+        >
+          ← Preparation
+        </button>
+      </div>
+
+      <div style={styles.classGrid}>
+        {Object.keys(BIOLOGY_CLASSES).map((className) => (
+          <button
+            key={className}
+            onClick={() => {
+              setBiologyClass(className);
+              setStep("chapter");
+            }}
+            style={styles.classCard}
+          >
+            <div style={styles.classIcon}>
+              🧬
+            </div>
+
+            <h2>{className}</h2>
+
+            <p>
+              {BIOLOGY_CLASSES[className].length} chapters
+            </p>
+
+            <span style={styles.continueText}>
+              View Chapters →
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
     return (
       <div style={styles.page}>
         <div style={styles.header}>
@@ -543,7 +666,33 @@ if (step === "preparation") {
         </div>
 
         <div style={styles.chapterGrid}>
-          {SUBJECTS[subject].chapters.map((item) => (
+          {subject === "Biology"
+  ? BIOLOGY_CLASSES[biologyClass].map((item) => (
+      <button
+        key={item}
+        onClick={() => {
+          setChapter(item);
+          setStep("difficulty");
+        }}
+        style={styles.chapterCard}
+      >
+        {item}
+        <span>→</span>
+      </button>
+    ))
+  : SUBJECTS[subject].chapters.map((item) => (
+      <button
+        key={item}
+        onClick={() => {
+          setChapter(item);
+          setStep("difficulty");
+        }}
+        style={styles.chapterCard}
+      >
+        {item}
+        <span>→</span>
+      </button>
+    ))}
             <button
               key={item}
               onClick={() => {
@@ -761,6 +910,29 @@ const styles = {
     textDecoration: "none",
     cursor: "pointer",
   },
+
+classGrid: {
+  maxWidth: "900px",
+  margin: "40px auto",
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: "24px",
+},
+
+classCard: {
+  padding: "35px",
+  borderRadius: "18px",
+  border: "1px solid #243047",
+  background: "#151d2d",
+  color: "#ffffff",
+  cursor: "pointer",
+  textAlign: "left",
+},
+
+classIcon: {
+  fontSize: "45px",
+  marginBottom: "15px",
+},
 
   grid: {
     maxWidth: "1100px",
