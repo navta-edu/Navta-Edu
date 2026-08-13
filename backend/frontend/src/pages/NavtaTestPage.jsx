@@ -102,7 +102,7 @@ const SUBJECTS = {
       "Statistics",
     ],
   },
-Biology: {
+ Biology: {
   chapters: [
     // Class 11 Biology
     "Class 11 Biology",
@@ -142,7 +142,7 @@ Biology: {
     "Ecosystem",
     "Biodiversity and Conservation",
   ],
-},
+ },
 };
 
 const QUESTIONS = {
