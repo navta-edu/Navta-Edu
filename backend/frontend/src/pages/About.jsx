@@ -63,11 +63,11 @@ export default function About() {
     </h3>
 
     <p className="text-slate-300 mb-4">
-      Your Name
+      Hardik Sahu
     </p>
 
     <a
-      href="https://www.linkedin.com/in/YOUR-LINKEDIN-USERNAME/"
+      href="https://www.linkedin.com/in/hardik-sahu-9797h1608p/"
       target="_blank"
       rel="noopener noreferrer"
       className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
