@@ -1,6 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+const PREPARATION_OPTIONS = {
+  NEET: {
+    title: "NEET",
+    description: "Medical entrance preparation",
+    icon: "🩺",
+  },
+  Boards: {
+    title: "Boards",
+    description: "School board examination preparation",
+    icon: "📚",
+  },
+};
 const SUBJECTS = {
   Physics: {
     chapters: [
