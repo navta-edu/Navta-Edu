@@ -735,6 +735,35 @@ const styles = {
     marginBottom: "20px",
   },
 
+  preparationGrid: {
+  maxWidth: "900px",
+  margin: "40px auto",
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: "24px",
+},
+
+preparationCard: {
+  padding: "35px",
+  borderRadius: "18px",
+  border: "1px solid #243047",
+  background: "#151d2d",
+  color: "#ffffff",
+  cursor: "pointer",
+  textAlign: "left",
+},
+
+preparationIcon: {
+  fontSize: "45px",
+  marginBottom: "15px",
+},
+
+continueText: {
+  display: "block",
+  marginTop: "20px",
+  color: "#38bdf8",
+  fontWeight: "700",
+},
   chapterGrid: {
     maxWidth: "1100px",
     margin: "0 auto",
