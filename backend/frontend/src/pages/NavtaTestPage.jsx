@@ -2,27 +2,66 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 const PREPARATION_OPTIONS = {
-  NEET: {
-    title: "NEET",
-    description: "Medical entrance preparation",
-    icon: "🩺",
+  Physics: {
+    NEET: {
+      title: "NEET",
+      description: "Medical entrance exam preparation",
+      icon: "🩺",
+    },
+    JEE: {
+      title: "JEE",
+      description: "JEE entrance exam preparation",
+      icon: "🚀",
+    },
+    Boards: {
+      title: "Boards",
+      description: "School board examination preparation",
+      icon: "📚",
+    },
   },
-  Boards: {
-    title: "Boards",
-    description: "School board examination preparation",
-    icon: "📚",
+
+  Chemistry: {
+    NEET: {
+      title: "NEET",
+      description: "Medical entrance exam preparation",
+      icon: "🩺",
+    },
+    JEE: {
+      title: "JEE",
+      description: "JEE entrance exam preparation",
+      icon: "🚀",
+    },
+    Boards: {
+      title: "Boards",
+      description: "School board examination preparation",
+      icon: "📚",
+    },
   },
-  };
-  const MATHS_PREPARATION_OPTIONS = {
-  JEE: {
-    title: "JEE",
-    description: "JEE entrance exam preparation",
-    icon: "🚀",
+
+  Maths: {
+    JEE: {
+      title: "JEE",
+      description: "JEE entrance exam preparation",
+      icon: "🚀",
+    },
+    Boards: {
+      title: "Boards",
+      description: "School board examination preparation",
+      icon: "📚",
+    },
   },
-  Boards: {
-    title: "Boards",
-    description: "School board examination preparation",
-    icon: "📚",
+
+  Biology: {
+    NEET: {
+      title: "NEET",
+      description: "Medical entrance exam preparation",
+      icon: "🩺",
+    },
+    Boards: {
+      title: "Boards",
+      description: "School board examination preparation",
+      icon: "📚",
+    },
   },
 };
 
@@ -400,15 +439,10 @@ export default function NavtaTestPage() {
           {Object.keys(SUBJECTS).map((item) => (
             <button
               key={item}
-  onClick={() => {
+onClick={() => {
   setSubject(item);
-
-  if (item === "Biology" || item === "Maths") {
-    setPreparation("");
-    setStep("preparation");
-  } else {
-    setStep("chapter");
-  }
+  setPreparation("");
+  setStep("preparation");
 }}
               style={styles.subjectCard}
             >
@@ -430,23 +464,16 @@ export default function NavtaTestPage() {
     );
   }
 
-  if (step === "preparation") {
 if (step === "preparation") {
-  const options =
-    subject === "Biology"
-      ? PREPARATION_OPTIONS
-      : MATHS_PREPARATION_OPTIONS;
-
-  const title =
-    subject === "Biology"
-      ? "Biology Preparation"
-      : "Maths Preparation";
+  const options = PREPARATION_OPTIONS[subject];
 
   return (
     <div style={styles.page}>
       <div style={styles.header}>
         <div>
-          <h1 style={styles.title}>{title}</h1>
+          <h1 style={styles.title}>
+            {subject} Preparation
+          </h1>
 
           <p style={styles.subtitle}>
             What are you preparing for?
@@ -498,18 +525,10 @@ if (step === "preparation") {
       <div style={styles.page}>
         <div style={styles.header}>
           <div>
-            <h1 style={styles.title}>{subject}</h1>
-            
 <h1 style={styles.title}>{subject}</h1>
 
 <p style={styles.subtitle}>
   {preparation
-    ? `${preparation} Preparation`
-    : "Select a chapter."}
-</p>
-            
-<p style={styles.subtitle}>
-  {subject === "Biology" && preparation
     ? `${preparation} Preparation`
     : "Select a chapter."}
 </p>
@@ -810,6 +829,36 @@ preparationCard: {
 preparationIcon: {
   fontSize: "45px",
   marginBottom: "15px",
+},
+
+preparationGrid: {
+  maxWidth: "900px",
+  margin: "40px auto",
+  display: "grid",
+  gridTemplateColumns: "repeat(3, 1fr)",
+  gap: "24px",
+},
+
+preparationCard: {
+  padding: "35px",
+  borderRadius: "18px",
+  border: "1px solid #243047",
+  background: "#151d2d",
+  color: "#ffffff",
+  cursor: "pointer",
+  textAlign: "left",
+},
+
+preparationIcon: {
+  fontSize: "45px",
+  marginBottom: "15px",
+},
+
+continueText: {
+  display: "block",
+  marginTop: "20px",
+  color: "#38bdf8",
+  fontWeight: "700",
 },
 
 continueText: {
