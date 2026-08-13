@@ -65,46 +65,6 @@ const PREPARATION_OPTIONS = {
   },
 };
 
-const BIOLOGY_CLASSES = {
-  "Class 11": [
-    "The Living World",
-    "Biological Classification",
-    "Plant Kingdom",
-    "Animal Kingdom",
-    "Morphology of Flowering Plants",
-    "Anatomy of Flowering Plants",
-    "Structural Organisation in Animals",
-    "Cell: The Unit of Life",
-    "Biomolecules",
-    "Cell Cycle and Cell Division",
-    "Photosynthesis in Higher Plants",
-    "Respiration in Plants",
-    "Plant Growth and Development",
-    "Breathing and Exchange of Gases",
-    "Body Fluids and Circulation",
-    "Excretory Products and their Elimination",
-    "Locomotion and Movement",
-    "Neural Control and Coordination",
-    "Chemical Coordination and Integration",
-  ],
-
-  "Class 12": [
-    "Sexual Reproduction in Flowering Plants",
-    "Human Reproduction",
-    "Reproductive Health",
-    "Principles of Inheritance and Variation",
-    "Molecular Basis of Inheritance",
-    "Evolution",
-    "Human Health and Disease",
-    "Microbes in Human Welfare",
-    "Biotechnology: Principles and Processes",
-    "Biotechnology and its Applications",
-    "Organisms and Populations",
-    "Ecosystem",
-    "Biodiversity and Conservation",
-  ],
-};
-
 const SUBJECTS = {
   Physics: {
     chapters: [
