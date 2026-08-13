@@ -38,6 +38,22 @@ const SUBJECTS = {
       "Statistics",
     ],
   },
+  Biology: {
+  chapters: [
+    "The Living World",
+    "Biological Classification",
+    "Plant Kingdom",
+    "Animal Kingdom",
+    "Cell Structure and Function",
+    "Biomolecules",
+    "Human Physiology",
+    "Plant Physiology",
+    "Reproduction",
+    "Genetics and Evolution",
+    "Ecology",
+    "Human Health and Disease",
+  ],
+},
 };
 
 const QUESTIONS = {
@@ -210,6 +226,38 @@ const QUESTIONS = {
       ],
     },
   },
+  Biology: {
+  "The Living World": {
+    Easy: [
+      {
+        question: "The basic unit of classification is:",
+        options: ["Genus", "Species", "Family", "Order"],
+        answer: 1,
+      },
+    ],
+
+    Medium: [
+      {
+        question: "Which taxonomic category comes immediately above species?",
+        options: ["Family", "Genus", "Order", "Class"],
+        answer: 1,
+      },
+    ],
+
+    Hard: [
+      {
+        question: "Binomial nomenclature was popularized by:",
+        options: [
+          "Charles Darwin",
+          "Carolus Linnaeus",
+          "Gregor Mendel",
+          "Robert Hooke",
+        ],
+        answer: 1,
+      },
+    ],
+  },
+},
 };
 
 function getQuestions(subject, chapter, difficulty) {
@@ -336,6 +384,7 @@ export default function NavtaTestPage() {
                 {item === "Physics" && "⚡"}
                 {item === "Chemistry" && "🧪"}
                 {item === "Maths" && "∑"}
+                {item === "Biology" && "🧬"}
               </div>
 
               <h2>{item}</h2>
