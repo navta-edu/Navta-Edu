@@ -12,7 +12,20 @@ const PREPARATION_OPTIONS = {
     description: "School board examination preparation",
     icon: "📚",
   },
+  };
+  const MATHS_PREPARATION_OPTIONS = {
+  JEE: {
+    title: "JEE",
+    description: "JEE entrance exam preparation",
+    icon: "🚀",
+  },
+  Boards: {
+    title: "Boards",
+    description: "School board examination preparation",
+    icon: "📚",
+  },
 };
+
 const SUBJECTS = {
   Physics: {
     chapters: [
@@ -387,15 +400,16 @@ export default function NavtaTestPage() {
           {Object.keys(SUBJECTS).map((item) => (
             <button
               key={item}
-              onClick={() => {
+  onClick={() => {
   setSubject(item);
 
-  if (item === "Biology") {
+  if (item === "Biology" || item === "Maths") {
+    setPreparation("");
     setStep("preparation");
   } else {
     setStep("chapter");
   }
-              }}
+}}
               style={styles.subjectCard}
             >
               <div style={styles.subjectIcon}>
@@ -417,11 +431,22 @@ export default function NavtaTestPage() {
   }
 
   if (step === "preparation") {
+if (step === "preparation") {
+  const options =
+    subject === "Biology"
+      ? PREPARATION_OPTIONS
+      : MATHS_PREPARATION_OPTIONS;
+
+  const title =
+    subject === "Biology"
+      ? "Biology Preparation"
+      : "Maths Preparation";
+
   return (
     <div style={styles.page}>
       <div style={styles.header}>
         <div>
-          <h1 style={styles.title}>Biology Preparation</h1>
+          <h1 style={styles.title}>{title}</h1>
 
           <p style={styles.subtitle}>
             What are you preparing for?
@@ -441,30 +466,28 @@ export default function NavtaTestPage() {
       </div>
 
       <div style={styles.preparationGrid}>
-        {Object.entries(PREPARATION_OPTIONS).map(
-          ([key, option]) => (
-            <button
-              key={key}
-              onClick={() => {
-                setPreparation(key);
-                setStep("chapter");
-              }}
-              style={styles.preparationCard}
-            >
-              <div style={styles.preparationIcon}>
-                {option.icon}
-              </div>
+        {Object.entries(options).map(([key, option]) => (
+          <button
+            key={key}
+            onClick={() => {
+              setPreparation(key);
+              setStep("chapter");
+            }}
+            style={styles.preparationCard}
+          >
+            <div style={styles.preparationIcon}>
+              {option.icon}
+            </div>
 
-              <h2>{option.title}</h2>
+            <h2>{option.title}</h2>
 
-              <p>{option.description}</p>
+            <p>{option.description}</p>
 
-              <span style={styles.continueText}>
-                Continue →
-              </span>
-            </button>
-          )
-        )}
+            <span style={styles.continueText}>
+              Continue →
+            </span>
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -476,7 +499,15 @@ export default function NavtaTestPage() {
         <div style={styles.header}>
           <div>
             <h1 style={styles.title}>{subject}</h1>
+            
+<h1 style={styles.title}>{subject}</h1>
 
+<p style={styles.subtitle}>
+  {preparation
+    ? `${preparation} Preparation`
+    : "Select a chapter."}
+</p>
+            
 <p style={styles.subtitle}>
   {subject === "Biology" && preparation
     ? `${preparation} Preparation`
@@ -756,6 +787,36 @@ preparationCard: {
 preparationIcon: {
   fontSize: "45px",
   marginBottom: "15px",
+},
+
+  preparationGrid: {
+  maxWidth: "900px",
+  margin: "40px auto",
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: "24px",
+},
+
+preparationCard: {
+  padding: "35px",
+  borderRadius: "18px",
+  border: "1px solid #243047",
+  background: "#151d2d",
+  color: "#ffffff",
+  cursor: "pointer",
+  textAlign: "left",
+},
+
+preparationIcon: {
+  fontSize: "45px",
+  marginBottom: "15px",
+},
+
+continueText: {
+  display: "block",
+  marginTop: "20px",
+  color: "#38bdf8",
+  fontWeight: "700",
 },
 
 continueText: {
