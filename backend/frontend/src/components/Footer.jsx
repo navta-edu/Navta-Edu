@@ -4,5 +4,5 @@
   rel="noopener noreferrer"
   className="hover:text-blue-400 transition-colors"
 >
-  Developed by Hardik ↗
+  Developed by Hardik Sahu ↗
 </a>
