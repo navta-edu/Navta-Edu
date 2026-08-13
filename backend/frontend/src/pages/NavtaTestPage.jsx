@@ -297,6 +297,7 @@ function getQuestions(subject, chapter, difficulty) {
 export default function NavtaTestPage() {
   const [step, setStep] = useState("subject");
   const [subject, setSubject] = useState("");
+  const [preparation, setPreparation] = useState("");
   const [chapter, setChapter] = useState("");
   const [difficulty, setDifficulty] = useState("");
   const [questions, setQuestions] = useState([]);
@@ -387,8 +388,13 @@ export default function NavtaTestPage() {
             <button
               key={item}
               onClick={() => {
-                setSubject(item);
-                setStep("chapter");
+  setSubject(item);
+
+  if (item === "Biology") {
+    setStep("preparation");
+  } else {
+    setStep("chapter");
+  }
               }}
               style={styles.subjectCard}
             >
@@ -410,13 +416,72 @@ export default function NavtaTestPage() {
     );
   }
 
+  if (step === "preparation") {
+  return (
+    <div style={styles.page}>
+      <div style={styles.header}>
+        <div>
+          <h1 style={styles.title}>Biology Preparation</h1>
+
+          <p style={styles.subtitle}>
+            What are you preparing for?
+          </p>
+        </div>
+
+        <button
+          onClick={() => {
+            setSubject("");
+            setPreparation("");
+            setStep("subject");
+          }}
+          style={styles.backButton}
+        >
+          ← Subjects
+        </button>
+      </div>
+
+      <div style={styles.preparationGrid}>
+        {Object.entries(PREPARATION_OPTIONS).map(
+          ([key, option]) => (
+            <button
+              key={key}
+              onClick={() => {
+                setPreparation(key);
+                setStep("chapter");
+              }}
+              style={styles.preparationCard}
+            >
+              <div style={styles.preparationIcon}>
+                {option.icon}
+              </div>
+
+              <h2>{option.title}</h2>
+
+              <p>{option.description}</p>
+
+              <span style={styles.continueText}>
+                Continue →
+              </span>
+            </button>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+  
   if (step === "chapter") {
     return (
       <div style={styles.page}>
         <div style={styles.header}>
           <div>
             <h1 style={styles.title}>{subject}</h1>
-            <p style={styles.subtitle}>Select a chapter.</p>
+
+<p style={styles.subtitle}>
+  {subject === "Biology" && preparation
+    ? `${preparation} Preparation`
+    : "Select a chapter."}
+</p>
           </div>
 
           <button
