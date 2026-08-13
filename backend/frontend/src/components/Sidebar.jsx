@@ -25,6 +25,7 @@ export default function Sidebar() {
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/notes', label: 'Study Notes', icon: BookOpen },
     { to: '/pyqs', label: 'PYQ Papers', icon: FileText },
+    { to: '/navta-test', label: 'Navta TEST', icon: ClipboardCheck }, // Navta Test
     { to: '/assessments', label: 'Assessments', icon: ClipboardCheck },
     { to: '/analytics', label: 'Analytics', icon: BarChart3 },
     { to: '/rewards', label: 'Reward Shop', icon: Trophy },
