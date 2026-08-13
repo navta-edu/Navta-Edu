@@ -52,7 +52,32 @@ export default function About() {
             <p className="text-slate-500 dark:text-slate-400 mt-4 leading-relaxed">
               For **Teachers**, Navta serves as a digital classroom manager. Educators upload lecture notes, create multiple-choice questions, and assemble full tests. The dashboard gives access to classroom statistics, including student streaks, averages, and grading scales.
             </p>
-          </div>
+            </div>
+          
+            {/* Developer Credit */}
+<section className="mt-8 mb-8">
+  <div className="max-w-4xl mx-auto rounded-xl border border-slate-700 bg-slate-900/80 p-6 text-center shadow-lg">
+    
+    <h3 className="text-xl font-bold text-white mb-2">
+      Developed By
+    </h3>
+
+    <p className="text-slate-300 mb-4">
+      Your Name
+    </p>
+
+    <a
+      href="https://www.linkedin.com/in/YOUR-LINKEDIN-USERNAME/"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+    >
+      Connect on LinkedIn
+    </a>
+
+  </div>
+</section>
+            
           <div className="bg-primary-500/10 dark:bg-primary-950/20 rounded-2xl p-6 border border-primary-500/20 dark:border-primary-800/30">
             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Core Capabilities</h3>
             <ul className="space-y-3">
