@@ -3,7 +3,7 @@
   <div class="footer-left">
     © 2026 Navta. All rights reserved.
   </div>
-  <!-- Right Side: Developer Info -->
+  {/* comment */}
   <div class="footer-right">
     
     Designed & Developed by 
