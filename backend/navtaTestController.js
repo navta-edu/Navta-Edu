@@ -95,4 +95,106 @@ exports.deleteQuestion = async (req, res) => {
       error: error.message,
     });
   }
+
+  exports.generateTest = async (req, res) => {
+  try {
+    const {
+      subject,
+      exam,
+      classLevel,
+      chapter,
+    } = req.body;
+
+    const EASY_COUNT = 5;
+    const MEDIUM_COUNT = 5;
+    const HARD_COUNT = 5;
+
+    const getRandomQuestions = async (difficulty, count) => {
+      return NavtaQuestion.aggregate([
+        {
+          $match: {
+            subject,
+            exam,
+            classLevel,
+            chapter,
+            difficulty,
+            isActive: true,
+          },
+        },
+        {
+          $sample: {
+            size: count,
+          },
+        },
+        {
+          $project: {
+            question: 1,
+            options: 1,
+            difficulty: 1,
+          },
+        },
+      ]);
+    };
+
+    const easyQuestions = await getRandomQuestions(
+      "Easy",
+      EASY_COUNT
+    );
+
+    const mediumQuestions = await getRandomQuestions(
+      "Medium",
+      MEDIUM_COUNT
+    );
+
+    const hardQuestions = await getRandomQuestions(
+      "Hard",
+      HARD_COUNT
+    );
+
+    if (
+      easyQuestions.length < EASY_COUNT ||
+      mediumQuestions.length < MEDIUM_COUNT ||
+      hardQuestions.length < HARD_COUNT
+    ) {
+      return res.status(400).json({
+        message:
+          "Not enough questions available for this test.",
+        available: {
+          easy: easyQuestions.length,
+          medium: mediumQuestions.length,
+          hard: hardQuestions.length,
+        },
+      });
+    }
+
+    const questions = [
+      ...easyQuestions,
+      ...mediumQuestions,
+      ...hardQuestions,
+    ];
+
+    // Shuffle the complete test
+    for (let i = questions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+
+      [questions[i], questions[j]] = [
+        questions[j],
+        questions[i],
+      ];
+    }
+
+    res.json({
+      duration: 30 * 60,
+      totalQuestions: questions.length,
+      questions,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message: "Failed to generate test.",
+      error: error.message,
+    });
+  }
+};
 };
