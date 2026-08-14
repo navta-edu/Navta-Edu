@@ -559,8 +559,7 @@ onClick={() => {
   {subject === "Biology"
     ? `${preparation} → ${biologyClass}`
     : `${preparation} Preparation`}
-</p>;
-        </div>
+</p>
 
         <button
           onClick={() => {
@@ -572,7 +571,9 @@ onClick={() => {
         >
           ← Preparation
         </button>
-      </div>
+      </>
+            );
+  }
 
       <div style={styles.classGrid}>
         {Object.keys(BIOLOGY_CLASSES).map((className) => (
