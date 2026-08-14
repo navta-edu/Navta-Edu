@@ -4,6 +4,7 @@ const cors = require("cors");
 const morgan = require("morgan");
 const path = require("path");
 const connectDB = require("./config/db");
+const navtaTestRoutes = require("./routes/navtaTestRoutes");
 
 // Connect to Database
 connectDB();
@@ -42,6 +43,7 @@ app.use("/api/content", require("./routes/contentRoutes"));
 app.use("/api/student", require("./routes/studentRoutes"));
 app.use("/api/teacher", require("./routes/teacherRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
+app.use("/api/navta-test", navtaTestRoutes);
 
 // Serve Frontend (Hostinger deployment)
 // Serve Frontend (Hostinger deployment)
