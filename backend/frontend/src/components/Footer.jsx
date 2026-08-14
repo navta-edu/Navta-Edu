@@ -1,5 +1,5 @@
 <footer class="footer-container">
-  <!-- Left Side: Copyright -->
+  {/* Left Side: Copyright */}
   <div class="footer-left">
     © 2026 Navta. All rights reserved.
   </div>
