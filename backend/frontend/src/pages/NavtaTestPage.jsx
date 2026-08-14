@@ -105,7 +105,6 @@ const SUBJECTS = {
  Biology: {
   chapters: [
     // Class 11 Biology
-    "Class 11 Biology",
     "The Living World",
     "Biological Classification",
     "Plant Kingdom",
@@ -127,7 +126,6 @@ const SUBJECTS = {
     "Chemical Coordination and Integration",
 
     // Class 12 Biology
-    "Class 12 Biology",
     "Sexual Reproduction in Flowering Plants",
     "Human Reproduction",
     "Reproductive Health",
