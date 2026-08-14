@@ -100,6 +100,7 @@ const SUBJECTS = {
       "Limits and Derivatives",
       "Probability",
       "Statistics",
+      "Inverse Trigonometry Functions",
     ],
   },
  Biology: {
