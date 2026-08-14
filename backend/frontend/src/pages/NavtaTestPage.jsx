@@ -549,18 +549,8 @@ onClick={() => {
     </div>
   );
 }
-  
-  if (step === "chapter") {
-<h1 style={styles.title}>
-  {subject}
-</h1>
 
-<p style={styles.subtitle}>
-  {subject === "Biology"
-    ? `${preparation} → ${biologyClass}`
-    : `${preparation} Preparation`}
-</p>
-
+<div>
         <button
           onClick={() => {
             setPreparation("");
@@ -571,9 +561,7 @@ onClick={() => {
         >
           ← Preparation
         </button>
-      </>
-            );
-  }
+      </div>
 
       <div style={styles.classGrid}>
         {Object.keys(BIOLOGY_CLASSES).map((className) => (
