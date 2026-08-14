@@ -559,7 +559,7 @@ onClick={() => {
   {subject === "Biology"
     ? `${preparation} → ${biologyClass}`
     : `${preparation} Preparation`}
-</p>
+</p>;
         </div>
 
         <button
