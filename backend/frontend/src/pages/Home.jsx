@@ -118,6 +118,30 @@ export default function Home() {
           </Link>
         </div>
       </div>
+
+      {/* Developer Credit */}
+<section className="mt-10 mb-8 px-4">
+  <div className="mx-auto max-w-3xl rounded-xl border border-slate-700 bg-slate-900/80 p-6 text-center shadow-lg">
+
+    <p className="mb-1 text-sm text-slate-400">
+      Developed by
+    </p>
+
+    <h3 className="mb-4 text-xl font-bold text-white">
+      Hardik Sahu
+    </h3>
+
+    <a
+      href="https://www.linkedin.com/in/hardik-sahu-9797h1608p/"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+    >
+      LinkedIn
+    </a>
+
+  </div>
+</section>
     </div>
   );
 }
