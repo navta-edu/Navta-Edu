@@ -555,7 +555,7 @@ onClick={() => {
   {subject}
 </h1>
 
-<p style={styles.subtitle}>
+<p> style={styles.subtitle}>
   {subject === "Biology"
     ? `${preparation} → ${biologyClass}`
     : `${preparation} Preparation`}
