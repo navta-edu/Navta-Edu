@@ -12,6 +12,9 @@ const {
 router.post("/questions", createQuestion);
 
 // Admin
+router.post("/generate", generateTest);
+
+// Admin
 router.get("/questions", getQuestions);
 
 // Admin
