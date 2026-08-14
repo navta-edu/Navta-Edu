@@ -546,7 +546,36 @@ onClick={() => {
     </div>
   );
 }
+if (step === "chapter") {
+  return (
+    <div>
+      <h1 style={styles.title}>
+        {subject}
+      </h1>
 
+      <p style={styles.subtitle}>
+        {subject === "Biology"
+          ? `${preparation} → ${biologyClass}`
+          : `${preparation} Preparation`}
+      </p>
+
+      <div style={styles.classGrid}>
+        {/* Your chapter buttons/content go here */}
+      </div>
+
+      <button
+        onClick={() => {
+          setPreparation("");
+          setBiologyClass("");
+          setStep("preparation");
+        }}
+        style={styles.backButton}
+      >
+        ← Back
+      </button>
+    </div>
+  );
+}
 <div>
         <button
           onClick={() => {
