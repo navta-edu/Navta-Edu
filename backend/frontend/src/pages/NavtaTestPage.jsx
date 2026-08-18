@@ -65,46 +65,8 @@ const PREPARATION_OPTIONS = {
   },
 };
 
-const SUBJECTS = {
-  Physics: {
-    chapters: [
-      "Units and Measurements",
-      "Kinematics",
-      "Laws of Motion",
-      "Work, Energy and Power",
-      "Gravitation",
-      "Thermodynamics",
-      "Waves",
-      "Current Electricity",
-    ],
-  },
-  Chemistry: {
-    chapters: [
-      "Some Basic Concepts of Chemistry",
-      "Atomic Structure",
-      "Chemical Bonding",
-      "Thermodynamics",
-      "Equilibrium",
-      "Redox Reactions",
-      "Organic Chemistry",
-      "Hydrocarbons",
-    ],
-  },
-  Maths: {
-    chapters: [
-      "Sets and Relations",
-      "Quadratic Equations",
-      "Sequences and Series",
-      "Trigonometry",
-      "Straight Lines",
-      "Limits and Derivatives",
-      "Probability",
-      "Statistics",
-      "Inverse Trigonometry Functions",
-    ],
-  },
- Biology: {
-  chapters: [
+const BIOLOGY_CLASSES = {
+  "Class 11": [
     "The Living World",
     "Biological Classification",
     "Plant Kingdom",
@@ -124,6 +86,9 @@ const SUBJECTS = {
     "Locomotion and Movement",
     "Neural Control and Coordination",
     "Chemical Coordination and Integration",
+  ],
+
+  "Class 12": [
     "Sexual Reproduction in Flowering Plants",
     "Human Reproduction",
     "Reproductive Health",
@@ -138,7 +103,44 @@ const SUBJECTS = {
     "Ecosystem",
     "Biodiversity and Conservation",
   ],
- },
+};
+
+const SUBJECTS = {
+  Physics: [
+    "Units and Measurements",
+    "Kinematics",
+    "Laws of Motion",
+    "Work, Energy and Power",
+    "Gravitation",
+    "Thermodynamics",
+    "Waves",
+    "Current Electricity",
+  ],
+
+  Chemistry: [
+    "Some Basic Concepts of Chemistry",
+    "Atomic Structure",
+    "Chemical Bonding",
+    "Thermodynamics",
+    "Equilibrium",
+    "Redox Reactions",
+    "Organic Chemistry",
+    "Hydrocarbons",
+  ],
+
+  Maths: [
+    "Sets and Relations",
+    "Quadratic Equations",
+    "Sequences and Series",
+    "Trigonometry",
+    "Straight Lines",
+    "Limits and Derivatives",
+    "Probability",
+    "Statistics",
+    "Inverse Trigonometry Functions",
+  ],
+
+  Biology: [],
 };
 
 const QUESTIONS = {
@@ -311,38 +313,37 @@ const QUESTIONS = {
       ],
     },
   },
+
   Biology: {
-  "The Living World": {
-    Easy: [
-      {
-        question: "The basic unit of classification is:",
-        options: ["Genus", "Species", "Family", "Order"],
-        answer: 1,
-      },
-    ],
-
-    Medium: [
-      {
-        question: "Which taxonomic category comes immediately above species?",
-        options: ["Family", "Genus", "Order", "Class"],
-        answer: 1,
-      },
-    ],
-
-    Hard: [
-      {
-        question: "Binomial nomenclature was popularized by:",
-        options: [
-          "Charles Darwin",
-          "Carolus Linnaeus",
-          "Gregor Mendel",
-          "Robert Hooke",
-        ],
-        answer: 1,
-      },
-    ],
+    "The Living World": {
+      Easy: [
+        {
+          question: "The basic unit of classification is:",
+          options: ["Genus", "Species", "Family", "Order"],
+          answer: 1,
+        },
+      ],
+      Medium: [
+        {
+          question: "Which taxonomic category comes immediately above species?",
+          options: ["Family", "Genus", "Order", "Class"],
+          answer: 1,
+        },
+      ],
+      Hard: [
+        {
+          question: "Binomial nomenclature was popularized by:",
+          options: [
+            "Charles Darwin",
+            "Carolus Linnaeus",
+            "Gregor Mendel",
+            "Robert Hooke",
+          ],
+          answer: 1,
+        },
+      ],
+    },
   },
-},
 };
 
 function getQuestions(subject, chapter, difficulty) {
@@ -352,16 +353,10 @@ function getQuestions(subject, chapter, difficulty) {
     return chapterQuestions;
   }
 
-  // Fallback question so every chapter can start a test.
   return [
     {
       question: `Sample ${difficulty} question for ${subject} - ${chapter}`,
-      options: [
-        "Option A",
-        "Option B",
-        "Option C",
-        "Option D",
-      ],
+      options: ["Option A", "Option B", "Option C", "Option D"],
       answer: 0,
     },
   ];
@@ -432,6 +427,8 @@ export default function NavtaTestPage() {
   const resetTest = () => {
     setStep("subject");
     setSubject("");
+    setPreparation("");
+    setBiologyClass("");
     setChapter("");
     setDifficulty("");
     setQuestions([]);
@@ -439,6 +436,29 @@ export default function NavtaTestPage() {
     setAnswers({});
     setTimeLeft(30 * 60);
     setSubmitted(false);
+  };
+
+  const goToPreparation = () => {
+    setPreparation("");
+    setBiologyClass("");
+    setChapter("");
+    setDifficulty("");
+    setStep("preparation");
+  };
+
+  const goToSubjects = () => {
+    setSubject("");
+    setPreparation("");
+    setBiologyClass("");
+    setChapter("");
+    setDifficulty("");
+    setStep("subject");
+  };
+
+  const goToChapter = () => {
+    setChapter("");
+    setDifficulty("");
+    setStep("chapter");
   };
 
   if (step === "subject") {
@@ -461,11 +481,14 @@ export default function NavtaTestPage() {
           {Object.keys(SUBJECTS).map((item) => (
             <button
               key={item}
-onClick={() => {
-  setSubject(item);
-  setPreparation("");
-  setStep("preparation");
-}}
+              onClick={() => {
+                setSubject(item);
+                setPreparation("");
+                setBiologyClass("");
+                setChapter("");
+                setDifficulty("");
+                setStep("preparation");
+              }}
               style={styles.subjectCard}
             >
               <div style={styles.subjectIcon}>
@@ -476,8 +499,11 @@ onClick={() => {
               </div>
 
               <h2>{item}</h2>
+
               <p>
-                {SUBJECTS[item].chapters.length} chapters available
+                {item === "Biology"
+                  ? "Choose NEET or Boards"
+                  : `${SUBJECTS[item].length} chapters available`}
               </p>
             </button>
           ))}
@@ -486,191 +512,142 @@ onClick={() => {
     );
   }
 
-if (step === "preparation") {
-  const options = PREPARATION_OPTIONS[subject];
+  if (step === "preparation") {
+    const options = PREPARATION_OPTIONS[subject];
 
-  return (
-    <div style={styles.page}>
-      <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>
-            {subject} Preparation
-          </h1>
-
-          <p style={styles.subtitle}>
-            What are you preparing for?
-          </p>
-        </div>
-
-        <button
-          onClick={() => {
-            setSubject("");
-            setPreparation("");
-            setStep("subject");
-          }}
-          style={styles.backButton}
-        >
-          ← Subjects
-        </button>
-      </div>
-
-      <div style={styles.preparationGrid}>
-        {Object.entries(options).map(([key, option]) => (
-          <button
-            key={key}
-onClick={() => {
-  setPreparation(key);
-
-  if (subject === "Biology") {
-    setStep("biologyClass");
-  } else {
-    setStep("chapter");
-  }
-}}
-            style={styles.preparationCard}
-          >
-            <div style={styles.preparationIcon}>
-              {option.icon}
-            </div>
-
-            <h2>{option.title}</h2>
-
-            <p>{option.description}</p>
-
-            <span style={styles.continueText}>
-              Continue →
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-if (step === "chapter") {
-  return (
-    <div>
-      <h1 style={styles.title}>
-        {subject}
-      </h1>
-
-      <p style={styles.subtitle}>
-        {subject === "Biology"
-          ? `${preparation} → ${biologyClass}`
-          : `${preparation} Preparation`}
-      </p>
-
-      <div style={styles.classGrid}>
-        {/* Your chapter buttons/content go here */}
-      </div>
-
-      <button
-        onClick={() => {
-          setPreparation("");
-          setBiologyClass("");
-          setStep("preparation");
-        }}
-        style={styles.backButton}
-      >
-        ← Back
-      </button>
-    </div>
-  );
-}
-<div>
-        <button
-          onClick={() => {
-            setPreparation("");
-            setBiologyClass("");
-            setStep("preparation");
-          }}
-          style={styles.backButton}
-        >
-          ← Preparation
-        </button>
-      </div>
-
-      <div style={styles.classGrid}>
-        {Object.keys(BIOLOGY_CLASSES).map((className) => (
-          <button
-            key={className}
-            onClick={() => {
-              setBiologyClass(className);
-              setStep("chapter");
-            }}
-            style={styles.classCard}
-          >
-            <div style={styles.classIcon}>
-              🧬
-            </div>
-
-            <h2>{className}</h2>
-
-            <p>
-              {BIOLOGY_CLASSES[className].length} chapters
-            </p>
-
-            <span style={styles.continueText}>
-              View Chapters →
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
     return (
       <div style={styles.page}>
         <div style={styles.header}>
           <div>
-<h1 style={styles.title}>{subject}</h1>
+            <h1 style={styles.title}>{subject} Preparation</h1>
 
-<p style={styles.subtitle}>
-  {preparation
-    ? `${preparation} Preparation`
-    : "Select a chapter."}
-</p>
+            <p style={styles.subtitle}>
+              What are you preparing for?
+            </p>
           </div>
 
-          <button
-            onClick={() => setStep("subject")}
-            style={styles.backButton}
-          >
+          <button onClick={goToSubjects} style={styles.backButton}>
             ← Subjects
           </button>
         </div>
 
+        <div style={styles.preparationGrid}>
+          {Object.entries(options).map(([key, option]) => (
+            <button
+              key={key}
+              onClick={() => {
+                setPreparation(key);
+
+                if (subject === "Biology") {
+                  setBiologyClass("");
+                  setStep("biologyClass");
+                } else {
+                  setChapter("");
+                  setStep("chapter");
+                }
+              }}
+              style={styles.preparationCard}
+            >
+              <div style={styles.preparationIcon}>
+                {option.icon}
+              </div>
+
+              <h2>{option.title}</h2>
+
+              <p>{option.description}</p>
+
+              <span style={styles.continueText}>
+                Continue →
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "biologyClass") {
+    return (
+      <div style={styles.page}>
+        <div style={styles.header}>
+          <div>
+            <h1 style={styles.title}>Choose Class</h1>
+
+            <p style={styles.subtitle}>
+              Biology → {preparation}
+            </p>
+          </div>
+
+          <button onClick={goToPreparation} style={styles.backButton}>
+            ← Preparation
+          </button>
+        </div>
+
+        <div style={styles.classGrid}>
+          {Object.entries(BIOLOGY_CLASSES).map(([className, chapters]) => (
+            <button
+              key={className}
+              onClick={() => {
+                setBiologyClass(className);
+                setChapter("");
+                setStep("chapter");
+              }}
+              style={styles.classCard}
+            >
+              <div style={styles.classIcon}>🧬</div>
+
+              <h2>{className}</h2>
+
+              <p>{chapters.length} chapters</p>
+
+              <span style={styles.continueText}>
+                View Chapters →
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "chapter") {
+    const chapters =
+      subject === "Biology"
+        ? BIOLOGY_CLASSES[biologyClass] || []
+        : SUBJECTS[subject] || [];
+
+    return (
+      <div style={styles.page}>
+        <div style={styles.header}>
+          <div>
+            <h1 style={styles.title}>{subject}</h1>
+
+            <p style={styles.subtitle}>
+              {subject === "Biology"
+                ? `${preparation} → ${biologyClass}`
+                : `${preparation} Preparation`}
+            </p>
+          </div>
+
+          <button
+            onClick={
+              subject === "Biology"
+                ? () => setStep("biologyClass")
+                : goToPreparation
+            }
+            style={styles.backButton}
+          >
+            ← Back
+          </button>
+        </div>
+
         <div style={styles.chapterGrid}>
-          {subject === "Biology"
-  ? BIOLOGY_CLASSES[biologyClass].map((item) => (
-      <button
-        key={item}
-        onClick={() => {
-          setChapter(item);
-          setStep("difficulty");
-        }}
-        style={styles.chapterCard}
-      >
-        {item}
-        <span>→</span>
-      </button>
-    ))
-  : SUBJECTS[subject].chapters.map((item) => (
-      <button
-        key={item}
-        onClick={() => {
-          setChapter(item);
-          setStep("difficulty");
-        }}
-        style={styles.chapterCard}
-      >
-        {item}
-        <span>→</span>
-      </button>
-    ))}
+          {chapters.map((item) => (
             <button
               key={item}
               onClick={() => {
                 setChapter(item);
+                setDifficulty("");
                 setStep("difficulty");
               }}
               style={styles.chapterCard}
@@ -690,10 +667,18 @@ if (step === "chapter") {
         <div style={styles.header}>
           <div>
             <h1 style={styles.title}>Select Difficulty</h1>
+
             <p style={styles.subtitle}>
-              {subject} → {chapter}
+              {subject}
+              {subject === "Biology" ? ` → ${biologyClass}` : ""}
+              {" → "}
+              {chapter}
             </p>
           </div>
+
+          <button onClick={goToChapter} style={styles.backButton}>
+            ← Chapters
+          </button>
         </div>
 
         <div style={styles.difficultyGrid}>
@@ -736,6 +721,7 @@ if (step === "chapter") {
         <div style={styles.testHeader}>
           <div>
             <h1 style={styles.title}>Navta TEST</h1>
+
             <p style={styles.subtitle}>
               {subject} → {chapter} → {difficulty}
             </p>
@@ -885,29 +871,6 @@ const styles = {
     cursor: "pointer",
   },
 
-classGrid: {
-  maxWidth: "900px",
-  margin: "40px auto",
-  display: "grid",
-  gridTemplateColumns: "repeat(2, 1fr)",
-  gap: "24px",
-},
-
-classCard: {
-  padding: "35px",
-  borderRadius: "18px",
-  border: "1px solid #243047",
-  background: "#151d2d",
-  color: "#ffffff",
-  cursor: "pointer",
-  textAlign: "left",
-},
-
-classIcon: {
-  fontSize: "45px",
-  marginBottom: "15px",
-},
-
   grid: {
     maxWidth: "1100px",
     margin: "0 auto",
@@ -932,94 +895,58 @@ classIcon: {
   },
 
   preparationGrid: {
-  maxWidth: "900px",
-  margin: "40px auto",
-  display: "grid",
-  gridTemplateColumns: "repeat(2, 1fr)",
-  gap: "24px",
-},
+    maxWidth: "900px",
+    margin: "40px auto",
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: "24px",
+  },
 
-preparationCard: {
-  padding: "35px",
-  borderRadius: "18px",
-  border: "1px solid #243047",
-  background: "#151d2d",
-  color: "#ffffff",
-  cursor: "pointer",
-  textAlign: "left",
-},
+  preparationCard: {
+    padding: "35px",
+    borderRadius: "18px",
+    border: "1px solid #243047",
+    background: "#151d2d",
+    color: "#ffffff",
+    cursor: "pointer",
+    textAlign: "left",
+  },
 
-preparationIcon: {
-  fontSize: "45px",
-  marginBottom: "15px",
-},
+  preparationIcon: {
+    fontSize: "45px",
+    marginBottom: "15px",
+  },
 
-  preparationGrid: {
-  maxWidth: "900px",
-  margin: "40px auto",
-  display: "grid",
-  gridTemplateColumns: "repeat(2, 1fr)",
-  gap: "24px",
-},
+  classGrid: {
+    maxWidth: "900px",
+    margin: "40px auto",
+    display: "grid",
+    gridTemplateColumns: "repeat(2, 1fr)",
+    gap: "24px",
+  },
 
-preparationCard: {
-  padding: "35px",
-  borderRadius: "18px",
-  border: "1px solid #243047",
-  background: "#151d2d",
-  color: "#ffffff",
-  cursor: "pointer",
-  textAlign: "left",
-},
+  classCard: {
+    padding: "35px",
+    borderRadius: "18px",
+    border: "1px solid #243047",
+    background: "#151d2d",
+    color: "#ffffff",
+    cursor: "pointer",
+    textAlign: "left",
+  },
 
-preparationIcon: {
-  fontSize: "45px",
-  marginBottom: "15px",
-},
+  classIcon: {
+    fontSize: "45px",
+    marginBottom: "15px",
+  },
 
-preparationGrid: {
-  maxWidth: "900px",
-  margin: "40px auto",
-  display: "grid",
-  gridTemplateColumns: "repeat(3, 1fr)",
-  gap: "24px",
-},
+  continueText: {
+    display: "block",
+    marginTop: "20px",
+    color: "#38bdf8",
+    fontWeight: "700",
+  },
 
-preparationCard: {
-  padding: "35px",
-  borderRadius: "18px",
-  border: "1px solid #243047",
-  background: "#151d2d",
-  color: "#ffffff",
-  cursor: "pointer",
-  textAlign: "left",
-},
-
-preparationIcon: {
-  fontSize: "45px",
-  marginBottom: "15px",
-},
-
-continueText: {
-  display: "block",
-  marginTop: "20px",
-  color: "#38bdf8",
-  fontWeight: "700",
-},
-
-continueText: {
-  display: "block",
-  marginTop: "20px",
-  color: "#38bdf8",
-  fontWeight: "700",
-},
-
-continueText: {
-  display: "block",
-  marginTop: "20px",
-  color: "#38bdf8",
-  fontWeight: "700",
-},
   chapterGrid: {
     maxWidth: "1100px",
     margin: "0 auto",
