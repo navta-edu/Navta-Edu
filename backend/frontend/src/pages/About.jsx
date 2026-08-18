@@ -54,28 +54,6 @@ export default function About() {
             </p>
             </div>
           
-            {/* Developer Credit */}
-<section className="mt-8 mb-8">
-  <div className="max-w-4xl mx-auto rounded-xl border border-slate-700 bg-slate-900/80 p-6 text-center shadow-lg">
-    
-    <h3 className="text-xl font-bold text-white mb-2">
-      Developed By
-    </h3>
-
-    <p className="text-slate-300 mb-4">
-      Hardik Sahu
-    </p>
-
-    <a
-      href="https://www.linkedin.com/in/hardik-sahu-9797h1608p/"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-    >
-      Connect on LinkedIn
-    </a>
-
-  </div>
 </section>
             
           <div className="bg-primary-500/10 dark:bg-primary-950/20 rounded-2xl p-6 border border-primary-500/20 dark:border-primary-800/30">
