@@ -118,41 +118,6 @@ export default function Home() {
           </Link>
         </div>
       </div>
-      
-      {/* Developer Credit */}
-  <div
-  style={{
-    position: "fixed",
-    bottom: "20px",
-    right: "20px",
-    padding: "10px 16px",
-    border: "1px solid rgba(255,255,255,0.15)",
-    borderRadius: "10px",
-    background: "rgba(15, 23, 42, 0.9)",
-    backdropFilter: "blur(8px)",
-    fontSize: "13px",
-    zIndex: 1000,
-    textAlign: "right",
-  }}
->
-  <div style={{ marginBottom: "4px" }}>
-    Developed by{" "}
-    <strong>YOUR DEVELOPER NAME</strong>
-  </div>
-
-  <a
-    href="https://www.linkedin.com/in/YOUR-LINKEDIN-ID/"
-    target="_blank"
-    rel="noopener noreferrer"
-    style={{
-      color: "#0A66C2",
-      textDecoration: "none",
-      fontWeight: "600",
-    }}
-  >
-    LinkedIn ↗
-  </a>
-</div>
     </div>
   );
 }
