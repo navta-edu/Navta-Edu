@@ -7,6 +7,7 @@ const navtaQuestionSchema = new mongoose.Schema(
       enum: ["Physics", "Chemistry", "Maths", "Biology"],
       required: true,
     },
+    
 
     exam: {
       type: String,
