@@ -53,8 +53,6 @@ export default function About() {
               For **Teachers**, Navta serves as a digital classroom manager. Educators upload lecture notes, create multiple-choice questions, and assemble full tests. The dashboard gives access to classroom statistics, including student streaks, averages, and grading scales.
             </p>
             </div>
-          
-</section>
             
           <div className="bg-primary-500/10 dark:bg-primary-950/20 rounded-2xl p-6 border border-primary-500/20 dark:border-primary-800/30">
             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Core Capabilities</h3>
