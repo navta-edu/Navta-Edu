@@ -1,6 +1,7 @@
 const NavtaQuestion = require("../models/NavtaQuestion");
 
 // Add a question
+
 exports.createQuestion = async (req, res) => {
   try {
     const {
