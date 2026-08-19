@@ -1,4 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useEffect,
+  useMemo,
+  useState
+} from 'react';
+
 import { contentAPI } from '../utils/api';
 import Card from '../components/Card';
 import Button from '../components/Button';
@@ -35,34 +40,116 @@ const SCHOOL_SUBJECTS = [
 
 // ======================================================
 // JEE YEARS
-// JEE Main started in 2013
+// JEE Main years supplied by you: 2013 - 2026
 // ======================================================
 
-const JEE_YEARS = [];
+const JEE_YEARS = [
+  '2013',
+  '2014',
+  '2015',
+  '2016',
+  '2017',
+  '2018',
+  '2019',
+  '2020',
+  '2021',
+  '2022',
+  '2023',
+  '2024',
+  '2025',
+  '2026'
+];
 
-for (
-  let year = 2013;
-  year <= new Date().getFullYear();
-  year++
-) {
-  JEE_YEARS.push(String(year));
-}
+
+// ======================================================
+// JEE SESSIONS BY YEAR
+// ======================================================
+
+const JEE_SESSIONS_BY_YEAR = {
+
+  '2013': [
+    'April'
+  ],
+
+  '2014': [
+    'April'
+  ],
+
+  '2015': [
+    'April'
+  ],
+
+  '2016': [
+    'April'
+  ],
+
+  '2017': [
+    'April'
+  ],
+
+  '2018': [
+    'April'
+  ],
+
+  '2019': [
+    'January',
+    'April'
+  ],
+
+  '2020': [
+    'January',
+    'September'
+  ],
+
+  '2021': [
+    'February',
+    'March',
+    'July',
+    'August'
+  ],
+
+  '2022': [
+    'June',
+    'July'
+  ],
+
+  '2023': [
+    'January',
+    'April'
+  ],
+
+  '2024': [
+    'January',
+    'April'
+  ],
+
+  '2025': [
+    'January',
+    'April'
+  ],
+
+  '2026': [
+    'January',
+    'April'
+  ]
+
+};
 
 
 // ======================================================
 // NEET YEARS
 //
-// NEET-UG was first conducted in 2013.
-// NEET was not conducted as NEET-UG in 2014.
-// 2015 used AIPMT.
-// NEET-UG resumed from 2016.
+// NEET-UG:
+// 2013
+// 2016 onwards
 //
-// Therefore:
-// 2013, 2016, 2017, ... current year
+// 2014 was not conducted as NEET-UG.
+// 2015 used AIPMT.
 // ======================================================
 
 const NEET_YEARS = [
   '2013',
+
   ...Array.from(
     {
       length:
@@ -75,31 +162,44 @@ const NEET_YEARS = [
 
 
 // ======================================================
-// MAIN SECTIONS
+// MAIN EXAM OPTIONS
 // ======================================================
 
 const EXAM_OPTIONS = [
+
   {
     id: 'school',
+
     title: 'School Level',
+
     description:
       'Class 11 & 12 school examination papers',
+
     icon: GraduationCap
   },
+
   {
     id: 'jee',
+
     title: 'JEE',
+
     description:
       'JEE Main previous year question papers',
+
     icon: BookOpen
   },
+
   {
     id: 'neet',
+
     title: 'NEET',
+
     description:
       'NEET previous year question papers',
+
     icon: BookOpen
   }
+
 ];
 
 
@@ -108,61 +208,106 @@ const EXAM_OPTIONS = [
 // ======================================================
 
 const normalize = (value) => {
+
   return String(value || '')
     .trim()
     .toLowerCase();
+
 };
 
+
+// ======================================================
+// NORMALIZE EXAM
+// ======================================================
 
 const normalizeExam = (paper) => {
+
   return normalize(
     paper?.examName ||
-      paper?.exam ||
-      paper?.examType ||
-      ''
+    paper?.exam ||
+    paper?.examType ||
+    ''
   );
+
 };
 
+
+// ======================================================
+// GET SESSION
+// ======================================================
 
 const getPaperSession = (paper) => {
+
   return normalize(
     paper?.session ||
-      paper?.attempt ||
-      paper?.phase ||
-      ''
+    paper?.attempt ||
+    paper?.phase ||
+    ''
   );
+
 };
 
 
+// ======================================================
+// GET DATE
+// ======================================================
+
 const getPaperDate = (paper) => {
+
   return (
     paper?.examDate ||
     paper?.date ||
     paper?.paperDate ||
     ''
   );
+
 };
 
 
+// ======================================================
+// GET SHIFT
+// ======================================================
+
 const getPaperShift = (paper) => {
+
   return (
     paper?.shift ||
     paper?.shiftName ||
     ''
   );
+
 };
 
 
+// ======================================================
+// FORMAT DATE
+// ======================================================
+
 const formatDate = (dateValue) => {
+
   if (!dateValue) {
+
     return 'Date not available';
+
   }
 
-  const date = new Date(dateValue);
 
-  if (Number.isNaN(date.getTime())) {
-    return String(dateValue);
+  const date =
+    new Date(dateValue);
+
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+
+    return String(
+      dateValue
+    );
+
   }
+
 
   return date.toLocaleDateString(
     'en-IN',
@@ -172,6 +317,144 @@ const formatDate = (dateValue) => {
       year: 'numeric'
     }
   );
+
+};
+
+
+// ======================================================
+// SESSION MATCHER
+//
+// Allows database values such as:
+// january / jan
+// april / apr
+// september / sep / sept
+// ======================================================
+
+const sessionMatches = (
+  paperSession,
+  selectedSession
+) => {
+
+  const paperValue =
+    normalize(
+      paperSession
+    );
+
+  const selectedValue =
+    normalize(
+      selectedSession
+    );
+
+
+  const aliases = {
+
+    january: [
+      'january',
+      'jan'
+    ],
+
+    february: [
+      'february',
+      'feb'
+    ],
+
+    march: [
+      'march',
+      'mar'
+    ],
+
+    april: [
+      'april',
+      'apr'
+    ],
+
+    june: [
+      'june',
+      'jun'
+    ],
+
+    july: [
+      'july',
+      'jul'
+    ],
+
+    august: [
+      'august',
+      'aug'
+    ],
+
+    september: [
+      'september',
+      'sep',
+      'sept'
+    ]
+
+  };
+
+
+  const validValues =
+    aliases[
+      selectedValue
+    ] || [
+      selectedValue
+    ];
+
+
+  return validValues.includes(
+    paperValue
+  );
+
+};
+
+
+// ======================================================
+// SESSION DISPLAY NAME
+// ======================================================
+
+const sessionDisplayName = (
+  session
+) => {
+
+  const value =
+    normalize(
+      session
+    );
+
+
+  const names = {
+
+    january:
+      'January Session',
+
+    february:
+      'February Session',
+
+    march:
+      'March Session',
+
+    april:
+      'April Session',
+
+    june:
+      'June Session',
+
+    july:
+      'July Session',
+
+    august:
+      'August Session',
+
+    september:
+      'September Session'
+
+  };
+
+
+  return (
+    names[value] ||
+    session
+  );
+
 };
 
 
@@ -181,73 +464,104 @@ const formatDate = (dateValue) => {
 
 export default function PYQPage() {
 
-  const { user } = useAuth();
+  const { user } =
+    useAuth();
 
 
   // ====================================================
   // BACKEND DATA
   // ====================================================
 
-  const [subjects, setSubjects] =
-    useState([]);
+  const [
+    subjects,
+    setSubjects
+  ] = useState([]);
 
-  const [allPYQs, setAllPYQs] =
-    useState([]);
+
+  const [
+    allPYQs,
+    setAllPYQs
+  ] = useState([]);
 
 
   // ====================================================
   // LOADING
   // ====================================================
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading
+  ] = useState(true);
 
-  const [papersLoading, setPapersLoading] =
-    useState(false);
+
+  const [
+    papersLoading,
+    setPapersLoading
+  ] = useState(false);
 
 
   // ====================================================
   // MAIN SECTION
   // ====================================================
 
-  const [section, setSection] =
-    useState('');
+  const [
+    section,
+    setSection
+  ] = useState('');
 
 
   // ====================================================
   // SCHOOL
   // ====================================================
 
-  const [schoolClass, setSchoolClass] =
-    useState('');
+  const [
+    schoolClass,
+    setSchoolClass
+  ] = useState('');
 
-  const [schoolSubject, setSchoolSubject] =
-    useState('');
+
+  const [
+    schoolSubject,
+    setSchoolSubject
+  ] = useState('');
 
 
   // ====================================================
   // COMPETITIVE EXAM
   // ====================================================
 
-  const [competitiveExam, setCompetitiveExam] =
-    useState('');
+  const [
+    competitiveExam,
+    setCompetitiveExam
+  ] = useState('');
 
-  const [selectedYear, setSelectedYear] =
-    useState('all');
+
+  const [
+    selectedYear,
+    setSelectedYear
+  ] = useState('all');
 
 
   // ====================================================
   // JEE FILTERS
   // ====================================================
 
-  const [jeeSession, setJeeSession] =
-    useState('all');
+  const [
+    jeeSession,
+    setJeeSession
+  ] = useState('all');
 
-  const [jeeDate, setJeeDate] =
-    useState('all');
 
-  const [jeeShift, setJeeShift] =
-    useState('all');
+  const [
+    jeeDate,
+    setJeeDate
+  ] = useState('all');
+
+
+  const [
+    jeeShift,
+    setJeeShift
+  ] = useState('all');
 
 
   // ====================================================
@@ -258,23 +572,29 @@ export default function PYQPage() {
 
     contentAPI
       .getSubjects()
+
       .then((res) => {
 
         setSubjects(
           res.data || []
         );
 
-        setLoading(false);
+        setLoading(
+          false
+        );
 
       })
-      .catch((err) => {
+
+      .catch((error) => {
 
         console.error(
           'Error loading subjects:',
-          err
+          error
         );
 
-        setLoading(false);
+        setLoading(
+          false
+        );
 
       });
 
@@ -290,8 +610,11 @@ export default function PYQPage() {
   ) => {
 
     if (!subjectName) {
+
       return '';
+
     }
+
 
     const found =
       subjects.find(
@@ -304,7 +627,12 @@ export default function PYQPage() {
           )
       );
 
-    return found?._id || '';
+
+    return (
+      found?._id ||
+      ''
+    );
+
   };
 
 
@@ -313,32 +641,43 @@ export default function PYQPage() {
   // ====================================================
 
   const loadSubjectPYQs =
-    async (subjectName) => {
+    async (
+      subjectName
+    ) => {
 
       const subjectId =
         findSubjectId(
           subjectName
         );
 
+
       if (!subjectId) {
 
         setAllPYQs([]);
 
         return;
+
       }
+
 
       try {
 
-        setPapersLoading(true);
+        setPapersLoading(
+          true
+        );
+
 
         const res =
-          await contentAPI.getPYQs(
-            subjectId
-          );
+          await contentAPI
+            .getPYQs(
+              subjectId
+            );
+
 
         setAllPYQs(
           res.data || []
         );
+
 
       } catch (error) {
 
@@ -351,9 +690,12 @@ export default function PYQPage() {
 
       } finally {
 
-        setPapersLoading(false);
+        setPapersLoading(
+          false
+        );
 
       }
+
     };
 
 
@@ -362,19 +704,29 @@ export default function PYQPage() {
   // ====================================================
 
   const loadCompetitivePYQs =
-    async (examName) => {
+    async (
+      examName
+    ) => {
 
       try {
 
-        setPapersLoading(true);
+        setPapersLoading(
+          true
+        );
 
         setAllPYQs([]);
 
-        if (!subjects.length) {
 
-          setPapersLoading(false);
+        if (
+          !subjects.length
+        ) {
+
+          setPapersLoading(
+            false
+          );
 
           return;
+
         }
 
 
@@ -388,13 +740,16 @@ export default function PYQPage() {
                   .getPYQs(
                     subject._id
                   )
+
                   .then(
                     (res) =>
                       res.data || []
                   )
+
                   .catch(
                     () => []
                   )
+
             )
 
           );
@@ -404,6 +759,7 @@ export default function PYQPage() {
           responses.flat();
 
 
+        // Remove duplicates
         const uniquePapers =
           Array.from(
             new Map(
@@ -417,6 +773,7 @@ export default function PYQPage() {
           );
 
 
+        // Filter JEE / NEET
         const filtered =
           uniquePapers.filter(
             (paper) => {
@@ -459,6 +816,7 @@ export default function PYQPage() {
           filtered
         );
 
+
       } catch (error) {
 
         console.error(
@@ -470,9 +828,12 @@ export default function PYQPage() {
 
       } finally {
 
-        setPapersLoading(false);
+        setPapersLoading(
+          false
+        );
 
       }
+
     };
 
 
@@ -574,7 +935,7 @@ export default function PYQPage() {
 
 
   // ====================================================
-  // YEAR LIST
+  // AVAILABLE YEARS
   // ====================================================
 
   const availableYears =
@@ -649,58 +1010,67 @@ export default function PYQPage() {
 
   // ====================================================
   // JEE SESSIONS
+  //
+  // IMPORTANT:
+  // Sessions now come from the fixed year list,
+  // NOT from uploaded papers.
   // ====================================================
 
   const availableJeeSessions =
     useMemo(() => {
 
-      const sessions =
-        jeeYearPapers
-          .map(
-            (paper) =>
-              getPaperSession(
-                paper
-              )
-          )
-          .filter(Boolean);
+      // If a year is selected
+      if (
+        selectedYear !== 'all'
+      ) {
+
+        return (
+          JEE_SESSIONS_BY_YEAR[
+            String(
+              selectedYear
+            )
+          ] || []
+        );
+
+      }
 
 
-      const unique =
-        [
-          ...new Set(
-            sessions
-          )
-        ];
+      // If All Years is selected,
+      // show every session used across JEE history.
 
+      const allSessions = [];
 
-      unique.sort(
-        (a, b) => {
+      Object.values(
+        JEE_SESSIONS_BY_YEAR
+      ).forEach(
+        (sessions) => {
 
-          const order = {
+          sessions.forEach(
+            (session) => {
 
-            january: 1,
+              if (
+                !allSessions.includes(
+                  session
+                )
+              ) {
 
-            jan: 1,
+                allSessions.push(
+                  session
+                );
 
-            april: 2,
+              }
 
-            apr: 2
-
-          };
-
-          return (
-            (order[a] || 99) -
-            (order[b] || 99)
+            }
           );
 
         }
       );
 
 
-      return unique;
+      return allSessions;
 
     }, [
-      jeeYearPapers
+      selectedYear
     ]);
 
 
@@ -711,10 +1081,9 @@ export default function PYQPage() {
   const availableJeeDates =
     useMemo(() => {
 
-      let papers =
-        [
-          ...jeeYearPapers
-        ];
+      let papers = [
+        ...jeeYearPapers
+      ];
 
 
       if (
@@ -724,10 +1093,10 @@ export default function PYQPage() {
         papers =
           papers.filter(
             (paper) =>
-              getPaperSession(
-                paper
-              ) ===
-              normalize(
+              sessionMatches(
+                getPaperSession(
+                  paper
+                ),
                 jeeSession
               )
           );
@@ -781,10 +1150,9 @@ export default function PYQPage() {
   const availableJeeShifts =
     useMemo(() => {
 
-      let papers =
-        [
-          ...jeeYearPapers
-        ];
+      let papers = [
+        ...jeeYearPapers
+      ];
 
 
       if (
@@ -794,10 +1162,10 @@ export default function PYQPage() {
         papers =
           papers.filter(
             (paper) =>
-              getPaperSession(
-                paper
-              ) ===
-              normalize(
+              sessionMatches(
+                getPaperSession(
+                  paper
+                ),
                 jeeSession
               )
           );
@@ -856,10 +1224,9 @@ export default function PYQPage() {
   const displayedPYQs =
     useMemo(() => {
 
-      let papers =
-        [
-          ...allPYQs
-        ];
+      let papers = [
+        ...allPYQs
+      ];
 
 
       // -----------------------------------------------
@@ -904,6 +1271,7 @@ export default function PYQPage() {
               return (
                 normalizedClass ===
                   selectedClass ||
+
                 normalizedClass.includes(
                   selectedClass
                 )
@@ -953,10 +1321,10 @@ export default function PYQPage() {
         papers =
           papers.filter(
             (paper) =>
-              getPaperSession(
-                paper
-              ) ===
-              normalize(
+              sessionMatches(
+                getPaperSession(
+                  paper
+                ),
                 jeeSession
               )
           );
@@ -1041,13 +1409,17 @@ export default function PYQPage() {
 
           const dateA =
             new Date(
-              getPaperDate(a)
+              getPaperDate(
+                a
+              )
             ).getTime() || 0;
 
 
           const dateB =
             new Date(
-              getPaperDate(b)
+              getPaperDate(
+                b
+              )
             ).getTime() || 0;
 
 
@@ -1202,7 +1574,7 @@ export default function PYQPage() {
 
 
   // ====================================================
-  // LOADING SCREEN
+  // LOADING
   // ====================================================
 
   if (loading) {
@@ -1250,6 +1622,8 @@ export default function PYQPage() {
           space-y-8
         "
       >
+
+        {/* HEADER */}
 
         <div
           className="
@@ -1303,6 +1677,7 @@ export default function PYQPage() {
                 className="
                   text-sm
                   text-slate-400
+                  dark:text-slate-500
                   mt-1
                 "
               >
@@ -1343,6 +1718,8 @@ export default function PYQPage() {
                       option.id
                     );
 
+                    setAllPYQs([]);
+
                     setSchoolClass('');
 
                     setSchoolSubject('');
@@ -1363,24 +1740,22 @@ export default function PYQPage() {
                       'all'
                     );
 
-                    setAllPYQs([]);
-
                   }}
+
                   className="
                     text-left
-                    group
+                    p-6
                     rounded-2xl
                     border
                     border-slate-200
                     dark:border-slate-800
                     bg-white
                     dark:bg-slate-900
-                    p-6
+                    hover:border-primary-400
                     hover:-translate-y-1
-                    hover:border-primary-500
-                    hover:shadow-xl
                     transition-all
                     duration-200
+                    group
                   "
                 >
 
@@ -1403,7 +1778,10 @@ export default function PYQPage() {
                     >
 
                       <Icon
-                        className="w-7 h-7"
+                        className="
+                          w-7
+                          h-7
+                        "
                       />
 
                     </div>
@@ -1413,7 +1791,7 @@ export default function PYQPage() {
                       className="
                         w-5
                         h-5
-                        text-slate-400
+                        text-slate-300
                         group-hover:text-primary-500
                       "
                     />
@@ -1423,11 +1801,11 @@ export default function PYQPage() {
 
                   <h2
                     className="
-                      mt-6
                       text-lg
                       font-bold
                       text-slate-900
                       dark:text-white
+                      mt-5
                     "
                   >
                     {option.title}
@@ -1436,9 +1814,9 @@ export default function PYQPage() {
 
                   <p
                     className="
-                      mt-2
-                      text-sm
+                      text-xs
                       text-slate-400
+                      mt-1
                     "
                   >
                     {option.description}
@@ -1453,44 +1831,6 @@ export default function PYQPage() {
 
         </div>
 
-
-        {/* ADMIN / TEACHER LINK */}
-
-        {(user?.role === 'teacher' ||
-          user?.role === 'admin') && (
-
-          <div
-            className="
-              flex
-              justify-end
-            "
-          >
-
-            <Link
-              to={
-                user.role === 'teacher'
-                  ? '/teacher'
-                  : '/admin'
-              }
-            >
-
-              <Button
-                icon={PlusCircle}
-                className="
-                  px-4
-                  py-2.5
-                  text-xs
-                "
-              >
-                Upload Paper
-              </Button>
-
-            </Link>
-
-          </div>
-
-        )}
-
       </div>
 
     );
@@ -1499,7 +1839,7 @@ export default function PYQPage() {
 
 
   // ====================================================
-  // SCHOOL - SELECT CLASS
+  // SCHOOL CLASS SELECTION
   // ====================================================
 
   if (
@@ -1511,7 +1851,7 @@ export default function PYQPage() {
 
       <div
         className="
-          space-y-8
+          space-y-6
         "
       >
 
@@ -1528,7 +1868,9 @@ export default function PYQPage() {
         >
 
           <button
-            onClick={goBack}
+            onClick={
+              goBack
+            }
             className="
               p-2
               rounded-lg
@@ -1538,7 +1880,11 @@ export default function PYQPage() {
           >
 
             <ArrowLeft
-              className="w-5 h-5 text-slate-500"
+              className="
+                w-5
+                h-5
+                text-slate-500
+              "
             />
 
           </button>
@@ -1560,7 +1906,7 @@ export default function PYQPage() {
 
             <p
               className="
-                text-sm
+                text-xs
                 text-slate-400
                 mt-1
               "
@@ -1581,7 +1927,10 @@ export default function PYQPage() {
           "
         >
 
-          {['11th', '12th'].map(
+          {[
+            '11th',
+            '12th'
+          ].map(
             (className) => (
 
               <button
@@ -1591,60 +1940,34 @@ export default function PYQPage() {
                     className
                   )
                 }
+
                 className="
-                  group
-                  p-8
-                  text-left
+                  p-6
                   rounded-2xl
                   border
                   border-slate-200
                   dark:border-slate-800
                   bg-white
                   dark:bg-slate-900
+                  text-left
+                  hover:border-primary-400
                   hover:-translate-y-1
-                  hover:border-primary-500
                   transition-all
                 "
               >
 
-                <div
+                <GraduationCap
                   className="
-                    flex
-                    justify-between
-                    items-center
+                    w-8
+                    h-8
+                    text-primary-500
+                    mb-4
                   "
-                >
-
-                  <div
-                    className="
-                      p-4
-                      rounded-xl
-                      bg-indigo-50
-                      dark:bg-indigo-950/30
-                      text-indigo-500
-                    "
-                  >
-
-                    <GraduationCap
-                      className="w-8 h-8"
-                    />
-
-                  </div>
-
-
-                  <ChevronRight
-                    className="
-                      w-6 h-6
-                      text-slate-400
-                    "
-                  />
-
-                </div>
+                />
 
 
                 <h2
                   className="
-                    mt-6
                     text-xl
                     font-bold
                     text-slate-900
@@ -1657,12 +1980,13 @@ export default function PYQPage() {
 
                 <p
                   className="
-                    text-sm
+                    text-xs
                     text-slate-400
-                    mt-2
+                    mt-1
                   "
                 >
-                  View Class {className} previous year papers.
+                  Physics, Chemistry, Maths
+                  & Biology
                 </p>
 
               </button>
@@ -1680,7 +2004,7 @@ export default function PYQPage() {
 
 
   // ====================================================
-  // SCHOOL - SELECT SUBJECT
+  // SCHOOL SUBJECT SELECTION
   // ====================================================
 
   if (
@@ -1693,7 +2017,7 @@ export default function PYQPage() {
 
       <div
         className="
-          space-y-8
+          space-y-6
         "
       >
 
@@ -1710,7 +2034,9 @@ export default function PYQPage() {
         >
 
           <button
-            onClick={goBack}
+            onClick={
+              goBack
+            }
             className="
               p-2
               rounded-lg
@@ -1720,7 +2046,11 @@ export default function PYQPage() {
           >
 
             <ArrowLeft
-              className="w-5 h-5 text-slate-500"
+              className="
+                w-5
+                h-5
+                text-slate-500
+              "
             />
 
           </button>
@@ -1742,7 +2072,7 @@ export default function PYQPage() {
 
             <p
               className="
-                text-sm
+                text-xs
                 text-slate-400
                 mt-1
               "
@@ -1758,7 +2088,6 @@ export default function PYQPage() {
         <div
           className="
             grid
-            grid-cols-1
             sm:grid-cols-2
             lg:grid-cols-4
             gap-5
@@ -1775,60 +2104,34 @@ export default function PYQPage() {
                     subject
                   )
                 }
+
                 className="
-                  group
-                  p-6
-                  text-left
+                  p-5
                   rounded-2xl
                   border
                   border-slate-200
                   dark:border-slate-800
                   bg-white
                   dark:bg-slate-900
+                  text-left
+                  hover:border-primary-400
                   hover:-translate-y-1
-                  hover:border-primary-500
                   transition-all
                 "
               >
 
-                <div
+                <BookOpen
                   className="
-                    flex
-                    justify-between
-                    items-center
+                    w-7
+                    h-7
+                    text-primary-500
+                    mb-4
                   "
-                >
-
-                  <div
-                    className="
-                      p-3
-                      rounded-xl
-                      bg-indigo-50
-                      dark:bg-indigo-950/30
-                      text-indigo-500
-                    "
-                  >
-
-                    <BookOpen
-                      className="w-6 h-6"
-                    />
-
-                  </div>
-
-
-                  <ChevronRight
-                    className="
-                      w-5 h-5
-                      text-slate-400
-                    "
-                  />
-
-                </div>
+                />
 
 
                 <h2
                   className="
-                    mt-5
                     font-bold
                     text-slate-900
                     dark:text-white
@@ -1842,10 +2145,10 @@ export default function PYQPage() {
                   className="
                     text-xs
                     text-slate-400
-                    mt-2
+                    mt-1
                   "
                 >
-                  Class {schoolClass} {subject} papers
+                  Class {schoolClass}
                 </p>
 
               </button>
@@ -1863,7 +2166,7 @@ export default function PYQPage() {
 
 
   // ====================================================
-  // JEE / NEET
+  // JEE / NEET PAGE
   // ====================================================
 
   if (
@@ -1902,7 +2205,10 @@ export default function PYQPage() {
           >
 
             <button
-              onClick={goBack}
+              onClick={
+                goBack
+              }
+
               className="
                 p-2
                 rounded-lg
@@ -1933,7 +2239,10 @@ export default function PYQPage() {
             >
 
               <BookOpen
-                className="w-6 h-6"
+                className="
+                  w-6
+                  h-6
+                "
               />
 
             </div>
@@ -1949,7 +2258,9 @@ export default function PYQPage() {
                   dark:text-white
                 "
               >
-                {competitiveExam} Previous Year Papers
+                {competitiveExam}
+                {' '}
+                Previous Year Papers
               </h1>
 
 
@@ -1960,7 +2271,10 @@ export default function PYQPage() {
                   mt-1
                 "
               >
-                Select a year to find previous year papers.
+                Select year
+                {section === 'jee'
+                  ? ', session, date and shift.'
+                  : '.'}
               </p>
 
             </div>
@@ -1998,7 +2312,10 @@ export default function PYQPage() {
 
 
               <select
-                value={selectedYear}
+                value={
+                  selectedYear
+                }
+
                 onChange={(e) => {
 
                   setSelectedYear(
@@ -2018,6 +2335,7 @@ export default function PYQPage() {
                   );
 
                 }}
+
                 className="
                   w-full
                   px-3
@@ -2078,7 +2396,10 @@ export default function PYQPage() {
 
 
                 <select
-                  value={jeeSession}
+                  value={
+                    jeeSession
+                  }
+
                   onChange={(e) => {
 
                     setJeeSession(
@@ -2094,6 +2415,7 @@ export default function PYQPage() {
                     );
 
                   }}
+
                   className="
                     w-full
                     px-3
@@ -2123,15 +2445,9 @@ export default function PYQPage() {
                         key={session}
                         value={session}
                       >
-
-                        {session === 'jan' ||
-                        session === 'january'
-                          ? 'January Session'
-                          : session === 'apr' ||
-                            session === 'april'
-                          ? 'April Session'
-                          : session}
-
+                        {sessionDisplayName(
+                          session
+                        )}
                       </option>
 
                     )
@@ -2164,7 +2480,10 @@ export default function PYQPage() {
 
 
                 <select
-                  value={jeeDate}
+                  value={
+                    jeeDate
+                  }
+
                   onChange={(e) => {
 
                     setJeeDate(
@@ -2176,6 +2495,7 @@ export default function PYQPage() {
                     );
 
                   }}
+
                   className="
                     w-full
                     px-3
@@ -2240,12 +2560,16 @@ export default function PYQPage() {
 
 
                 <select
-                  value={jeeShift}
+                  value={
+                    jeeShift
+                  }
+
                   onChange={(e) =>
                     setJeeShift(
                       e.target.value
                     )
                   }
+
                   className="
                     w-full
                     px-3
@@ -2347,9 +2671,10 @@ export default function PYQPage() {
                     mt-1
                   "
                 >
-                  JEE years from 2013 onwards are available in the year selector.
-                  January and April session dates and shifts appear when those
-                  details are available in the existing paper data.
+                  JEE Main sessions are configured
+                  according to the year. Dates and
+                  shifts appear when papers containing
+                  those details are uploaded.
                 </p>
 
               </div>
@@ -2416,9 +2741,8 @@ export default function PYQPage() {
                     mt-1
                   "
                 >
-                  NEET-UG was first conducted in 2013.
-                  The year selector includes 2013 and the NEET-UG years
-                  from 2016 onwards.
+                  Select a year to find
+                  NEET previous year papers.
                 </p>
 
               </div>
@@ -2476,7 +2800,10 @@ export default function PYQPage() {
               (paper) => (
 
                 <Card
-                  key={paper._id}
+                  key={
+                    paper._id
+                  }
+
                   className="
                     hover:-translate-y-1
                     transition-all
@@ -2497,7 +2824,10 @@ export default function PYQPage() {
                   >
 
                     <FileText
-                      className="w-6 h-6"
+                      className="
+                        w-6
+                        h-6
+                      "
                     />
 
                   </div>
@@ -2510,6 +2840,7 @@ export default function PYQPage() {
                       text-slate-900
                       dark:text-white
                       leading-snug
+                      line-clamp-2
                     "
                   >
                     {paper.title}
@@ -2537,11 +2868,16 @@ export default function PYQPage() {
                     >
 
                       <Calendar
-                        className="w-3.5 h-3.5"
+                        className="
+                          w-3.5
+                          h-3.5
+                        "
                       />
 
                       <span>
-                        Year {paper.year || 'N/A'}
+                        Year{' '}
+                        {paper.year ||
+                          'N/A'}
                       </span>
 
                     </div>
@@ -2556,7 +2892,10 @@ export default function PYQPage() {
                     >
 
                       <Tag
-                        className="w-3.5 h-3.5"
+                        className="
+                          w-3.5
+                          h-3.5
+                        "
                       />
 
                       <span>
@@ -2595,14 +2934,19 @@ export default function PYQPage() {
                         >
 
                           <Calendar
-                            className="w-3.5 h-3.5"
+                            className="
+                              w-3.5
+                              h-3.5
+                            "
                           />
 
                           <span>
                             Session:{' '}
                             {
-                              getPaperSession(
-                                paper
+                              sessionDisplayName(
+                                getPaperSession(
+                                  paper
+                                )
                               )
                             }
                           </span>
@@ -2627,7 +2971,10 @@ export default function PYQPage() {
                         >
 
                           <Calendar
-                            className="w-3.5 h-3.5"
+                            className="
+                              w-3.5
+                              h-3.5
+                            "
                           />
 
                           <span>
@@ -2659,7 +3006,10 @@ export default function PYQPage() {
                         >
 
                           <Clock
-                            className="w-3.5 h-3.5"
+                            className="
+                              w-3.5
+                              h-3.5
+                            "
                           />
 
                           <span>
@@ -2694,8 +3044,12 @@ export default function PYQPage() {
                     {paper.pdfUrl ? (
 
                       <a
-                        href={paper.pdfUrl}
+                        href={
+                          paper.pdfUrl
+                        }
+
                         target="_blank"
+
                         rel="noreferrer"
                       >
 
@@ -2737,7 +3091,7 @@ export default function PYQPage() {
             )}
 
 
-            {/* EMPTY */}
+            {/* NO PAPERS */}
 
             {displayedPYQs.length === 0 && (
 
@@ -2769,7 +3123,9 @@ export default function PYQPage() {
                     dark:text-slate-400
                   "
                 >
-                  No {competitiveExam} papers found
+                  No {competitiveExam}
+                  {' '}
+                  papers found
                 </p>
 
 
@@ -2780,7 +3136,8 @@ export default function PYQPage() {
                     mt-1
                   "
                 >
-                  Try another year.
+                  Try another year,
+                  session, date or shift.
                 </p>
 
               </div>
@@ -2810,6 +3167,8 @@ export default function PYQPage() {
       "
     >
 
+      {/* HEADER */}
+
       <div
         className="
           flex
@@ -2834,7 +3193,10 @@ export default function PYQPage() {
         >
 
           <button
-            onClick={goBack}
+            onClick={
+              goBack
+            }
+
             className="
               p-2
               rounded-lg
@@ -2864,7 +3226,11 @@ export default function PYQPage() {
                 dark:text-white
               "
             >
-              Class {schoolClass} {schoolSubject} PYQs
+              Class {schoolClass}
+              {' '}
+              {schoolSubject}
+              {' '}
+              PYQs
             </h1>
 
 
@@ -2875,7 +3241,8 @@ export default function PYQPage() {
                 mt-1
               "
             >
-              Previous year school examination papers.
+              Previous year school
+              examination papers.
             </p>
 
           </div>
@@ -2883,7 +3250,7 @@ export default function PYQPage() {
         </div>
 
 
-        {/* EXISTING UPLOAD LINK */}
+        {/* UPLOAD */}
 
         {(user?.role === 'teacher' ||
           user?.role === 'admin') && (
@@ -2902,6 +3269,7 @@ export default function PYQPage() {
                 px-3.5
                 py-2.5
                 text-xs
+                whitespace-nowrap
               "
             >
               Upload Paper
@@ -2914,7 +3282,7 @@ export default function PYQPage() {
       </div>
 
 
-      {/* LOADING */}
+      {/* PAPERS */}
 
       {papersLoading ? (
 
@@ -2955,7 +3323,10 @@ export default function PYQPage() {
             (paper) => (
 
               <Card
-                key={paper._id}
+                key={
+                  paper._id
+                }
+
                 className="
                   hover:-translate-y-1
                   transition-all
@@ -2976,7 +3347,10 @@ export default function PYQPage() {
                 >
 
                   <FileText
-                    className="w-6 h-6"
+                    className="
+                      w-6
+                      h-6
+                    "
                   />
 
                 </div>
@@ -2988,6 +3362,8 @@ export default function PYQPage() {
                     font-bold
                     text-slate-900
                     dark:text-white
+                    leading-snug
+                    line-clamp-2
                   "
                 >
                   {paper.title}
@@ -3004,7 +3380,8 @@ export default function PYQPage() {
                       font-semibold
                     "
                   >
-                    Chapter: {paper.chapter.title}
+                    Chapter:{' '}
+                    {paper.chapter.title}
                   </p>
 
                 )}
@@ -3031,11 +3408,16 @@ export default function PYQPage() {
                   >
 
                     <Calendar
-                      className="w-3.5 h-3.5"
+                      className="
+                        w-3.5
+                        h-3.5
+                      "
                     />
 
                     <span>
-                      Year {paper.year || 'N/A'}
+                      Year{' '}
+                      {paper.year ||
+                        'N/A'}
                     </span>
 
                   </div>
@@ -3050,7 +3432,10 @@ export default function PYQPage() {
                   >
 
                     <Tag
-                      className="w-3.5 h-3.5"
+                      className="
+                        w-3.5
+                        h-3.5
+                      "
                     />
 
                     <span>
@@ -3062,6 +3447,8 @@ export default function PYQPage() {
 
                 </div>
 
+
+                {/* DOWNLOAD */}
 
                 <div
                   className="
@@ -3076,8 +3463,12 @@ export default function PYQPage() {
                   {paper.pdfUrl ? (
 
                     <a
-                      href={paper.pdfUrl}
+                      href={
+                        paper.pdfUrl
+                      }
+
                       target="_blank"
+
                       rel="noreferrer"
                     >
 
@@ -3119,8 +3510,6 @@ export default function PYQPage() {
           )}
 
 
-          {/* NO PAPERS */}
-
           {displayedPYQs.length === 0 && (
 
             <div
@@ -3131,7 +3520,7 @@ export default function PYQPage() {
               "
             >
 
-              <FileText
+              <Search
                 className="
                   w-10
                   h-10
@@ -3162,7 +3551,8 @@ export default function PYQPage() {
                   mt-1
                 "
               >
-                No papers are currently available for Class {schoolClass} {schoolSubject}.
+                Try another subject
+                or check back later.
               </p>
 
             </div>
