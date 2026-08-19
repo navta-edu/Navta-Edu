@@ -6,6 +6,7 @@ const {
   createQuestion,
   getQuestions,
   deleteQuestion,
+  generateTest,
 } = require("../controllers/navtaTestController");
 
 // Admin

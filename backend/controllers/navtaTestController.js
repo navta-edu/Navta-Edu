@@ -95,8 +95,9 @@ exports.deleteQuestion = async (req, res) => {
       error: error.message,
     });
   }
+};
 
-  exports.generateTest = async (req, res) => {
+exports.generateTest = async (req, res) => {
   try {
     const {
       subject,
@@ -196,5 +197,4 @@ exports.deleteQuestion = async (req, res) => {
       error: error.message,
     });
   }
-};
 };
