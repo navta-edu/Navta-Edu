@@ -5,10 +5,6 @@ const morgan = require("morgan");
 const path = require("path");
 const connectDB = require("./config/db");
 const navtaTestRoutes = require("./routes/navtaTestRoutes");
-const aiRoutes = require('./routes/aiRoutes');
-
-// Connect to aiRoutes
-app.use('/api/ai', aiRoutes);
 
 // Connect to Database
 
