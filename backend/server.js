@@ -7,6 +7,7 @@ const connectDB = require("./config/db");
 const navtaTestRoutes = require("./routes/navtaTestRoutes");
 
 // Connect to Database
+
 connectDB();
 
 const app = express();
