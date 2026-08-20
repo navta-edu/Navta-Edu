@@ -1,12 +1,6 @@
 import React from 'react';
 import Card from '../components/Card';
-import {
-  ShieldCheck,
-  Target,
-  Heart,
-  GraduationCap,
-  Linkedin
-} from 'lucide-react';
+import { ShieldCheck, Target, Heart, GraduationCap } from 'lucide-react';
 
 export default function About() {
   const values = [
@@ -39,10 +33,8 @@ export default function About() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 bg-grid-pattern relative">
 
-      {/* Background Glow */}
       <div className="absolute top-0 right-1/4 -z-10 h-96 w-96 rounded-full bg-primary-400/5 blur-[100px]" />
 
-      {/* Title block */}
       <div className="text-center max-w-3xl mx-auto mb-16">
 
         <h1 className="text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight sm:text-5xl">
@@ -53,14 +45,11 @@ export default function About() {
         </h1>
 
         <p className="mt-4 text-lg text-slate-500 dark:text-slate-400 leading-relaxed">
-          Navta is a modern full-stack virtual library and assessment portal
-          designed to bridge the gap between structured curriculum and active
-          student engagement.
+          Navta is a modern full-stack virtual library and assessment portal designed to bridge the gap between structured curriculum and active student engagement.
         </p>
 
       </div>
 
-      {/* Grid of Values */}
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mb-20">
 
         {values.map((v, index) => {
@@ -86,12 +75,10 @@ export default function About() {
 
       </div>
 
-      {/* How Navta Works */}
       <div className="glass rounded-3xl p-8 md:p-12 border border-slate-100 dark:border-slate-800/40 relative overflow-hidden shadow-sm">
 
         <div className="grid md:grid-cols-2 gap-8 items-center">
 
-          {/* Left Content */}
           <div>
 
             <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
@@ -99,24 +86,23 @@ export default function About() {
             </h2>
 
             <p className="text-slate-500 dark:text-slate-400 mt-4 leading-relaxed">
-              For <strong>Students</strong>, Navta offers structured study
-              sheets, past year exams (PYQ) libraries, and chapter quiz
-              sessions. Every action yields XP and coins, which unlock virtual
-              achievements and store vouchers. Analytics provide a summary
-              showing strong topics and chapters that need focus.
+              For <strong>Students</strong>, Navta offers structured study sheets,
+              past year exams (PYQ) libraries, and chapter quiz sessions.
+              Every action yields XP and coins, which unlock virtual achievements
+              and store vouchers. Analytics provide a summary showing strong
+              topics and chapters that need focus.
             </p>
 
             <p className="text-slate-500 dark:text-slate-400 mt-4 leading-relaxed">
-              For <strong>Teachers</strong>, Navta serves as a digital
-              classroom manager. Educators upload lecture notes, create
-              multiple-choice questions, and assemble full tests. The dashboard
-              gives access to classroom statistics, including student streaks,
-              averages, and grading scales.
+              For <strong>Teachers</strong>, Navta serves as a digital classroom
+              manager. Educators upload lecture notes, create multiple-choice
+              questions, and assemble full tests. The dashboard gives access to
+              classroom statistics, including student streaks, averages, and
+              grading scales.
             </p>
 
           </div>
 
-          {/* Core Capabilities */}
           <div className="bg-primary-500/10 dark:bg-primary-950/20 rounded-2xl p-6 border border-primary-500/20 dark:border-primary-800/30">
 
             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">
@@ -137,77 +123,16 @@ export default function About() {
                   key={idx}
                   className="flex items-start gap-3 text-sm text-slate-600 dark:text-slate-400"
                 >
-
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-500 text-white text-[10px] font-bold mt-0.5">
                     {idx + 1}
                   </span>
 
                   <span>{item}</span>
-
                 </li>
 
               ))}
 
             </ul>
-
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* ========================================= */}
-      {/* Developer Section */}
-      {/* ========================================= */}
-
-      <div className="mt-6 glass rounded-3xl p-8 md:p-10 border border-slate-100 dark:border-slate-800/40 relative overflow-hidden shadow-sm">
-
-        <div className="flex flex-col md:flex-row items-center justify-between gap-8">
-
-          {/* Developer Information */}
-          <div className="text-center md:text-left">
-
-            <p className="text-xs uppercase tracking-widest font-semibold text-primary-500 mb-2">
-              Website Developer
-            </p>
-
-            <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">
-              Developed By
-            </h2>
-
-            <p className="mt-2 text-lg font-semibold text-slate-700 dark:text-slate-200">
-              Hardik Sahu
-            </p>
-
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Developer &amp; Creator of Navta
-            </p>
-
-          </div>
-
-          {/* LinkedIn */}
-          <div className="flex flex-col items-center md:items-end">
-
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
-              Connect with me
-            </p>
-
-            <a
-              href="https://www.linkedin.com/in/YOUR-LINKEDIN-ID/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/5 dark:bg-slate-950/40 px-6 py-3 text-sm font-semibold text-blue-500 dark:text-blue-400 transition-all duration-200 hover:border-blue-500 hover:bg-blue-500/10 hover:-translate-y-0.5"
-            >
-
-              <Linkedin className="w-5 h-5" />
-
-              LinkedIn
-
-              <span className="text-xs">
-                ↗
-              </span>
-
-            </a>
 
           </div>
 
