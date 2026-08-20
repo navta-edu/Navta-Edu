@@ -772,7 +772,7 @@ export default function NavtaTestPage() {
 
                 <p>
                   {item === "Biology"
-                    ? "Choose NEET or Boards"
+                    ? "32 chapters available"
                     : `${SUBJECTS[item].length} chapters available`}
                 </p>
               </button>
