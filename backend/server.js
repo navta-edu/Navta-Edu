@@ -5,7 +5,6 @@ const morgan = require("morgan");
 const path = require("path");
 const connectDB = require("./config/db");
 const navtaTestRoutes = require("./routes/navtaTestRoutes");
-const chatRoutes = require('./routes/chatRoutes');
 
 // Connect to Database
 
@@ -46,7 +45,6 @@ app.use("/api/student", require("./routes/studentRoutes"));
 app.use("/api/teacher", require("./routes/teacherRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
 app.use("/api/navta-test", navtaTestRoutes);
-app.use('/api/chat', chatRoutes);
 
 // Serve Frontend (Hostinger deployment)
 // Serve Frontend (Hostinger deployment)
