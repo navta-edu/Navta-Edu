@@ -153,11 +153,18 @@ const QUESTIONS = {
           answer: 1,
         },
         {
-          question: "Which instrument is commonly used to measure very small lengths?",
-          options: ["Ruler", "Vernier calipers", "Thermometer", "Barometer"],
+          question:
+            "Which instrument is commonly used to measure very small lengths?",
+          options: [
+            "Ruler",
+            "Vernier calipers",
+            "Thermometer",
+            "Barometer",
+          ],
           answer: 1,
         },
       ],
+
       Medium: [
         {
           question: "The dimensional formula of velocity is:",
@@ -165,6 +172,7 @@ const QUESTIONS = {
           answer: 0,
         },
       ],
+
       Hard: [
         {
           question: "Which quantity has dimensions [ML²T⁻²]?",
@@ -182,6 +190,7 @@ const QUESTIONS = {
           answer: 1,
         },
       ],
+
       Medium: [
         {
           question: "The slope of a velocity-time graph represents:",
@@ -189,6 +198,7 @@ const QUESTIONS = {
           answer: 2,
         },
       ],
+
       Hard: [
         {
           question: "For uniformly accelerated motion, which equation is correct?",
@@ -213,6 +223,7 @@ const QUESTIONS = {
           answer: 1,
         },
       ],
+
       Medium: [
         {
           question: "The maximum number of electrons in the second shell is:",
@@ -220,6 +231,7 @@ const QUESTIONS = {
           answer: 2,
         },
       ],
+
       Hard: [
         {
           question: "The number of orbitals in a p-subshell is:",
@@ -237,6 +249,7 @@ const QUESTIONS = {
           answer: 1,
         },
       ],
+
       Medium: [
         {
           question: "What is the shape of a methane molecule?",
@@ -244,6 +257,7 @@ const QUESTIONS = {
           answer: 2,
         },
       ],
+
       Hard: [
         {
           question: "The hybridisation of carbon in methane is:",
@@ -263,6 +277,7 @@ const QUESTIONS = {
           answer: 1,
         },
       ],
+
       Medium: [
         {
           question: "The roots of x² - 5x + 6 = 0 are:",
@@ -270,6 +285,7 @@ const QUESTIONS = {
           answer: 1,
         },
       ],
+
       Hard: [
         {
           question: "For ax² + bx + c = 0, the discriminant is:",
@@ -292,6 +308,7 @@ const QUESTIONS = {
           answer: 1,
         },
       ],
+
       Medium: [
         {
           question: "What is cos 0°?",
@@ -299,6 +316,7 @@ const QUESTIONS = {
           answer: 1,
         },
       ],
+
       Hard: [
         {
           question: "Which identity is correct?",
@@ -323,13 +341,16 @@ const QUESTIONS = {
           answer: 1,
         },
       ],
+
       Medium: [
         {
-          question: "Which taxonomic category comes immediately above species?",
+          question:
+            "Which taxonomic category comes immediately above species?",
           options: ["Family", "Genus", "Order", "Class"],
           answer: 1,
         },
       ],
+
       Hard: [
         {
           question: "Binomial nomenclature was popularized by:",
@@ -461,407 +482,653 @@ export default function NavtaTestPage() {
     setStep("chapter");
   };
 
-  if (step === "subject") {
-    return (
-      <div style={styles.page}>
-        <div style={styles.header}>
-          <div>
-            <h1 style={styles.title}>Navta TEST</h1>
-            <p style={styles.subtitle}>
-              Choose a subject to begin your test.
-            </p>
-          </div>
+  return (
+    <>
+      <style>{`
+        * {
+          box-sizing: border-box;
+        }
 
-          <Link to="/dashboard" style={styles.backButton}>
-            ← Dashboard
-          </Link>
-        </div>
+        .navta-test-page {
+          min-height: 100vh;
+          width: 100%;
+          overflow-x: hidden;
+          background: #0b1220;
+          color: #ffffff;
+          padding: 40px;
+        }
 
-        <div style={styles.grid}>
-          {Object.keys(SUBJECTS).map((item) => (
-            <button
-              key={item}
-              onClick={() => {
-                setSubject(item);
-                setPreparation("");
-                setBiologyClass("");
-                setChapter("");
-                setDifficulty("");
-                setStep("preparation");
-              }}
-              style={styles.subjectCard}
-            >
-              <div style={styles.subjectIcon}>
-                {item === "Physics" && "⚡"}
-                {item === "Chemistry" && "🧪"}
-                {item === "Maths" && "∑"}
-                {item === "Biology" && "🧬"}
-              </div>
+        .navta-header {
+          max-width: 1100px;
+          margin: 0 auto 35px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 20px;
+        }
 
-              <h2>{item}</h2>
+        .navta-title {
+          font-size: 32px;
+          line-height: 1.2;
+          margin: 0;
+        }
 
-              <p>
-                {item === "Biology"
-                  ? "Choose NEET or Boards"
-                  : `${SUBJECTS[item].length} chapters available`}
+        .navta-subtitle {
+          color: #94a3b8;
+          margin-top: 8px;
+          line-height: 1.5;
+        }
+
+        .navta-grid {
+          max-width: 1100px;
+          margin: 0 auto;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 24px;
+        }
+
+        .navta-preparation-grid {
+          max-width: 900px;
+          margin: 40px auto;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 24px;
+        }
+
+        .navta-class-grid {
+          max-width: 900px;
+          margin: 40px auto;
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 24px;
+        }
+
+        .navta-chapter-grid {
+          max-width: 1100px;
+          margin: 0 auto;
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 15px;
+        }
+
+        .navta-difficulty-grid {
+          max-width: 900px;
+          margin: 40px auto;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 20px;
+        }
+
+        .navta-test-header {
+          max-width: 1000px;
+          margin: 0 auto 20px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 20px;
+        }
+
+        .navta-question-card {
+          max-width: 1000px;
+          margin: 0 auto;
+          padding: 35px;
+          border-radius: 18px;
+          background: #151d2d;
+          border: 1px solid #243047;
+        }
+
+        .navta-navigation {
+          max-width: 1000px;
+          margin: 20px auto;
+          display: flex;
+          justify-content: space-between;
+          gap: 15px;
+        }
+
+        .navta-result-card {
+          max-width: 600px;
+          margin: 100px auto;
+          padding: 50px;
+          border-radius: 20px;
+          background: #151d2d;
+          text-align: center;
+        }
+
+        @media (max-width: 768px) {
+          .navta-test-page {
+            padding: 20px 14px;
+          }
+
+          .navta-header {
+            margin-bottom: 25px;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 15px;
+          }
+
+          .navta-title {
+            font-size: 27px;
+          }
+
+          .navta-subtitle {
+            font-size: 14px;
+            margin-bottom: 0;
+          }
+
+          .navta-back-button {
+            width: 100%;
+            text-align: center;
+          }
+
+          .navta-grid {
+            grid-template-columns: 1fr;
+            gap: 14px;
+          }
+
+          .navta-preparation-grid {
+            grid-template-columns: 1fr;
+            gap: 14px;
+            margin: 25px auto;
+          }
+
+          .navta-class-grid {
+            grid-template-columns: 1fr;
+            gap: 14px;
+            margin: 25px auto;
+          }
+
+          .navta-chapter-grid {
+            grid-template-columns: 1fr;
+            gap: 12px;
+          }
+
+          .navta-difficulty-grid {
+            grid-template-columns: 1fr;
+            gap: 14px;
+            margin: 25px auto;
+          }
+
+          .navta-test-header {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 15px;
+          }
+
+          .navta-timer {
+            width: 100%;
+            text-align: center;
+          }
+
+          .navta-question-card {
+            padding: 20px 15px;
+            border-radius: 14px;
+          }
+
+          .navta-question {
+            font-size: 19px !important;
+            line-height: 1.5;
+            word-break: break-word;
+          }
+
+          .navta-option {
+            font-size: 14px !important;
+            padding: 14px !important;
+            line-height: 1.45;
+            word-break: break-word;
+          }
+
+          .navta-navigation {
+            flex-direction: column;
+            gap: 10px;
+          }
+
+          .navta-navigation button {
+            width: 100%;
+          }
+
+          .navta-result-card {
+            margin: 40px auto;
+            padding: 30px 18px;
+          }
+
+          .navta-score {
+            font-size: 48px !important;
+          }
+        }
+
+        @media (max-width: 400px) {
+          .navta-test-page {
+            padding: 16px 10px;
+          }
+
+          .navta-title {
+            font-size: 24px;
+          }
+
+          .navta-subject-card,
+          .navta-preparation-card,
+          .navta-class-card {
+            padding: 22px !important;
+          }
+
+          .navta-question-card {
+            padding: 17px 12px;
+          }
+
+          .navta-option {
+            gap: 10px !important;
+            padding: 12px !important;
+          }
+
+          .navta-timer {
+            font-size: 20px !important;
+          }
+        }
+      `}</style>
+
+      {step === "subject" && (
+        <div className="navta-test-page">
+          <div className="navta-header">
+            <div>
+              <h1 className="navta-title">Navta TEST</h1>
+
+              <p className="navta-subtitle">
+                Choose a subject to begin your test.
               </p>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
+            </div>
 
-  if (step === "preparation") {
-    const options = PREPARATION_OPTIONS[subject];
-
-    return (
-      <div style={styles.page}>
-        <div style={styles.header}>
-          <div>
-            <h1 style={styles.title}>{subject} Preparation</h1>
-
-            <p style={styles.subtitle}>
-              What are you preparing for?
-            </p>
-          </div>
-
-          <button onClick={goToSubjects} style={styles.backButton}>
-            ← Subjects
-          </button>
-        </div>
-
-        <div style={styles.preparationGrid}>
-          {Object.entries(options).map(([key, option]) => (
-            <button
-              key={key}
-              onClick={() => {
-                setPreparation(key);
-
-                if (subject === "Biology") {
-                  setBiologyClass("");
-                  setStep("biologyClass");
-                } else {
-                  setChapter("");
-                  setStep("chapter");
-                }
-              }}
-              style={styles.preparationCard}
+            <Link
+              to="/dashboard"
+              className="navta-back-button"
+              style={styles.backButton}
             >
-              <div style={styles.preparationIcon}>
-                {option.icon}
-              </div>
-
-              <h2>{option.title}</h2>
-
-              <p>{option.description}</p>
-
-              <span style={styles.continueText}>
-                Continue →
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "biologyClass") {
-    return (
-      <div style={styles.page}>
-        <div style={styles.header}>
-          <div>
-            <h1 style={styles.title}>Choose Class</h1>
-
-            <p style={styles.subtitle}>
-              Biology → {preparation}
-            </p>
+              ← Dashboard
+            </Link>
           </div>
 
-          <button onClick={goToPreparation} style={styles.backButton}>
-            ← Preparation
-          </button>
-        </div>
-
-        <div style={styles.classGrid}>
-          {Object.entries(BIOLOGY_CLASSES).map(([className, chapters]) => (
-            <button
-              key={className}
-              onClick={() => {
-                setBiologyClass(className);
-                setChapter("");
-                setStep("chapter");
-              }}
-              style={styles.classCard}
-            >
-              <div style={styles.classIcon}>🧬</div>
-
-              <h2>{className}</h2>
-
-              <p>{chapters.length} chapters</p>
-
-              <span style={styles.continueText}>
-                View Chapters →
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "chapter") {
-    const chapters =
-      subject === "Biology"
-        ? BIOLOGY_CLASSES[biologyClass] || []
-        : SUBJECTS[subject] || [];
-
-    return (
-      <div style={styles.page}>
-        <div style={styles.header}>
-          <div>
-            <h1 style={styles.title}>{subject}</h1>
-
-            <p style={styles.subtitle}>
-              {subject === "Biology"
-                ? `${preparation} → ${biologyClass}`
-                : `${preparation} Preparation`}
-            </p>
-          </div>
-
-          <button
-            onClick={
-              subject === "Biology"
-                ? () => setStep("biologyClass")
-                : goToPreparation
-            }
-            style={styles.backButton}
-          >
-            ← Back
-          </button>
-        </div>
-
-        <div style={styles.chapterGrid}>
-          {chapters.map((item) => (
-            <button
-              key={item}
-              onClick={() => {
-                setChapter(item);
-                setDifficulty("");
-                setStep("difficulty");
-              }}
-              style={styles.chapterCard}
-            >
-              {item}
-              <span>→</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "difficulty") {
-    return (
-      <div style={styles.page}>
-        <div style={styles.header}>
-          <div>
-            <h1 style={styles.title}>Select Difficulty</h1>
-
-            <p style={styles.subtitle}>
-              {subject}
-              {subject === "Biology" ? ` → ${biologyClass}` : ""}
-              {" → "}
-              {chapter}
-            </p>
-          </div>
-
-          <button onClick={goToChapter} style={styles.backButton}>
-            ← Chapters
-          </button>
-        </div>
-
-        <div style={styles.difficultyGrid}>
-          {["Easy", "Medium", "Hard"].map((level) => (
-            <button
-              key={level}
-              onClick={() => setDifficulty(level)}
-              style={{
-                ...styles.difficultyCard,
-                ...(difficulty === level
-                  ? styles.selectedDifficulty
-                  : {}),
-              }}
-            >
-              <h2>{level}</h2>
-              <p>30 minute test</p>
-            </button>
-          ))}
-        </div>
-
-        <button
-          disabled={!difficulty}
-          onClick={startTest}
-          style={{
-            ...styles.startButton,
-            opacity: difficulty ? 1 : 0.5,
-          }}
-        >
-          Start Navta TEST →
-        </button>
-      </div>
-    );
-  }
-
-  if (step === "test" && !submitted) {
-    const question = questions[currentQuestion];
-
-    return (
-      <div style={styles.page}>
-        <div style={styles.testHeader}>
-          <div>
-            <h1 style={styles.title}>Navta TEST</h1>
-
-            <p style={styles.subtitle}>
-              {subject} → {chapter} → {difficulty}
-            </p>
-          </div>
-
-          <div
-            style={{
-              ...styles.timer,
-              ...(timeLeft <= 60 ? styles.dangerTimer : {}),
-            }}
-          >
-            ⏱ {formattedTime}
-          </div>
-        </div>
-
-        <div style={styles.progress}>
-          Question {currentQuestion + 1} of {questions.length}
-        </div>
-
-        <div style={styles.questionCard}>
-          <h2 style={styles.question}>
-            {question.question}
-          </h2>
-
-          <div>
-            {question.options.map((option, index) => (
+          <div className="navta-grid">
+            {Object.keys(SUBJECTS).map((item) => (
               <button
-                key={option}
-                onClick={() => selectAnswer(index)}
-                style={{
-                  ...styles.option,
-                  ...(answers[currentQuestion] === index
-                    ? styles.selectedOption
-                    : {}),
+                key={item}
+                onClick={() => {
+                  setSubject(item);
+                  setPreparation("");
+                  setBiologyClass("");
+                  setChapter("");
+                  setDifficulty("");
+                  setStep("preparation");
                 }}
+                className="navta-subject-card"
+                style={styles.subjectCard}
               >
-                <span style={styles.optionLetter}>
-                  {String.fromCharCode(65 + index)}
-                </span>
+                <div style={styles.subjectIcon}>
+                  {item === "Physics" && "⚡"}
+                  {item === "Chemistry" && "🧪"}
+                  {item === "Maths" && "∑"}
+                  {item === "Biology" && "🧬"}
+                </div>
 
-                {option}
+                <h2>{item}</h2>
+
+                <p>
+                  {item === "Biology"
+                    ? "Choose NEET or Boards"
+                    : `${SUBJECTS[item].length} chapters available`}
+                </p>
               </button>
             ))}
           </div>
         </div>
+      )}
 
-        <div style={styles.navigation}>
-          <button
-            disabled={currentQuestion === 0}
-            onClick={() =>
-              setCurrentQuestion((previous) => previous - 1)
-            }
-            style={styles.navButton}
-          >
-            ← Previous
-          </button>
+      {step === "preparation" && (
+        <div className="navta-test-page">
+          <div className="navta-header">
+            <div>
+              <h1 className="navta-title">{subject} Preparation</h1>
 
-          {currentQuestion < questions.length - 1 ? (
+              <p className="navta-subtitle">
+                What are you preparing for?
+              </p>
+            </div>
+
             <button
-              onClick={() =>
-                setCurrentQuestion((previous) => previous + 1)
+              onClick={goToSubjects}
+              className="navta-back-button"
+              style={styles.backButton}
+            >
+              ← Subjects
+            </button>
+          </div>
+
+          <div className="navta-preparation-grid">
+            {Object.entries(PREPARATION_OPTIONS[subject]).map(
+              ([key, option]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setPreparation(key);
+
+                    if (subject === "Biology") {
+                      setBiologyClass("");
+                      setStep("biologyClass");
+                    } else {
+                      setChapter("");
+                      setStep("chapter");
+                    }
+                  }}
+                  className="navta-preparation-card"
+                  style={styles.preparationCard}
+                >
+                  <div style={styles.preparationIcon}>
+                    {option.icon}
+                  </div>
+
+                  <h2>{option.title}</h2>
+
+                  <p>{option.description}</p>
+
+                  <span style={styles.continueText}>
+                    Continue →
+                  </span>
+                </button>
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {step === "biologyClass" && (
+        <div className="navta-test-page">
+          <div className="navta-header">
+            <div>
+              <h1 className="navta-title">Choose Class</h1>
+
+              <p className="navta-subtitle">
+                Biology → {preparation}
+              </p>
+            </div>
+
+            <button
+              onClick={goToPreparation}
+              className="navta-back-button"
+              style={styles.backButton}
+            >
+              ← Preparation
+            </button>
+          </div>
+
+          <div className="navta-class-grid">
+            {Object.entries(BIOLOGY_CLASSES).map(
+              ([className, chapters]) => (
+                <button
+                  key={className}
+                  onClick={() => {
+                    setBiologyClass(className);
+                    setChapter("");
+                    setStep("chapter");
+                  }}
+                  className="navta-class-card"
+                  style={styles.classCard}
+                >
+                  <div style={styles.classIcon}>🧬</div>
+
+                  <h2>{className}</h2>
+
+                  <p>{chapters.length} chapters</p>
+
+                  <span style={styles.continueText}>
+                    View Chapters →
+                  </span>
+                </button>
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {step === "chapter" && (
+        <div className="navta-test-page">
+          <div className="navta-header">
+            <div>
+              <h1 className="navta-title">{subject}</h1>
+
+              <p className="navta-subtitle">
+                {subject === "Biology"
+                  ? `${preparation} → ${biologyClass}`
+                  : `${preparation} Preparation`}
+              </p>
+            </div>
+
+            <button
+              onClick={
+                subject === "Biology"
+                  ? () => setStep("biologyClass")
+                  : goToPreparation
               }
-              style={styles.nextButton}
+              className="navta-back-button"
+              style={styles.backButton}
             >
-              Next →
+              ← Back
             </button>
-          ) : (
+          </div>
+
+          <div className="navta-chapter-grid">
+            {(subject === "Biology"
+              ? BIOLOGY_CLASSES[biologyClass] || []
+              : SUBJECTS[subject] || []
+            ).map((item) => (
+              <button
+                key={item}
+                onClick={() => {
+                  setChapter(item);
+                  setDifficulty("");
+                  setStep("difficulty");
+                }}
+                style={styles.chapterCard}
+              >
+                <span>{item}</span>
+                <span>→</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {step === "difficulty" && (
+        <div className="navta-test-page">
+          <div className="navta-header">
+            <div>
+              <h1 className="navta-title">Select Difficulty</h1>
+
+              <p className="navta-subtitle">
+                {subject}
+                {subject === "Biology" ? ` → ${biologyClass}` : ""}
+                {" → "}
+                {chapter}
+              </p>
+            </div>
+
             <button
-              onClick={() => setSubmitted(true)}
-              style={styles.submitButton}
+              onClick={goToChapter}
+              className="navta-back-button"
+              style={styles.backButton}
             >
-              Submit Test
+              ← Chapters
             </button>
-          )}
+          </div>
+
+          <div className="navta-difficulty-grid">
+            {["Easy", "Medium", "Hard"].map((level) => (
+              <button
+                key={level}
+                onClick={() => setDifficulty(level)}
+                style={{
+                  ...styles.difficultyCard,
+                  ...(difficulty === level
+                    ? styles.selectedDifficulty
+                    : {}),
+                }}
+              >
+                <h2>{level}</h2>
+                <p>30 minute test</p>
+              </button>
+            ))}
+          </div>
+
+          <button
+            disabled={!difficulty}
+            onClick={startTest}
+            style={{
+              ...styles.startButton,
+              opacity: difficulty ? 1 : 0.5,
+            }}
+          >
+            Start Navta TEST →
+          </button>
         </div>
-      </div>
-    );
-  }
+      )}
 
-  return (
-    <div style={styles.page}>
-      <div style={styles.resultCard}>
-        <div style={styles.resultIcon}>✓</div>
+      {step === "test" && !submitted && questions.length > 0 && (
+        <div className="navta-test-page">
+          <div className="navta-test-header">
+            <div>
+              <h1 className="navta-title">Navta TEST</h1>
 
-        <h1>Test Completed!</h1>
+              <p className="navta-subtitle">
+                {subject} → {chapter} → {difficulty}
+              </p>
+            </div>
 
-        <p style={styles.resultSubject}>
-          {subject} → {chapter} → {difficulty}
-        </p>
+            <div
+              className="navta-timer"
+              style={{
+                ...styles.timer,
+                ...(timeLeft <= 60 ? styles.dangerTimer : {}),
+              }}
+            >
+              ⏱ {formattedTime}
+            </div>
+          </div>
 
-        <div style={styles.score}>
-          {score}/{questions.length}
+          <div style={styles.progress}>
+            Question {currentQuestion + 1} of {questions.length}
+          </div>
+
+          <div className="navta-question-card">
+            <h2 className="navta-question" style={styles.question}>
+              {questions[currentQuestion].question}
+            </h2>
+
+            <div>
+              {questions[currentQuestion].options.map(
+                (option, index) => (
+                  <button
+                    key={option}
+                    onClick={() => selectAnswer(index)}
+                    className="navta-option"
+                    style={{
+                      ...styles.option,
+                      ...(answers[currentQuestion] === index
+                        ? styles.selectedOption
+                        : {}),
+                    }}
+                  >
+                    <span style={styles.optionLetter}>
+                      {String.fromCharCode(65 + index)}
+                    </span>
+
+                    <span>{option}</span>
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+
+          <div className="navta-navigation">
+            <button
+              disabled={currentQuestion === 0}
+              onClick={() =>
+                setCurrentQuestion(
+                  (previous) => previous - 1
+                )
+              }
+              style={{
+                ...styles.navButton,
+                opacity: currentQuestion === 0 ? 0.5 : 1,
+              }}
+            >
+              ← Previous
+            </button>
+
+            {currentQuestion < questions.length - 1 ? (
+              <button
+                onClick={() =>
+                  setCurrentQuestion(
+                    (previous) => previous + 1
+                  )
+                }
+                style={styles.nextButton}
+              >
+                Next →
+              </button>
+            ) : (
+              <button
+                onClick={() => setSubmitted(true)}
+                style={styles.submitButton}
+              >
+                Submit Test
+              </button>
+            )}
+          </div>
         </div>
+      )}
 
-        <p style={styles.resultText}>
-          You answered {score} question
-          {score !== 1 ? "s" : ""} correctly.
-        </p>
+      {step === "test" && submitted && (
+        <div className="navta-test-page">
+          <div className="navta-result-card">
+            <div style={styles.resultIcon}>✓</div>
 
-        <button onClick={resetTest} style={styles.startButton}>
-          Take Another Test
-        </button>
+            <h1>Test Completed!</h1>
 
-        <Link to="/dashboard" style={styles.dashboardLink}>
-          Back to Dashboard
-        </Link>
-      </div>
-    </div>
+            <p style={styles.resultSubject}>
+              {subject} → {chapter} → {difficulty}
+            </p>
+
+            <div className="navta-score" style={styles.score}>
+              {score}/{questions.length}
+            </div>
+
+            <p style={styles.resultText}>
+              You answered {score} question
+              {score !== 1 ? "s" : ""} correctly.
+            </p>
+
+            <button
+              onClick={resetTest}
+              style={styles.startButton}
+            >
+              Take Another Test
+            </button>
+
+            <Link
+              to="/dashboard"
+              style={styles.dashboardLink}
+            >
+              Back to Dashboard
+            </Link>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
 const styles = {
-  page: {
-    minHeight: "100vh",
-    background: "#0b1220",
-    color: "#ffffff",
-    padding: "40px",
-    boxSizing: "border-box",
-  },
-
-  header: {
-    maxWidth: "1100px",
-    margin: "0 auto 35px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "20px",
-  },
-
-  title: {
-    fontSize: "32px",
-    margin: 0,
-  },
-
-  subtitle: {
-    color: "#94a3b8",
-    marginTop: "8px",
-  },
-
   backButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
     padding: "12px 18px",
     borderRadius: "10px",
     border: "1px solid #334155",
@@ -869,14 +1136,6 @@ const styles = {
     color: "#ffffff",
     textDecoration: "none",
     cursor: "pointer",
-  },
-
-  grid: {
-    maxWidth: "1100px",
-    margin: "0 auto",
-    display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
-    gap: "24px",
   },
 
   subjectCard: {
@@ -894,14 +1153,6 @@ const styles = {
     marginBottom: "20px",
   },
 
-  preparationGrid: {
-    maxWidth: "900px",
-    margin: "40px auto",
-    display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
-    gap: "24px",
-  },
-
   preparationCard: {
     padding: "35px",
     borderRadius: "18px",
@@ -915,14 +1166,6 @@ const styles = {
   preparationIcon: {
     fontSize: "45px",
     marginBottom: "15px",
-  },
-
-  classGrid: {
-    maxWidth: "900px",
-    margin: "40px auto",
-    display: "grid",
-    gridTemplateColumns: "repeat(2, 1fr)",
-    gap: "24px",
   },
 
   classCard: {
@@ -947,16 +1190,9 @@ const styles = {
     fontWeight: "700",
   },
 
-  chapterGrid: {
-    maxWidth: "1100px",
-    margin: "0 auto",
-    display: "grid",
-    gridTemplateColumns: "repeat(2, 1fr)",
-    gap: "15px",
-  },
-
   chapterCard: {
     padding: "20px",
+    minWidth: 0,
     borderRadius: "12px",
     border: "1px solid #243047",
     background: "#151d2d",
@@ -964,16 +1200,11 @@ const styles = {
     cursor: "pointer",
     display: "flex",
     justifyContent: "space-between",
+    alignItems: "center",
     textAlign: "left",
     fontSize: "16px",
-  },
-
-  difficultyGrid: {
-    maxWidth: "900px",
-    margin: "40px auto",
-    display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
-    gap: "20px",
+    gap: "12px",
+    overflowWrap: "anywhere",
   },
 
   difficultyCard: {
@@ -1003,14 +1234,6 @@ const styles = {
     cursor: "pointer",
   },
 
-  testHeader: {
-    maxWidth: "1000px",
-    margin: "0 auto 20px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
   timer: {
     padding: "14px 22px",
     borderRadius: "12px",
@@ -1018,6 +1241,7 @@ const styles = {
     color: "#00c6ff",
     fontSize: "24px",
     fontWeight: "800",
+    whiteSpace: "nowrap",
   },
 
   dangerTimer: {
@@ -1031,15 +1255,6 @@ const styles = {
     color: "#94a3b8",
   },
 
-  questionCard: {
-    maxWidth: "1000px",
-    margin: "0 auto",
-    padding: "35px",
-    borderRadius: "18px",
-    background: "#151d2d",
-    border: "1px solid #243047",
-  },
-
   question: {
     fontSize: "22px",
     marginBottom: "30px",
@@ -1047,6 +1262,7 @@ const styles = {
 
   option: {
     width: "100%",
+    minWidth: 0,
     padding: "17px",
     marginBottom: "12px",
     borderRadius: "10px",
@@ -1059,6 +1275,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: "15px",
+    overflowWrap: "anywhere",
   },
 
   selectedOption: {
@@ -1067,14 +1284,9 @@ const styles = {
   },
 
   optionLetter: {
+    minWidth: "25px",
+    flexShrink: 0,
     fontWeight: "800",
-  },
-
-  navigation: {
-    maxWidth: "1000px",
-    margin: "20px auto",
-    display: "flex",
-    justifyContent: "space-between",
   },
 
   navButton: {
@@ -1102,15 +1314,6 @@ const styles = {
     background: "#16a34a",
     color: "#ffffff",
     cursor: "pointer",
-  },
-
-  resultCard: {
-    maxWidth: "600px",
-    margin: "100px auto",
-    padding: "50px",
-    borderRadius: "20px",
-    background: "#151d2d",
-    textAlign: "center",
   },
 
   resultIcon: {
