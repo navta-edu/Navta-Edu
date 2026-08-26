@@ -1,12 +1,9 @@
-const express =
-  require('express');
+const express = require('express');
 
 const {
   protect,
   authorizeRoles
-} = require(
-  '../middleware/auth'
-);
+} = require('../middleware/auth');
 
 const {
   createChapter,
@@ -15,162 +12,139 @@ const {
   createTest,
   getStudentMetrics,
   getQuestionBank
-} = require(
-  '../controllers/teacherController'
-);
+} = require('../controllers/teacherController');
 
 const {
   getQuestions,
   createQuestion,
   deleteQuestion
-} = require(
-  '../controllers/adminController'
-);
+} = require('../controllers/adminController');
 
-const router =
-  express.Router();
+const router = express.Router();
 
 // =====================================================
-// ALL ROUTES REQUIRE LOGIN
+// ALL TEACHER ROUTES REQUIRE LOGIN
 // =====================================================
 
 router.use(protect);
 
 // =====================================================
-// NAVTA TEST QUESTION BANK
-// FOR PAPER BUILDER
+// NAVTA TEST -> PAPER BUILDER QUESTION BANK
 //
-// Reads directly from NavtaQuestion collection.
-// Questions uploaded through Admin -> Navta TEST
-// automatically appear here.
+// IMPORTANT:
+// teacher + external_teacher + admin can access it
 // =====================================================
 
 router.get(
   '/question-bank',
-
   authorizeRoles(
     'teacher',
     'external_teacher',
     'admin'
   ),
-
   getQuestionBank
 );
 
 // =====================================================
-// EXISTING GENERAL QUESTION BANK
+// EXISTING QUESTION MANAGEMENT
 // =====================================================
 
 router.get(
   '/questions',
-
   authorizeRoles(
     'teacher',
     'external_teacher',
     'admin'
   ),
-
   getQuestions
 );
 
 router.post(
   '/questions',
-
   authorizeRoles(
     'teacher',
     'external_teacher',
     'admin'
   ),
-
   createQuestion
 );
 
 // =====================================================
-// CONTENT MANAGEMENT
-// TEACHER + ADMIN
+// CHAPTERS
 // =====================================================
 
 router.post(
   '/chapters',
-
   authorizeRoles(
     'teacher',
     'admin'
   ),
-
   createChapter
 );
 
+// =====================================================
+// NOTES
+// =====================================================
+
 router.post(
   '/notes',
-
   authorizeRoles(
     'teacher',
     'admin'
   ),
-
   createNote
 );
 
+// =====================================================
+// PYQS
+// =====================================================
+
 router.post(
   '/pyqs',
-
   authorizeRoles(
     'teacher',
     'admin'
   ),
-
   createPYQ
 );
 
+// =====================================================
+// TESTS
+// =====================================================
+
 router.post(
   '/tests',
-
   authorizeRoles(
     'teacher',
     'admin'
   ),
-
   createTest
 );
 
 // =====================================================
-// STUDENT PERFORMANCE
+// STUDENT METRICS
 // =====================================================
 
 router.get(
   '/student-metrics',
-
   authorizeRoles(
     'teacher',
     'admin'
   ),
-
   getStudentMetrics
 );
 
 // =====================================================
-// DELETE GENERAL QUESTION
-//
-// IMPORTANT:
-// This deletes from the older Question collection.
-// It does NOT delete NavtaQuestion admin-bank questions.
+// DELETE EXISTING QUESTION
 // =====================================================
 
 router.delete(
   '/questions/:id',
-
   authorizeRoles(
     'teacher',
     'admin'
   ),
-
   deleteQuestion
 );
 
-// =====================================================
-// EXPORT
-// =====================================================
-
-module.exports =
-  router;
+module.exports = router;
