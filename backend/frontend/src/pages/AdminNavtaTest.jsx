@@ -490,11 +490,10 @@ export default function AdminNavtaTest() {
           </p>
 
           <div className="admin-navta-info">
-            NEET and JEE test duration is controlled by
-            the student test system. You only need to
-            categorize each question correctly here.
-            Boards will continue using the existing test
-            behavior.
+            Select Subject → Preparation → Class → Chapter → Difficulty,
+            then add the question and its explanation. The explanation is
+            stored with the question but is shown to the student only when
+            the student answers that question incorrectly.
           </div>
 
           <div className="admin-navta-test-card">
@@ -823,7 +822,7 @@ export default function AdminNavtaTest() {
 
                     <textarea
                       className="admin-navta-textarea admin-navta-explanation"
-                      placeholder="Explanation (optional)"
+                      placeholder="Enter explanation — shown to the student only after a wrong answer"
                       value={form.explanation}
                       onChange={(e) =>
                         updateField(
@@ -831,6 +830,7 @@ export default function AdminNavtaTest() {
                           e.target.value
                         )
                       }
+                      required
                     />
                   </div>
 
