@@ -1,6 +1,16 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  Outlet
+} from 'react-router-dom';
+
+import {
+  AuthProvider,
+  useAuth
+} from './context/AuthContext';
 
 // Layout & Navigation
 import Navbar from './components/Navbar';
@@ -20,6 +30,7 @@ import StudentDashboard from './pages/StudentDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
 import ExternalTeacherDashboard from './pages/ExternalTeacherDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminNavtaTest from './pages/AdminNavtaTest';
 import NavtaTestPage from './pages/NavtaTestPage';
 import NotesPage from './pages/NotesPage';
 import PYQPage from './pages/PYQPage';
@@ -30,20 +41,28 @@ import RewardsPage from './pages/RewardsPage';
 import SettingsPage from './pages/SettingsPage';
 import ResultDetail from './pages/ResultDetail';
 
-// Distraction-free Layout for Public / Login Pages
+// =====================================================
+// PUBLIC LAYOUT
+// =====================================================
+
 function PublicLayout() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0B0F19]">
       <Navbar />
+
       <main className="flex-1">
         <Outlet />
       </main>
+
       <Footer />
     </div>
   );
 }
 
-// Sidebar-integrated Layout for dashboards and study libraries
+// =====================================================
+// DASHBOARD LAYOUT
+// =====================================================
+
 function DashboardLayout() {
   const { user, loading } = useAuth();
 
@@ -56,97 +75,289 @@ function DashboardLayout() {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+      />
+    );
   }
 
-  if (!user.isProfileComplete && user.role !== 'admin' && window.location.pathname !== '/onboarding') {
-    return <Navigate to="/onboarding" replace />;
+  if (
+    !user.isProfileComplete &&
+    user.role !== 'admin' &&
+    window.location.pathname !== '/onboarding'
+  ) {
+    return (
+      <Navigate
+        to="/onboarding"
+        replace
+      />
+    );
   }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F8FAFC] dark:bg-[#0B0F19]">
       <Navbar />
+
       <div className="flex-1 flex flex-col md:flex-row w-full max-w-7xl mx-auto">
         <Sidebar />
+
         <main className="flex-1 p-6 overflow-x-hidden">
           <Outlet />
         </main>
       </div>
+
       <Footer />
     </div>
   );
 }
 
-// Role-based Route Protection Guard
+// =====================================================
+// ROLE GUARD
+// =====================================================
+
 function RoleGuard({ allowedRoles }) {
   const { user, loading } = useAuth();
 
-  if (loading) return null;
-  
+  if (loading) {
+    return null;
+  }
+
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+      />
+    );
   }
 
   if (!allowedRoles.includes(user.role)) {
-    return <Navigate to="/unauthorized" replace />;
+    return (
+      <Navigate
+        to="/unauthorized"
+        replace
+      />
+    );
   }
 
   return <Outlet />;
 }
+
+// =====================================================
+// MAIN APP
+// =====================================================
 
 export default function App() {
   return (
     <AuthProvider>
       <Router>
         <Routes>
-          {/* Public Views */}
+
+          {/* =====================================================
+              PUBLIC ROUTES
+          ===================================================== */}
+
           <Route element={<PublicLayout />}>
-            <Route path="/" element={<Home />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/unauthorized" element={<Unauthorized />} />
-            <Route path="/onboarding" element={<Onboarding />} />
+            <Route
+              path="/"
+              element={<Home />}
+            />
+
+            <Route
+              path="/about"
+              element={<About />}
+            />
+
+            <Route
+              path="/login"
+              element={<Login />}
+            />
+
+            <Route
+              path="/signup"
+              element={<Signup />}
+            />
+
+            <Route
+              path="/unauthorized"
+              element={<Unauthorized />}
+            />
+
+            <Route
+              path="/onboarding"
+              element={<Onboarding />}
+            />
           </Route>
 
-          {/* Secure Dashboards and Study Areas */}
+          {/* =====================================================
+              SECURE DASHBOARD LAYOUT
+          ===================================================== */}
+
           <Route element={<DashboardLayout />}>
-            {/* Student only pages */}
-            <Route element={<RoleGuard allowedRoles={['student']} />}>
-              <Route path="/dashboard" element={<StudentDashboard />} />
-              <Route path="/analytics" element={<AnalyticsPage />} />
-              <Route path="/rewards" element={<RewardsPage />} />
-              <Route path="/results/:resultId" element={<ResultDetail />} />
+
+            {/* =================================================
+                STUDENT ONLY
+            ================================================= */}
+
+            <Route
+              element={
+                <RoleGuard
+                  allowedRoles={['student']}
+                />
+              }
+            >
+              <Route
+                path="/dashboard"
+                element={<StudentDashboard />}
+              />
+
+              <Route
+                path="/analytics"
+                element={<AnalyticsPage />}
+              />
+
+              <Route
+                path="/rewards"
+                element={<RewardsPage />}
+              />
+
+              <Route
+                path="/results/:resultId"
+                element={<ResultDetail />}
+              />
             </Route>
 
-            {/* Teacher only pages */}
-            <Route element={<RoleGuard allowedRoles={['teacher']} />}>
-              <Route path="/teacher" element={<TeacherDashboard />} />
+            {/* =================================================
+                TEACHER ONLY
+            ================================================= */}
+
+            <Route
+              element={
+                <RoleGuard
+                  allowedRoles={['teacher']}
+                />
+              }
+            >
+              <Route
+                path="/teacher"
+                element={<TeacherDashboard />}
+              />
             </Route>
 
-            {/* External Teacher only pages */}
-            <Route element={<RoleGuard allowedRoles={['external_teacher']} />}>
-              <Route path="/external-teacher" element={<ExternalTeacherDashboard />} />
+            {/* =================================================
+                EXTERNAL TEACHER ONLY
+            ================================================= */}
+
+            <Route
+              element={
+                <RoleGuard
+                  allowedRoles={[
+                    'external_teacher'
+                  ]}
+                />
+              }
+            >
+              <Route
+                path="/external-teacher"
+                element={
+                  <ExternalTeacherDashboard />
+                }
+              />
             </Route>
 
-            {/* Admin only pages */}
-            <Route element={<RoleGuard allowedRoles={['admin']} />}>
-              <Route path="/admin" element={<AdminDashboard />} />
+            {/* =================================================
+                ADMIN ONLY
+            ================================================= */}
+
+            <Route
+              element={
+                <RoleGuard
+                  allowedRoles={['admin']}
+                />
+              }
+            >
+
+              <Route
+                path="/admin"
+                element={<AdminDashboard />}
+              />
+
+              {/* NAVTA TEST ADMIN PAGE */}
+              <Route
+                path="/admin/navta-test"
+                element={<AdminNavtaTest />}
+              />
+
             </Route>
 
-            {/* Shared Secure Pages (Student + Teacher + Admin + External Teacher) */}
-            <Route element={<RoleGuard allowedRoles={['student', 'teacher', 'admin', 'external_teacher']} />}>
-              <Route path="/notes" element={<NotesPage />} />
-              <Route path="/pyqs" element={<PYQPage />} />
-              <Route path="/navta-test" element={<NavtaTestPage />} /> {/* navta test route */}
-              <Route path="/assessments" element={<AssessmentPage />} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/settings" element={<SettingsPage />} />
+            {/* =================================================
+                SHARED SECURE PAGES
+            ================================================= */}
+
+            <Route
+              element={
+                <RoleGuard
+                  allowedRoles={[
+                    'student',
+                    'teacher',
+                    'admin',
+                    'external_teacher'
+                  ]}
+                />
+              }
+            >
+
+              <Route
+                path="/notes"
+                element={<NotesPage />}
+              />
+
+              <Route
+                path="/pyqs"
+                element={<PYQPage />}
+              />
+
+              {/* Student Navta TEST */}
+              <Route
+                path="/navta-test"
+                element={<NavtaTestPage />}
+              />
+
+              <Route
+                path="/assessments"
+                element={<AssessmentPage />}
+              />
+
+              <Route
+                path="/profile"
+                element={<ProfilePage />}
+              />
+
+              <Route
+                path="/settings"
+                element={<SettingsPage />}
+              />
+
             </Route>
+
           </Route>
 
-          {/* Catch-all redirect */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* =====================================================
+              CATCH ALL
+          ===================================================== */}
+
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to="/"
+                replace
+              />
+            }
+          />
+
         </Routes>
       </Router>
     </AuthProvider>
