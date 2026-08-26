@@ -5,9 +5,9 @@
 ========================================================= */
 
 @theme {
-  --color-darkbg: #0F172A;
-  --color-darkcard: #1E293B;
-  --color-darkborder: #334155;
+  --color-darkbg: #040815;
+  --color-darkcard: #081326;
+  --color-darkborder: #1E293B;
 
   --font-sans: "Outfit", "Inter", sans-serif;
 
@@ -43,14 +43,24 @@ body {
 
   @apply antialiased font-sans text-slate-800 dark:text-slate-100;
 
-  background-color: #f8fbff;
+  background-color: #f7faff;
 
   background-image:
-    linear-gradient(
-      rgba(248, 251, 255, 0.72),
-      rgba(248, 251, 255, 0.72)
+    radial-gradient(
+      circle at 15% 15%,
+      rgba(14, 165, 233, 0.08),
+      transparent 32%
     ),
-    url("./assets/navta-learning-bg.png");
+    radial-gradient(
+      circle at 85% 25%,
+      rgba(139, 92, 246, 0.06),
+      transparent 28%
+    ),
+    linear-gradient(
+      to bottom,
+      #f8fbff,
+      #f4f8fc
+    );
 
   background-size: cover;
   background-position: center top;
@@ -63,18 +73,18 @@ body {
 }
 
 /* =========================================================
-   DARK MODE BACKGROUND
+   DARK MODE - NAVTA AURORA
 ========================================================= */
 
 .dark body {
-  background-color: #08111f;
+  background-color: #040815;
 
   background-image:
     linear-gradient(
-      rgba(5, 12, 24, 0.84),
-      rgba(5, 12, 24, 0.84)
+      rgba(3, 7, 18, 0.76),
+      rgba(3, 7, 18, 0.76)
     ),
-    url("./assets/navta-learning-bg.png");
+    url("./assets/navta-aurora-bg.png");
 
   background-size: cover;
   background-position: center top;
@@ -92,19 +102,19 @@ body {
 }
 
 /* =========================================================
-   GLASSMORPHISM
+   GLASS
 ========================================================= */
 
 .glass {
-  background: rgba(255, 255, 255, 0.74);
+  background: rgba(255, 255, 255, 0.78);
 
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.55);
 
   box-shadow:
-    0 8px 30px rgba(15, 23, 42, 0.06);
+    0 14px 40px rgba(15, 23, 42, 0.08);
 }
 
 /* =========================================================
@@ -112,60 +122,83 @@ body {
 ========================================================= */
 
 .dark .glass {
-  background: rgba(15, 23, 42, 0.62);
+  background: rgba(8, 19, 38, 0.82);
+
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+
+  border: 1px solid rgba(51, 65, 85, 0.55);
+
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.28);
+}
+
+/* =========================================================
+   PREMIUM CARD SURFACE
+========================================================= */
+
+.navta-card-surface {
+  background: rgba(255, 255, 255, 0.84);
 
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(148, 163, 184, 0.16);
 
   box-shadow:
-    0 8px 30px rgba(0, 0, 0, 0.18);
-}
-
-/* =========================================================
-   PREMIUM NAVTA CARDS
-========================================================= */
-
-.navta-card-surface {
-  background: rgba(255, 255, 255, 0.82);
-
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-
-  border: 1px solid rgba(148, 163, 184, 0.14);
-
-  box-shadow:
-    0 10px 30px rgba(15, 23, 42, 0.06);
+    0 16px 40px rgba(15, 23, 42, 0.07);
 
   border-radius: 18px;
 }
 
 .dark .navta-card-surface {
-  background: rgba(15, 23, 42, 0.72);
+  background: rgba(8, 19, 38, 0.88);
 
-  border-color: rgba(148, 163, 184, 0.08);
+  border-color: rgba(51, 65, 85, 0.62);
 
   box-shadow:
-    0 10px 30px rgba(0, 0, 0, 0.22);
+    0 20px 60px rgba(0, 0, 0, 0.30);
 }
 
 /* =========================================================
-   GRID PATTERN
+   OPTIONAL DARK PANEL
+========================================================= */
+
+.navta-dark-panel {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(8, 19, 38, 0.94),
+      rgba(7, 18, 36, 0.88)
+    );
+
+  border: 1px solid rgba(51, 65, 85, 0.6);
+
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+
+  box-shadow:
+    0 22px 70px rgba(0, 0, 0, 0.28);
+
+  border-radius: 24px;
+}
+
+/* =========================================================
+   SUBTLE GRID PATTERN
 ========================================================= */
 
 .bg-grid-pattern {
-  background-size: 40px 40px;
+  background-size: 42px 42px;
 
   background-image:
     linear-gradient(
       to right,
-      rgba(148, 163, 184, 0.05) 1px,
+      rgba(148, 163, 184, 0.035) 1px,
       transparent 1px
     ),
     linear-gradient(
       to bottom,
-      rgba(148, 163, 184, 0.05) 1px,
+      rgba(148, 163, 184, 0.035) 1px,
       transparent 1px
     );
 }
@@ -174,14 +207,50 @@ body {
   background-image:
     linear-gradient(
       to right,
-      rgba(51, 65, 85, 0.15) 1px,
+      rgba(56, 189, 248, 0.025) 1px,
       transparent 1px
     ),
     linear-gradient(
       to bottom,
-      rgba(51, 65, 85, 0.15) 1px,
+      rgba(139, 92, 246, 0.025) 1px,
       transparent 1px
     );
+}
+
+/* =========================================================
+   AURORA GLOW HELPERS
+========================================================= */
+
+.navta-aurora-glow-blue {
+  position: absolute;
+
+  width: 360px;
+  height: 360px;
+
+  border-radius: 9999px;
+
+  background:
+    rgba(14, 165, 233, 0.16);
+
+  filter: blur(120px);
+
+  pointer-events: none;
+}
+
+.navta-aurora-glow-purple {
+  position: absolute;
+
+  width: 360px;
+  height: 360px;
+
+  border-radius: 9999px;
+
+  background:
+    rgba(139, 92, 246, 0.14);
+
+  filter: blur(120px);
+
+  pointer-events: none;
 }
 
 /* =========================================================
@@ -192,30 +261,79 @@ body {
   0%,
   100% {
     transform: scale(1);
-    opacity: 0.5;
+    opacity: 0.45;
   }
 
   50% {
     transform: scale(1.05);
-    opacity: 0.8;
+    opacity: 0.72;
   }
 }
 
 .pulse-glow {
-  animation: pulseGlow 3s infinite ease-in-out;
+  animation:
+    pulseGlow
+    4s
+    infinite
+    ease-in-out;
 }
 
 /* =========================================================
-   HIDE SCROLLBAR
+   FADE IN
 ========================================================= */
 
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+.animate-fadeIn {
+  animation:
+    fadeIn
+    0.35s
+    ease-out
+    forwards;
 }
 
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================================
+   SLOW SPIN
+========================================================= */
+
+.animate-spin-slow {
+  animation:
+    spin
+    8s
+    linear
+    infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* =========================================================
+   GRADIENT TEXT
+========================================================= */
+
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-500 via-blue-500 to-violet-600 dark:from-primary-400 dark:via-blue-400 dark:to-violet-400 font-extrabold;
+}
+
+.gradient-orange {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-500 to-rose-500 font-extrabold;
 }
 
 /* =========================================================
@@ -232,61 +350,39 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 dark:bg-slate-700 rounded-full hover:bg-slate-400 dark:hover:bg-slate-600;
+  @apply bg-slate-300 dark:bg-slate-700 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400 dark:bg-slate-600;
 }
 
 /* =========================================================
-   GRADIENT TEXT
+   HIDE SCROLLBAR
 ========================================================= */
 
-.gradient-text {
-  @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-500 to-indigo-600 dark:from-primary-400 dark:to-indigo-400 font-extrabold;
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
-.gradient-orange {
-  @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-500 to-rose-500 font-extrabold;
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* =========================================================
-   FADE IN
+   SELECTION
 ========================================================= */
 
-.animate-fadeIn {
-  animation: fadeIn 0.3s ease-out forwards;
-}
+::selection {
+  background:
+    rgba(14, 165, 233, 0.22);
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  color: inherit;
 }
 
 /* =========================================================
-   SLOW SPIN
-========================================================= */
-
-.animate-spin-slow {
-  animation: spin 8s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* =========================================================
-   TABLET
+   MOBILE / TABLET
 ========================================================= */
 
 @media (max-width: 1024px) {
@@ -306,15 +402,19 @@ body {
     background-attachment: scroll;
 
     background-image:
-      linear-gradient(
-        rgba(248, 251, 255, 0.80),
-        rgba(248, 251, 255, 0.80)
+      radial-gradient(
+        circle at 20% 10%,
+        rgba(14, 165, 233, 0.07),
+        transparent 30%
       ),
-      url("./assets/navta-learning-bg.png");
+      linear-gradient(
+        to bottom,
+        #f8fbff,
+        #f4f8fc
+      );
 
     background-size: cover;
     background-position: center top;
-    background-repeat: no-repeat;
   }
 
   .dark body {
@@ -322,10 +422,10 @@ body {
 
     background-image:
       linear-gradient(
-        rgba(5, 12, 24, 0.88),
-        rgba(5, 12, 24, 0.88)
+        rgba(3, 7, 18, 0.80),
+        rgba(3, 7, 18, 0.80)
       ),
-      url("./assets/navta-learning-bg.png");
+      url("./assets/navta-aurora-bg.png");
 
     background-size: cover;
     background-position: center top;
@@ -333,14 +433,16 @@ body {
   }
 
   .glass {
-    background: rgba(255, 255, 255, 0.82);
+    background:
+      rgba(255, 255, 255, 0.84);
 
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
 
   .dark .glass {
-    background: rgba(15, 23, 42, 0.68);
+    background:
+      rgba(8, 19, 38, 0.88);
   }
 }
 
@@ -350,24 +452,36 @@ body {
 
 @media (max-width: 480px) {
   body {
-    background-image:
+    background:
       linear-gradient(
-        rgba(248, 251, 255, 0.84),
-        rgba(248, 251, 255, 0.84)
-      ),
-      url("./assets/navta-learning-bg.png");
+        to bottom,
+        #f8fbff,
+        #f4f8fc
+      );
 
-    background-position: center top;
+    background-attachment: scroll;
   }
 
   .dark body {
+    background-color: #040815;
+
     background-image:
       linear-gradient(
-        rgba(5, 12, 24, 0.90),
-        rgba(5, 12, 24, 0.90)
+        rgba(3, 7, 18, 0.84),
+        rgba(3, 7, 18, 0.84)
       ),
-      url("./assets/navta-learning-bg.png");
+      url("./assets/navta-aurora-bg.png");
 
-    background-position: center top;
+    background-position:
+      center top;
+
+    background-size:
+      cover;
+
+    background-repeat:
+      no-repeat;
+
+    background-attachment:
+      scroll;
   }
 }
