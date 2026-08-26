@@ -433,6 +433,7 @@ export default function NavtaTestPage() {
   const [questions, setQuestions] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
+  const [answerFeedback, setAnswerFeedback] = useState({});
   const [timeLeft, setTimeLeft] = useState(30 * 60);
   const [submitted, setSubmitted] = useState(false);
 
@@ -453,6 +454,7 @@ export default function NavtaTestPage() {
     setQuestions(testQuestions);
     setCurrentQuestion(0);
     setAnswers({});
+    setAnswerFeedback({});
     setTimeLeft(
       isTimedCompetitiveTest && selectedDuration
         ? selectedDuration * 60
@@ -487,16 +489,68 @@ export default function NavtaTestPage() {
     )}`;
   }, [timeLeft]);
 
+  const getCorrectAnswerIndex = (question) => {
+    if (typeof question?.answer === "number") {
+      return question.answer;
+    }
+
+    if (typeof question?.correctAnswer === "number") {
+      return question.correctAnswer;
+    }
+
+    return Number(question?.correctAnswer);
+  };
+
+  const goForwardAfterAnswer = () => {
+    if (currentQuestion < questions.length - 1) {
+      setCurrentQuestion((previous) => previous + 1);
+    } else {
+      setSubmitted(true);
+    }
+  };
+
   const selectAnswer = (answerIndex) => {
+    if (answerFeedback[currentQuestion]) {
+      return;
+    }
+
+    const question = questions[currentQuestion];
+    const correctAnswer = getCorrectAnswerIndex(question);
+    const isCorrect = answerIndex === correctAnswer;
+
     setAnswers((previous) => ({
       ...previous,
       [currentQuestion]: answerIndex,
     }));
+
+    setAnswerFeedback((previous) => ({
+      ...previous,
+      [currentQuestion]: {
+        isCorrect,
+        selectedAnswer: answerIndex,
+        correctAnswer,
+      },
+    }));
+
+    // Correct answer: no explanation is shown.
+    // Move automatically to the next question.
+    if (isCorrect) {
+      if (currentQuestion < questions.length - 1) {
+        setTimeout(() => {
+          setCurrentQuestion((previous) => previous + 1);
+        }, 250);
+      } else {
+        setTimeout(() => {
+          setSubmitted(true);
+        }, 250);
+      }
+    }
   };
 
   const score = useMemo(() => {
     return questions.reduce((total, question, index) => {
-      return total + (answers[index] === question.answer ? 1 : 0);
+      return total +
+        (answers[index] === getCorrectAnswerIndex(question) ? 1 : 0);
     }, 0);
   }, [answers, questions]);
 
@@ -511,6 +565,7 @@ export default function NavtaTestPage() {
     setQuestions([]);
     setCurrentQuestion(0);
     setAnswers({});
+    setAnswerFeedback({});
     setTimeLeft(30 * 60);
     setSubmitted(false);
   };
@@ -715,6 +770,44 @@ export default function NavtaTestPage() {
           color: #fbbf24;
           font-size: 13px;
           text-align: center;
+        }
+
+        .navta-answer-feedback {
+          max-width: 1000px;
+          margin: 18px auto 0;
+          padding: 18px;
+          border-radius: 14px;
+          border: 1px solid rgba(239, 68, 68, 0.45);
+          background: rgba(127, 29, 29, 0.22);
+        }
+
+        .navta-answer-feedback h3 {
+          margin: 0 0 10px;
+          color: #fca5a5;
+          font-size: 18px;
+        }
+
+        .navta-correct-answer {
+          margin: 0 0 10px;
+          color: #d1fae5;
+          font-weight: 700;
+        }
+
+        .navta-explanation {
+          margin: 0;
+          color: #e2e8f0;
+          line-height: 1.65;
+        }
+
+        .navta-feedback-next {
+          margin-top: 16px;
+          padding: 12px 20px;
+          border: none;
+          border-radius: 10px;
+          background: #079de0;
+          color: #ffffff;
+          font-weight: 700;
+          cursor: pointer;
         }
 
         .navta-test-header {
@@ -1361,37 +1454,92 @@ export default function NavtaTestPage() {
             </h2>
 
             <div>
-              {questions[currentQuestion].options.map(
-                (option, index) => (
+              {questions[currentQuestion].options.map((option, index) => {
+                const feedback = answerFeedback[currentQuestion];
+                const correctAnswer = getCorrectAnswerIndex(
+                  questions[currentQuestion]
+                );
+                const isSelected = answers[currentQuestion] === index;
+                const showWrongSelected =
+                  feedback && !feedback.isCorrect && isSelected;
+                const showCorrectAnswer =
+                  feedback &&
+                  !feedback.isCorrect &&
+                  index === correctAnswer;
+
+                return (
                   <button
-                    key={option}
+                    key={`${currentQuestion}-${index}`}
                     onClick={() => selectAnswer(index)}
+                    disabled={Boolean(feedback)}
                     className="navta-option"
                     style={{
                       ...styles.option,
-                      ...(answers[currentQuestion] === index
+                      ...(isSelected && !feedback
                         ? styles.selectedOption
+                        : {}),
+                      ...(showWrongSelected
+                        ? styles.wrongOption
+                        : {}),
+                      ...(showCorrectAnswer
+                        ? styles.correctOption
+                        : {}),
+                      ...(feedback
+                        ? { cursor: "default" }
                         : {}),
                     }}
                   >
                     <span style={styles.optionLetter}>
                       {String.fromCharCode(65 + index)}
                     </span>
-
                     <span>{option}</span>
                   </button>
-                )
-              )}
+                );
+              })}
             </div>
           </div>
+
+          {answerFeedback[currentQuestion] &&
+            !answerFeedback[currentQuestion].isCorrect && (
+              <div className="navta-answer-feedback">
+                <h3>✕ Incorrect</h3>
+
+                <p className="navta-correct-answer">
+                  Correct Answer:{" "}
+                  {String.fromCharCode(
+                    65 + answerFeedback[currentQuestion].correctAnswer
+                  )}
+                  .{" "}
+                  {
+                    questions[currentQuestion].options[
+                      answerFeedback[currentQuestion].correctAnswer
+                    ]
+                  }
+                </p>
+
+                <p className="navta-explanation">
+                  <strong>Explanation: </strong>
+                  {questions[currentQuestion].explanation ||
+                    "Explanation is not available for this question yet."}
+                </p>
+
+                <button
+                  type="button"
+                  className="navta-feedback-next"
+                  onClick={goForwardAfterAnswer}
+                >
+                  {currentQuestion < questions.length - 1
+                    ? "Next Question →"
+                    : "Finish Test"}
+                </button>
+              </div>
+            )}
 
           <div className="navta-navigation">
             <button
               disabled={currentQuestion === 0}
               onClick={() =>
-                setCurrentQuestion(
-                  (previous) => previous - 1
-                )
+                setCurrentQuestion((previous) => previous - 1)
               }
               style={{
                 ...styles.navButton,
@@ -1401,25 +1549,13 @@ export default function NavtaTestPage() {
               ← Previous
             </button>
 
-            {currentQuestion < questions.length - 1 ? (
-              <button
-                onClick={() =>
-                  setCurrentQuestion(
-                    (previous) => previous + 1
-                  )
-                }
-                style={styles.nextButton}
-              >
-                Next →
-              </button>
-            ) : (
-              <button
-                onClick={() => setSubmitted(true)}
-                style={styles.submitButton}
-              >
-                Submit Test
-              </button>
-            )}
+            <span style={{ color: "#94a3b8", alignSelf: "center" }}>
+              {answerFeedback[currentQuestion]
+                ? answerFeedback[currentQuestion].isCorrect
+                  ? "✓ Correct — moving to next question..."
+                  : "Review the explanation, then continue."
+                : "Select an answer"}
+            </span>
           </div>
         </div>
       )}
@@ -1621,6 +1757,16 @@ const styles = {
   selectedOption: {
     border: "2px solid #079de0",
     background: "#102f49",
+  },
+
+  wrongOption: {
+    border: "2px solid #ef4444",
+    background: "#3f171c",
+  },
+
+  correctOption: {
+    border: "2px solid #22c55e",
+    background: "#123524",
   },
 
   optionLetter: {
