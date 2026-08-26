@@ -31,22 +31,18 @@ const router =
   express.Router();
 
 // =====================================================
-// ALL TEACHER ROUTES REQUIRE LOGIN
+// ALL ROUTES REQUIRE LOGIN
 // =====================================================
 
 router.use(protect);
 
 // =====================================================
-// NAVTA QUESTION PAPER BUILDER QUESTION BANK
+// NAVTA TEST QUESTION BANK
+// FOR PAPER BUILDER
 //
-// IMPORTANT:
-// This reads directly from the same NavtaQuestion
-// collection used by the Admin Navta TEST portal.
-//
-// Teacher
-// External Teacher
-// Admin
-// can all VIEW it.
+// Reads directly from NavtaQuestion collection.
+// Questions uploaded through Admin -> Navta TEST
+// automatically appear here.
 // =====================================================
 
 router.get(
@@ -54,15 +50,15 @@ router.get(
 
   authorizeRoles(
     'teacher',
-    'admin',
-    'external_teacher'
+    'external_teacher',
+    'admin'
   ),
 
   getQuestionBank
 );
 
 // =====================================================
-// EXISTING GENERAL QUESTIONS
+// EXISTING GENERAL QUESTION BANK
 // =====================================================
 
 router.get(
@@ -70,8 +66,8 @@ router.get(
 
   authorizeRoles(
     'teacher',
-    'admin',
-    'external_teacher'
+    'external_teacher',
+    'admin'
   ),
 
   getQuestions
@@ -82,15 +78,16 @@ router.post(
 
   authorizeRoles(
     'teacher',
-    'admin',
-    'external_teacher'
+    'external_teacher',
+    'admin'
   ),
 
   createQuestion
 );
 
 // =====================================================
-// TEACHER / ADMIN CONTENT MANAGEMENT
+// CONTENT MANAGEMENT
+// TEACHER + ADMIN
 // =====================================================
 
 router.post(
@@ -138,7 +135,7 @@ router.post(
 );
 
 // =====================================================
-// STUDENT PERFORMANCE METRICS
+// STUDENT PERFORMANCE
 // =====================================================
 
 router.get(
@@ -155,11 +152,9 @@ router.get(
 // =====================================================
 // DELETE GENERAL QUESTION
 //
-// Keep your existing behavior:
-// Teacher/Admin can delete questions from the older
-// general Question collection.
-//
-// This DOES NOT delete questions from NavtaQuestion.
+// IMPORTANT:
+// This deletes from the older Question collection.
+// It does NOT delete NavtaQuestion admin-bank questions.
 // =====================================================
 
 router.delete(
@@ -177,4 +172,5 @@ router.delete(
 // EXPORT
 // =====================================================
 
-module.exports = router;
+module.exports =
+  router;
