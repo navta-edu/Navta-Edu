@@ -21,11 +21,12 @@ import {
   Clock3,
   Award,
   Database,
-  ChevronDown
+  ChevronDown,
+  RefreshCw
 } from 'lucide-react';
 
 // =====================================================
-// CONSTANTS
+// FILTER VALUES
 // =====================================================
 
 const SUBJECTS = [
@@ -72,26 +73,33 @@ const QUESTION_TYPES = [
 // =====================================================
 
 function normalizeQuestionType(type) {
-  if (!type) return 'mcq';
+  if (!type) {
+    return 'mcq';
+  }
 
-  const value = String(type)
-    .trim()
-    .toLowerCase();
+  const value =
+    String(type)
+      .trim()
+      .toLowerCase();
 
   if (
-    value === 'short' ||
-    value === 'short_answer' ||
-    value === 'short-answer' ||
-    value === 'short answer'
+    [
+      'short',
+      'short answer',
+      'short-answer',
+      'short_answer'
+    ].includes(value)
   ) {
     return 'short';
   }
 
   if (
-    value === 'long' ||
-    value === 'long_answer' ||
-    value === 'long-answer' ||
-    value === 'long answer'
+    [
+      'long',
+      'long answer',
+      'long-answer',
+      'long_answer'
+    ].includes(value)
   ) {
     return 'long';
   }
@@ -100,14 +108,14 @@ function normalizeQuestionType(type) {
 }
 
 function getQuestionTypeLabel(type) {
-  const normalized =
+  const value =
     normalizeQuestionType(type);
 
-  if (normalized === 'short') {
+  if (value === 'short') {
     return 'Short Answer';
   }
 
-  if (normalized === 'long') {
+  if (value === 'long') {
     return 'Long Answer';
   }
 
@@ -115,14 +123,14 @@ function getQuestionTypeLabel(type) {
 }
 
 function getDefaultMarks(question) {
-  const existingMarks =
+  const marks =
     Number(question?.maxMarks);
 
   if (
-    Number.isFinite(existingMarks) &&
-    existingMarks > 0
+    Number.isFinite(marks) &&
+    marks > 0
   ) {
-    return existingMarks;
+    return marks;
   }
 
   const type =
@@ -130,12 +138,12 @@ function getDefaultMarks(question) {
       question?.questionType
     );
 
-  if (type === 'long') {
-    return 5;
-  }
-
   if (type === 'short') {
     return 3;
+  }
+
+  if (type === 'long') {
+    return 5;
   }
 
   return 1;
@@ -147,7 +155,43 @@ function escapeHtml(value = '') {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+    .replaceAll(
+      "'",
+      '&#039;'
+    );
+}
+
+// =====================================================
+// AUTH HEADER
+//
+// This supports common NAVTA local-storage token names.
+// If your API utility already injects Authorization,
+// you can later move this into utils/api.js.
+// =====================================================
+
+function getAuthHeaders() {
+  const token =
+    localStorage.getItem(
+      'token'
+    ) ||
+    localStorage.getItem(
+      'authToken'
+    ) ||
+    localStorage.getItem(
+      'accessToken'
+    );
+
+  const headers = {
+    Accept:
+      'application/json'
+  };
+
+  if (token) {
+    headers.Authorization =
+      `Bearer ${token}`;
+  }
+
+  return headers;
 }
 
 // =====================================================
@@ -155,67 +199,71 @@ function escapeHtml(value = '') {
 // =====================================================
 
 export default function QuestionPaperBuilder() {
-  // ===================================================
-  // QUESTION BANK
-  // ===================================================
+  const [
+    questions,
+    setQuestions
+  ] = useState([]);
 
-  const [questions, setQuestions] =
-    useState([]);
+  const [
+    chapters,
+    setChapters
+  ] = useState([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading
+  ] = useState(true);
 
-  const [error, setError] =
-    useState('');
-
-  // ===================================================
-  // FILTERS
-  // ===================================================
-
-  const [filters, setFilters] =
-    useState({
-      subject: '',
-      exam: '',
-      classLevel: '',
-      chapter: '',
-      difficulty: '',
-      questionType: '',
-      search: ''
-    });
-
-  // ===================================================
-  // SELECTED QUESTIONS
-  // ===================================================
+  const [
+    error,
+    setError
+  ] = useState('');
 
   const [
     selectedQuestions,
     setSelectedQuestions
   ] = useState([]);
 
-  // ===================================================
-  // PAPER INFORMATION
-  // ===================================================
+  const [
+    filters,
+    setFilters
+  ] = useState({
+    subject: '',
+    exam: '',
+    classLevel: '',
+    chapter: '',
+    difficulty: '',
+    questionType: '',
+    search: ''
+  });
 
-  const [paperDetails, setPaperDetails] =
-    useState({
-      instituteName: 'NAVTA',
-      title: 'Question Paper',
-      examName: '',
-      subject: '',
-      classLevel: '',
-      date: '',
-      duration: '60',
-      instructions:
-        'Attempt all questions. Read each question carefully before answering.'
-    });
+  const [
+    paperDetails,
+    setPaperDetails
+  ] = useState({
+    instituteName:
+      'NAVTA',
+
+    title:
+      'Question Paper',
+
+    examName: '',
+
+    subject: '',
+
+    classLevel: '',
+
+    date: '',
+
+    duration: '60',
+
+    instructions:
+      'Attempt all questions. Read each question carefully before answering.'
+  });
 
   // ===================================================
-  // LOAD QUESTIONS
+  // LOAD QUESTION BANK
   // ===================================================
-
-  useEffect(() => {
-    loadQuestionBank();
-  }, []);
 
   const loadQuestionBank =
     async () => {
@@ -223,16 +271,85 @@ export default function QuestionPaperBuilder() {
         setLoading(true);
         setError('');
 
+        const params =
+          new URLSearchParams();
+
+        if (filters.subject) {
+          params.set(
+            'subject',
+            filters.subject
+          );
+        }
+
+        if (filters.exam) {
+          params.set(
+            'exam',
+            filters.exam
+          );
+        }
+
+        if (
+          filters.classLevel
+        ) {
+          params.set(
+            'classLevel',
+            filters.classLevel
+          );
+        }
+
+        if (filters.chapter) {
+          params.set(
+            'chapter',
+            filters.chapter
+          );
+        }
+
+        if (
+          filters.difficulty
+        ) {
+          params.set(
+            'difficulty',
+            filters.difficulty
+          );
+        }
+
+        if (
+          filters.questionType
+        ) {
+          params.set(
+            'questionType',
+            filters.questionType
+          );
+        }
+
+        if (
+          filters.search.trim()
+        ) {
+          params.set(
+            'search',
+            filters.search.trim()
+          );
+        }
+
+        const query =
+          params.toString();
+
+        const url =
+          query
+            ? `/api/teacher/question-bank?${query}`
+            : '/api/teacher/question-bank';
+
         const response =
           await fetch(
-            '/api/teacher/question-bank',
+            url,
             {
               method: 'GET',
-              credentials: 'include',
-              headers: {
-                Accept:
-                  'application/json'
-              }
+
+              credentials:
+                'include',
+
+              headers:
+                getAuthHeaders()
             }
           );
 
@@ -248,7 +365,7 @@ export default function QuestionPaperBuilder() {
         if (!response.ok) {
           throw new Error(
             data.message ||
-              'Failed to load NAVTA question bank.'
+              'Unable to load NAVTA question bank.'
           );
         }
 
@@ -259,15 +376,26 @@ export default function QuestionPaperBuilder() {
             ? data.questions
             : []
         );
-      } catch (err) {
+
+        setChapters(
+          Array.isArray(
+            data.chapters
+          )
+            ? data.chapters
+            : []
+        );
+      } catch (error) {
         console.error(
-          'QUESTION BANK ERROR:',
-          err
+          'PAPER BUILDER ERROR:',
+          error
         );
 
+        setQuestions([]);
+        setChapters([]);
+
         setError(
-          err.message ||
-            'Unable to load questions.'
+          error.message ||
+            'Unable to load NAVTA question bank.'
         );
       } finally {
         setLoading(false);
@@ -275,271 +403,57 @@ export default function QuestionPaperBuilder() {
     };
 
   // ===================================================
-  // UPDATE FILTER
+  // AUTOMATIC REFRESH
   // ===================================================
 
-  const updateFilter = (
-    field,
+  useEffect(() => {
+    const timer =
+      setTimeout(() => {
+        loadQuestionBank();
+      }, 250);
+
+    return () =>
+      clearTimeout(timer);
+  }, [
+    filters.subject,
+    filters.exam,
+    filters.classLevel,
+    filters.chapter,
+    filters.difficulty,
+    filters.questionType,
+    filters.search
+  ]);
+
+  // ===================================================
+  // FILTER CHANGE
+  // ===================================================
+
+  const setFilter = (
+    key,
     value
   ) => {
     setFilters(
       (previous) => ({
         ...previous,
-        [field]: value
+        [key]: value
       })
     );
   };
 
-  // ===================================================
-  // UPDATE PAPER DETAILS
-  // ===================================================
-
-  const updatePaperDetail = (
-    field,
+  const setPrimaryFilter = (
+    key,
     value
   ) => {
-    setPaperDetails(
+    setFilters(
       (previous) => ({
         ...previous,
-        [field]: value
+        [key]: value,
+        chapter: ''
       })
     );
   };
 
-  // ===================================================
-  // CHAPTER LIST
-  // ===================================================
-
-  const chapters = useMemo(() => {
-    let source = questions;
-
-    if (filters.subject) {
-      source = source.filter(
-        (question) =>
-          question.subject ===
-          filters.subject
-      );
-    }
-
-    if (filters.exam) {
-      source = source.filter(
-        (question) =>
-          question.exam ===
-          filters.exam
-      );
-    }
-
-    if (filters.classLevel) {
-      source = source.filter(
-        (question) =>
-          question.classLevel ===
-          filters.classLevel
-      );
-    }
-
-    return [
-      ...new Set(
-        source
-          .map(
-            (question) =>
-              question.chapter
-          )
-          .filter(Boolean)
-      )
-    ].sort((a, b) =>
-      a.localeCompare(b)
-    );
-  }, [
-    questions,
-    filters.subject,
-    filters.exam,
-    filters.classLevel
-  ]);
-
-  // ===================================================
-  // FILTER QUESTIONS
-  // ===================================================
-
-  const filteredQuestions =
-    useMemo(() => {
-      const search =
-        filters.search
-          .trim()
-          .toLowerCase();
-
-      return questions.filter(
-        (question) => {
-          if (
-            filters.subject &&
-            question.subject !==
-              filters.subject
-          ) {
-            return false;
-          }
-
-          if (
-            filters.exam &&
-            question.exam !==
-              filters.exam
-          ) {
-            return false;
-          }
-
-          if (
-            filters.classLevel &&
-            question.classLevel !==
-              filters.classLevel
-          ) {
-            return false;
-          }
-
-          if (
-            filters.chapter &&
-            question.chapter !==
-              filters.chapter
-          ) {
-            return false;
-          }
-
-          if (
-            filters.difficulty &&
-            question.difficulty !==
-              filters.difficulty
-          ) {
-            return false;
-          }
-
-          if (
-            filters.questionType &&
-            normalizeQuestionType(
-              question.questionType
-            ) !==
-              filters.questionType
-          ) {
-            return false;
-          }
-
-          if (search) {
-            const searchableText = [
-              question.question,
-              question.subject,
-              question.exam,
-              question.classLevel,
-              question.chapter,
-              question.difficulty
-            ]
-              .filter(Boolean)
-              .join(' ')
-              .toLowerCase();
-
-            if (
-              !searchableText.includes(
-                search
-              )
-            ) {
-              return false;
-            }
-          }
-
-          return true;
-        }
-      );
-    }, [questions, filters]);
-
-  // ===================================================
-  // QUESTION SELECTED?
-  // ===================================================
-
-  const isSelected = (id) =>
-    selectedQuestions.some(
-      (question) =>
-        question._id === id
-    );
-
-  // ===================================================
-  // SELECT / REMOVE QUESTION
-  // ===================================================
-
-  const toggleQuestion = (
-    question
-  ) => {
-    setSelectedQuestions(
-      (previous) => {
-        const exists =
-          previous.some(
-            (item) =>
-              item._id ===
-              question._id
-          );
-
-        if (exists) {
-          return previous.filter(
-            (item) =>
-              item._id !==
-              question._id
-          );
-        }
-
-        return [
-          ...previous,
-          {
-            ...question,
-            paperMarks:
-              getDefaultMarks(
-                question
-              )
-          }
-        ];
-      }
-    );
-  };
-
-  // ===================================================
-  // SELECT ALL FILTERED
-  // ===================================================
-
-  const selectAllFiltered = () => {
-    setSelectedQuestions(
-      (previous) => {
-        const ids =
-          new Set(
-            previous.map(
-              (question) =>
-                question._id
-            )
-          );
-
-        const newQuestions =
-          filteredQuestions
-            .filter(
-              (question) =>
-                !ids.has(
-                  question._id
-                )
-            )
-            .map(
-              (question) => ({
-                ...question,
-                paperMarks:
-                  getDefaultMarks(
-                    question
-                  )
-              })
-            );
-
-        return [
-          ...previous,
-          ...newQuestions
-        ];
-      }
-    );
-  };
-
-  // ===================================================
-  // CLEAR FILTERS
-  // ===================================================
-
-  const clearFilters = () => {
+  const resetFilters = () => {
     setFilters({
       subject: '',
       exam: '',
@@ -552,21 +466,106 @@ export default function QuestionPaperBuilder() {
   };
 
   // ===================================================
-  // REMOVE SELECTED QUESTION
+  // SELECT QUESTION
   // ===================================================
 
-  const removeQuestion = (id) => {
+  const isSelected = (id) =>
+    selectedQuestions.some(
+      (question) =>
+        question._id === id
+    );
+
+  const toggleQuestion = (
+    question
+  ) => {
+    setSelectedQuestions(
+      (previous) => {
+        if (
+          previous.some(
+            (item) =>
+              item._id ===
+              question._id
+          )
+        ) {
+          return previous.filter(
+            (item) =>
+              item._id !==
+              question._id
+          );
+        }
+
+        return [
+          ...previous,
+          {
+            ...question,
+
+            paperMarks:
+              getDefaultMarks(
+                question
+              )
+          }
+        ];
+      }
+    );
+  };
+
+  const selectAll = () => {
+    setSelectedQuestions(
+      (previous) => {
+        const ids =
+          new Set(
+            previous.map(
+              (item) =>
+                item._id
+            )
+          );
+
+        const additional =
+          questions
+            .filter(
+              (question) =>
+                !ids.has(
+                  question._id
+                )
+            )
+            .map(
+              (question) => ({
+                ...question,
+
+                paperMarks:
+                  getDefaultMarks(
+                    question
+                  )
+              })
+            );
+
+        return [
+          ...previous,
+          ...additional
+        ];
+      }
+    );
+  };
+
+  const removeQuestion = (
+    id
+  ) => {
     setSelectedQuestions(
       (previous) =>
         previous.filter(
-          (question) =>
-            question._id !== id
+          (item) =>
+            item._id !== id
         )
     );
   };
 
+  const clearSelected =
+    () => {
+      setSelectedQuestions([]);
+    };
+
   // ===================================================
-  // MOVE QUESTION
+  // REORDER
   // ===================================================
 
   const moveQuestion = (
@@ -575,12 +574,12 @@ export default function QuestionPaperBuilder() {
   ) => {
     setSelectedQuestions(
       (previous) => {
-        const newIndex =
+        const nextIndex =
           index + direction;
 
         if (
-          newIndex < 0 ||
-          newIndex >=
+          nextIndex < 0 ||
+          nextIndex >=
             previous.length
         ) {
           return previous;
@@ -592,9 +591,9 @@ export default function QuestionPaperBuilder() {
 
         [
           copy[index],
-          copy[newIndex]
+          copy[nextIndex]
         ] = [
-          copy[newIndex],
+          copy[nextIndex],
           copy[index]
         ];
 
@@ -604,10 +603,10 @@ export default function QuestionPaperBuilder() {
   };
 
   // ===================================================
-  // UPDATE QUESTION MARKS
+  // MARKS
   // ===================================================
 
-  const updateQuestionMarks = (
+  const updateMarks = (
     id,
     value
   ) => {
@@ -632,37 +631,43 @@ export default function QuestionPaperBuilder() {
     );
   };
 
-  // ===================================================
-  // TOTAL MARKS
-  // ===================================================
-
   const totalMarks =
-    useMemo(() => {
-      return selectedQuestions.reduce(
-        (total, question) =>
-          total +
+    useMemo(
+      () =>
+        selectedQuestions.reduce(
           (
-            Number(
-              question.paperMarks
-            ) || 0
-          ),
-        0
+            total,
+            question
+          ) =>
+            total +
+            (
+              Number(
+                question.paperMarks
+              ) || 0
+            ),
+          0
+        ),
+      [selectedQuestions]
+    );
+
+  // ===================================================
+  // PAPER DETAILS
+  // ===================================================
+
+  const updatePaperDetail =
+    (
+      key,
+      value
+    ) => {
+      setPaperDetails(
+        (previous) => ({
+          ...previous,
+          [key]: value
+        })
       );
-    }, [selectedQuestions]);
+    };
 
-  // ===================================================
-  // CLEAR PAPER
-  // ===================================================
-
-  const clearPaper = () => {
-    setSelectedQuestions([]);
-  };
-
-  // ===================================================
-  // SYNC PAPER DETAILS FROM FILTERS
-  // ===================================================
-
-  const useCurrentFiltersForPaper =
+  const useFiltersForPaper =
     () => {
       setPaperDetails(
         (previous) => ({
@@ -684,155 +689,147 @@ export default function QuestionPaperBuilder() {
     };
 
   // ===================================================
-  // GENERATE STUDENT PAPER
-  // Browser print -> Save as PDF
+  // GENERATE STUDENT PDF
   // ===================================================
 
-  const generateStudentPDF = () => {
-    if (
-      selectedQuestions.length ===
-      0
-    ) {
-      window.alert(
-        'Please select at least one question first.'
-      );
+  const generateStudentPDF =
+    () => {
+      if (
+        selectedQuestions.length ===
+        0
+      ) {
+        window.alert(
+          'Select at least one question first.'
+        );
 
-      return;
-    }
+        return;
+      }
 
-    const printWindow =
-      window.open(
-        '',
-        '_blank',
-        'width=1000,height=800'
-      );
+      const printWindow =
+        window.open(
+          '',
+          '_blank',
+          'width=1000,height=850'
+        );
 
-    if (!printWindow) {
-      window.alert(
-        'Your browser blocked the print window. Please allow popups for NAVTA.'
-      );
+      if (!printWindow) {
+        window.alert(
+          'Please allow popups for NAVTA.'
+        );
 
-      return;
-    }
+        return;
+      }
 
-    const questionsHtml =
-      selectedQuestions
-        .map(
-          (question, index) => {
-            const type =
-              normalizeQuestionType(
-                question.questionType
-              );
+      const questionHtml =
+        selectedQuestions
+          .map(
+            (
+              question,
+              index
+            ) => {
+              const type =
+                normalizeQuestionType(
+                  question.questionType
+                );
 
-            const options =
-              Array.isArray(
-                question.options
-              )
-                ? question.options
-                : [];
+              let optionsHtml =
+                '';
 
-            let optionsHtml = '';
+              if (
+                type === 'mcq' &&
+                Array.isArray(
+                  question.options
+                )
+              ) {
+                optionsHtml = `
+                  <div class="options">
 
-            if (
-              type === 'mcq' &&
-              options.length
-            ) {
-              optionsHtml = `
-                <div class="options">
-                  ${options
-                    .map(
-                      (
-                        option,
-                        optionIndex
-                      ) => `
-                        <div class="option">
-                          <span class="option-letter">
-                            ${String.fromCharCode(
-                              65 +
-                                optionIndex
-                            )}.
-                          </span>
+                    ${question.options
+                      .map(
+                        (
+                          option,
+                          optionIndex
+                        ) => `
+                          <div class="option">
 
-                          ${escapeHtml(
-                            option
-                          )}
-                        </div>
-                      `
-                    )
-                    .join('')}
+                            <strong>
+                              ${String.fromCharCode(
+                                65 +
+                                  optionIndex
+                              )}.
+                            </strong>
+
+                            ${escapeHtml(
+                              option
+                            )}
+
+                          </div>
+                        `
+                      )
+                      .join('')}
+
+                  </div>
+                `;
+              }
+
+              return `
+                <div class="question">
+
+                  <div class="question-row">
+
+                    <div class="question-text">
+
+                      <strong>
+                        ${index + 1}.
+                      </strong>
+
+                      ${escapeHtml(
+                        question.question
+                      )}
+
+                    </div>
+
+                    <div class="marks">
+
+                      [${
+                        question.paperMarks
+                      } ${
+                        Number(
+                          question.paperMarks
+                        ) === 1
+                          ? 'Mark'
+                          : 'Marks'
+                      }]
+
+                    </div>
+
+                  </div>
+
+                  ${optionsHtml}
+
                 </div>
               `;
             }
+          )
+          .join('');
 
-            return `
-              <div class="question">
-                <div class="question-header">
-                  <div class="question-text">
-                    <strong>
-                      ${index + 1}.
-                    </strong>
+      printWindow.document.write(`
+        <!DOCTYPE html>
 
-                    ${escapeHtml(
-                      question.question
-                    )}
-                  </div>
+        <html>
 
-                  <div class="marks">
-                    [${
-                      Number(
-                        question.paperMarks
-                      ) || 0
-                    } ${
-                      Number(
-                        question.paperMarks
-                      ) === 1
-                        ? 'Mark'
-                        : 'Marks'
-                    }]
-                  </div>
-                </div>
-
-                ${optionsHtml}
-              </div>
-            `;
-          }
-        )
-        .join('');
-
-    const instructions =
-      paperDetails.instructions
-        .split('\n')
-        .map(
-          (line) =>
-            line.trim()
-        )
-        .filter(Boolean)
-        .map(
-          (line, index) => `
-            <div>
-              ${index + 1}. ${escapeHtml(
-                line
-              )}
-            </div>
-          `
-        )
-        .join('');
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-
-      <html>
         <head>
-          <title>
-            ${escapeHtml(
-              paperDetails.title ||
-                'NAVTA Question Paper'
-            )}
-          </title>
 
           <meta charset="UTF-8" />
 
+          <title>
+            ${escapeHtml(
+              paperDetails.title
+            )}
+          </title>
+
           <style>
+
             @page {
               size: A4;
               margin: 16mm;
@@ -844,83 +841,103 @@ export default function QuestionPaperBuilder() {
 
             body {
               margin: 0;
+
               font-family:
                 Arial,
                 Helvetica,
                 sans-serif;
-              color: #111827;
-              background: white;
-              font-size: 14px;
-              line-height: 1.55;
-            }
 
-            .paper {
-              width: 100%;
+              color: #111827;
+
+              background: white;
+
+              font-size: 14px;
+
+              line-height: 1.55;
             }
 
             .brand {
               text-align: center;
+
               font-size: 28px;
+
               font-weight: 800;
-              letter-spacing: 1px;
             }
 
-            .institute {
+            .school {
               text-align: center;
+
               font-size: 14px;
-              margin-top: 2px;
+
+              margin-top: 3px;
             }
 
-            .title {
+            .paper-title {
               text-align: center;
-              font-size: 20px;
+
+              font-size: 19px;
+
               font-weight: 700;
-              margin-top: 12px;
+
+              margin-top: 10px;
             }
 
             .meta {
               margin-top: 18px;
-              border-top: 1px solid #111827;
-              border-bottom: 1px solid #111827;
-              padding: 10px 0;
+
+              padding:
+                10px 0;
+
+              border-top:
+                1px solid #111827;
+
+              border-bottom:
+                1px solid #111827;
+
               display: grid;
+
               grid-template-columns:
                 1fr 1fr;
-              gap: 6px 20px;
+
+              gap:
+                6px 20px;
             }
 
-            .meta-right {
+            .right {
               text-align: right;
             }
 
             .instructions {
-              margin-top: 16px;
-              padding-bottom: 14px;
+              margin-top: 15px;
+
+              padding-bottom:
+                14px;
+
               border-bottom:
                 1px solid #d1d5db;
             }
 
-            .instructions-title {
-              font-weight: 700;
-              margin-bottom: 5px;
-            }
-
             .questions {
-              margin-top: 20px;
+              margin-top: 22px;
             }
 
             .question {
               margin-bottom: 22px;
-              break-inside: avoid;
-              page-break-inside: avoid;
+
+              page-break-inside:
+                avoid;
             }
 
-            .question-header {
+            .question-row {
               display: flex;
-              align-items: flex-start;
+
+              gap: 20px;
+
               justify-content:
                 space-between;
-              gap: 20px;
+
+              align-items:
+                flex-start;
             }
 
             .question-text {
@@ -928,170 +945,202 @@ export default function QuestionPaperBuilder() {
             }
 
             .marks {
-              white-space: nowrap;
+              white-space:
+                nowrap;
+
               font-weight: 700;
             }
 
             .options {
-              margin-top: 10px;
-              margin-left: 25px;
               display: grid;
+
               grid-template-columns:
                 1fr 1fr;
-              gap: 7px 24px;
-            }
 
-            .option-letter {
-              font-weight: 700;
-              margin-right: 5px;
+              gap:
+                8px 20px;
+
+              margin:
+                10px 0 0 25px;
             }
 
             .footer {
-              margin-top: 35px;
+              margin-top: 40px;
+
               text-align: center;
-              font-size: 11px;
+
               color: #6b7280;
+
+              font-size: 10px;
             }
 
-            @media print {
-              body {
-                -webkit-print-color-adjust:
-                  exact;
-                print-color-adjust:
-                  exact;
-              }
-            }
           </style>
+
         </head>
 
         <body>
-          <div class="paper">
 
-            <div class="brand">
-              NAVTA
-            </div>
+          <div class="brand">
+            NAVTA
+          </div>
 
-            <div class="institute">
-              ${escapeHtml(
-                paperDetails.instituteName ||
-                  'NAVTA'
-              )}
-            </div>
+          <div class="school">
+            ${escapeHtml(
+              paperDetails.instituteName
+            )}
+          </div>
 
-            <div class="title">
-              ${escapeHtml(
-                paperDetails.title ||
-                  'Question Paper'
-              )}
-            </div>
+          <div class="paper-title">
+            ${escapeHtml(
+              paperDetails.title
+            )}
+          </div>
 
-            <div class="meta">
+          <div class="meta">
 
-              <div>
-                <strong>
-                  Exam:
-                </strong>
+            <div>
 
-                ${escapeHtml(
-                  paperDetails.examName ||
-                    '-'
-                )}
-              </div>
+              <strong>
+                Exam:
+              </strong>
 
-              <div class="meta-right">
-                <strong>
-                  Time:
-                </strong>
-
-                ${escapeHtml(
-                  paperDetails.duration ||
-                    '-'
-                )} Minutes
-              </div>
-
-              <div>
-                <strong>
-                  Subject:
-                </strong>
-
-                ${escapeHtml(
-                  paperDetails.subject ||
-                    '-'
-                )}
-              </div>
-
-              <div class="meta-right">
-                <strong>
-                  Maximum Marks:
-                </strong>
-
-                ${totalMarks}
-              </div>
-
-              <div>
-                <strong>
-                  Class:
-                </strong>
-
-                ${escapeHtml(
-                  paperDetails.classLevel ||
-                    '-'
-                )}
-              </div>
-
-              <div class="meta-right">
-                <strong>
-                  Date:
-                </strong>
-
-                ${escapeHtml(
-                  paperDetails.date ||
-                    '-'
-                )}
-              </div>
+              ${
+                escapeHtml(
+                  paperDetails.examName
+                ) ||
+                '-'
+              }
 
             </div>
 
-            ${
-              instructions
-                ? `
-                  <div class="instructions">
-                    <div class="instructions-title">
-                      General Instructions
-                    </div>
+            <div class="right">
 
-                    ${instructions}
-                  </div>
-                `
-                : ''
-            }
+              <strong>
+                Time:
+              </strong>
 
-            <div class="questions">
-              ${questionsHtml}
+              ${
+                escapeHtml(
+                  paperDetails.duration
+                ) ||
+                '-'
+              } Minutes
+
             </div>
 
-            <div class="footer">
-              Generated using NAVTA Paper Builder
+            <div>
+
+              <strong>
+                Subject:
+              </strong>
+
+              ${
+                escapeHtml(
+                  paperDetails.subject
+                ) ||
+                '-'
+              }
+
+            </div>
+
+            <div class="right">
+
+              <strong>
+                Maximum Marks:
+              </strong>
+
+              ${totalMarks}
+
+            </div>
+
+            <div>
+
+              <strong>
+                Class:
+              </strong>
+
+              ${
+                escapeHtml(
+                  paperDetails.classLevel
+                ) ||
+                '-'
+              }
+
+            </div>
+
+            <div class="right">
+
+              <strong>
+                Date:
+              </strong>
+
+              ${
+                escapeHtml(
+                  paperDetails.date
+                ) ||
+                '-'
+              }
+
             </div>
 
           </div>
 
-          <script>
-            window.onload = function () {
-              setTimeout(function () {
-                window.print();
-              }, 250);
-            };
-          </script>
-        </body>
-      </html>
-    `);
+          ${
+            paperDetails.instructions
+              ? `
+                <div class="instructions">
 
-    printWindow.document.close();
-  };
+                  <strong>
+                    General Instructions
+                  </strong>
+
+                  <p>
+                    ${escapeHtml(
+                      paperDetails.instructions
+                    )}
+                  </p>
+
+                </div>
+              `
+              : ''
+          }
+
+          <div class="questions">
+
+            ${questionHtml}
+
+          </div>
+
+          <div class="footer">
+            Generated using NAVTA Paper Builder
+          </div>
+
+          <script>
+
+            window.onload =
+              function () {
+
+                setTimeout(
+                  function () {
+                    window.print();
+                  },
+                  300
+                );
+
+              };
+
+          </script>
+
+        </body>
+
+        </html>
+      `);
+
+      printWindow.document.close();
+    };
 
   // ===================================================
-  // RENDER
+  // UI
   // ===================================================
 
   return (
@@ -1103,16 +1152,12 @@ export default function QuestionPaperBuilder() {
         pb-16
       "
     >
-      {/* =================================================
-          HEADER
-      ================================================= */}
+      {/* HEADER */}
 
       <div
         className="
           navta-premium-panel
-          p-5
-          sm:p-6
-          lg:p-8
+          p-6
           mb-6
         "
       >
@@ -1127,24 +1172,26 @@ export default function QuestionPaperBuilder() {
           "
         >
           <div>
+
             <div
               className="
                 inline-flex
                 items-center
                 gap-2
-                rounded-full
-                bg-primary-500/10
-                text-primary-600
-                dark:text-primary-400
                 px-3
                 py-1.5
+                rounded-full
+                bg-primary-500/10
+                text-primary-500
                 text-xs
                 font-bold
-                mb-3
               "
             >
               <FileText
-                className="w-4 h-4"
+                className="
+                  w-4
+                  h-4
+                "
               />
 
               NAVTA PAPER BUILDER
@@ -1152,13 +1199,12 @@ export default function QuestionPaperBuilder() {
 
             <h1
               className="
-                text-2xl
-                sm:text-3xl
-                lg:text-4xl
+                mt-4
+                text-3xl
+                sm:text-4xl
                 font-extrabold
                 text-slate-900
                 dark:text-white
-                tracking-tight
               "
             >
               Build your question paper
@@ -1169,122 +1215,49 @@ export default function QuestionPaperBuilder() {
                 mt-2
                 max-w-3xl
                 text-sm
-                sm:text-base
                 text-slate-500
                 dark:text-slate-400
               "
             >
-              Select questions directly
-              from the NAVTA Admin Question
-              Bank, arrange them, assign
-              marks and create a printable
-              student question paper.
+              Every question uploaded through
+              Admin → Navta TEST automatically
+              becomes available here.
             </p>
+
           </div>
 
           <div
             className="
               flex
-              flex-wrap
               gap-3
+              flex-wrap
             "
           >
-            <div
-              className="
-                navta-card-surface
-                px-4
-                py-3
-              "
-            >
-              <p
-                className="
-                  text-xs
-                  text-slate-400
-                  font-semibold
-                  uppercase
-                "
-              >
-                Question Bank
-              </p>
+            <HeaderStat
+              label="Question Bank"
+              value={
+                questions.length
+              }
+            />
 
-              <p
-                className="
-                  text-xl
-                  font-extrabold
-                  text-slate-900
-                  dark:text-white
-                "
-              >
-                {questions.length}
-              </p>
-            </div>
+            <HeaderStat
+              label="Selected"
+              value={
+                selectedQuestions.length
+              }
+              blue
+            />
 
-            <div
-              className="
-                navta-card-surface
-                px-4
-                py-3
-              "
-            >
-              <p
-                className="
-                  text-xs
-                  text-slate-400
-                  font-semibold
-                  uppercase
-                "
-              >
-                Selected
-              </p>
-
-              <p
-                className="
-                  text-xl
-                  font-extrabold
-                  text-primary-500
-                "
-              >
-                {
-                  selectedQuestions.length
-                }
-              </p>
-            </div>
-
-            <div
-              className="
-                navta-card-surface
-                px-4
-                py-3
-              "
-            >
-              <p
-                className="
-                  text-xs
-                  text-slate-400
-                  font-semibold
-                  uppercase
-                "
-              >
-                Total Marks
-              </p>
-
-              <p
-                className="
-                  text-xl
-                  font-extrabold
-                  text-emerald-500
-                "
-              >
-                {totalMarks}
-              </p>
-            </div>
+            <HeaderStat
+              label="Total Marks"
+              value={
+                totalMarks
+              }
+              green
+            />
           </div>
         </div>
       </div>
-
-      {/* =================================================
-          MAIN GRID
-      ================================================= */}
 
       <div
         className="
@@ -1295,19 +1268,15 @@ export default function QuestionPaperBuilder() {
           items-start
         "
       >
-        {/* =================================================
-            LEFT SIDE
-        ================================================= */}
+        {/* LEFT */}
 
         <div
           className="
-            min-w-0
             space-y-6
+            min-w-0
           "
         >
-          {/* ===============================================
-              FILTER PANEL
-          =============================================== */}
+          {/* FILTERS */}
 
           <div
             className="
@@ -1337,19 +1306,23 @@ export default function QuestionPaperBuilder() {
                     w-10
                     h-10
                     rounded-xl
-                    bg-primary-500/10
-                    text-primary-500
+                    bg-sky-500/10
+                    text-sky-500
                     flex
                     items-center
                     justify-center
                   "
                 >
                   <SlidersHorizontal
-                    className="w-5 h-5"
+                    className="
+                      w-5
+                      h-5
+                    "
                   />
                 </div>
 
                 <div>
+
                   <h2
                     className="
                       font-bold
@@ -1364,38 +1337,65 @@ export default function QuestionPaperBuilder() {
                     className="
                       text-xs
                       text-slate-500
-                      dark:text-slate-400
                     "
                   >
-                    Filter the NAVTA question bank.
+                    Chapters update automatically from Navta TEST.
                   </p>
+
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={clearFilters}
+              <div
                 className="
                   flex
                   items-center
-                  gap-2
-                  text-xs
-                  font-bold
-                  text-slate-500
-                  dark:text-slate-400
-                  hover:text-primary-500
-                  transition
+                  gap-3
                 "
               >
-                <RotateCcw
-                  className="w-4 h-4"
-                />
+                <button
+                  type="button"
+                  onClick={
+                    loadQuestionBank
+                  }
+                  className="
+                    text-slate-500
+                    hover:text-primary-500
+                  "
+                >
+                  <RefreshCw
+                    className="
+                      w-4
+                      h-4
+                    "
+                  />
+                </button>
 
-                Reset
-              </button>
+                <button
+                  type="button"
+                  onClick={
+                    resetFilters
+                  }
+                  className="
+                    flex
+                    items-center
+                    gap-2
+                    text-xs
+                    font-bold
+                    text-slate-500
+                    hover:text-primary-500
+                  "
+                >
+                  <RotateCcw
+                    className="
+                      w-4
+                      h-4
+                    "
+                  />
+
+                  Reset
+                </button>
+              </div>
             </div>
-
-            {/* SEARCH */}
 
             <div
               className="
@@ -1417,14 +1417,17 @@ export default function QuestionPaperBuilder() {
 
               <input
                 type="text"
-                value={filters.search}
-                onChange={(event) =>
-                  updateFilter(
-                    'search',
-                    event.target.value
-                  )
+                value={
+                  filters.search
                 }
-                placeholder="Search questions..."
+                onChange={
+                  (event) =>
+                    setFilter(
+                      'search',
+                      event.target.value
+                    )
+                }
+                placeholder="Search question..."
                 className="
                   w-full
                   pl-11
@@ -1439,14 +1442,9 @@ export default function QuestionPaperBuilder() {
                   text-sm
                   text-slate-900
                   dark:text-white
-                  placeholder:text-slate-400
-                  focus:border-primary-400
-                  transition
                 "
               />
             </div>
-
-            {/* FILTERS */}
 
             <div
               className="
@@ -1462,16 +1460,16 @@ export default function QuestionPaperBuilder() {
                 value={
                   filters.subject
                 }
-                onChange={(value) => {
-                  setFilters(
-                    (previous) => ({
-                      ...previous,
-                      subject: value,
-                      chapter: ''
-                    })
-                  );
-                }}
-                options={SUBJECTS}
+                options={
+                  SUBJECTS
+                }
+                onChange={
+                  (value) =>
+                    setPrimaryFilter(
+                      'subject',
+                      value
+                    )
+                }
               />
 
               <FilterSelect
@@ -1479,16 +1477,16 @@ export default function QuestionPaperBuilder() {
                 value={
                   filters.exam
                 }
-                onChange={(value) => {
-                  setFilters(
-                    (previous) => ({
-                      ...previous,
-                      exam: value,
-                      chapter: ''
-                    })
-                  );
-                }}
-                options={EXAMS}
+                options={
+                  EXAMS
+                }
+                onChange={
+                  (value) =>
+                    setPrimaryFilter(
+                      'exam',
+                      value
+                    )
+                }
               />
 
               <FilterSelect
@@ -1496,17 +1494,16 @@ export default function QuestionPaperBuilder() {
                 value={
                   filters.classLevel
                 }
-                onChange={(value) => {
-                  setFilters(
-                    (previous) => ({
-                      ...previous,
-                      classLevel:
-                        value,
-                      chapter: ''
-                    })
-                  );
-                }}
-                options={CLASSES}
+                options={
+                  CLASSES
+                }
+                onChange={
+                  (value) =>
+                    setPrimaryFilter(
+                      'classLevel',
+                      value
+                    )
+                }
               />
 
               <FilterSelect
@@ -1514,13 +1511,16 @@ export default function QuestionPaperBuilder() {
                 value={
                   filters.chapter
                 }
-                onChange={(value) =>
-                  updateFilter(
-                    'chapter',
-                    value
-                  )
+                options={
+                  chapters
                 }
-                options={chapters}
+                onChange={
+                  (value) =>
+                    setFilter(
+                      'chapter',
+                      value
+                    )
+                }
               />
 
               <FilterSelect
@@ -1528,14 +1528,15 @@ export default function QuestionPaperBuilder() {
                 value={
                   filters.difficulty
                 }
-                onChange={(value) =>
-                  updateFilter(
-                    'difficulty',
-                    value
-                  )
-                }
                 options={
                   DIFFICULTIES
+                }
+                onChange={
+                  (value) =>
+                    setFilter(
+                      'difficulty',
+                      value
+                    )
                 }
               />
 
@@ -1544,23 +1545,22 @@ export default function QuestionPaperBuilder() {
                 value={
                   filters.questionType
                 }
-                onChange={(value) =>
-                  updateFilter(
-                    'questionType',
-                    value
-                  )
-                }
                 options={
                   QUESTION_TYPES
                 }
                 objectOptions
+                onChange={
+                  (value) =>
+                    setFilter(
+                      'questionType',
+                      value
+                    )
+                }
               />
             </div>
           </div>
 
-          {/* ===============================================
-              QUESTION BANK
-          =============================================== */}
+          {/* QUESTION BANK */}
 
           <div
             className="
@@ -1572,10 +1572,8 @@ export default function QuestionPaperBuilder() {
             <div
               className="
                 flex
-                flex-col
-                sm:flex-row
-                sm:items-center
-                sm:justify-between
+                items-center
+                justify-between
                 gap-4
                 mb-5
               "
@@ -1600,11 +1598,15 @@ export default function QuestionPaperBuilder() {
                   "
                 >
                   <Database
-                    className="w-5 h-5"
+                    className="
+                      w-5
+                      h-5
+                    "
                   />
                 </div>
 
                 <div>
+
                   <h2
                     className="
                       font-bold
@@ -1619,48 +1621,41 @@ export default function QuestionPaperBuilder() {
                     className="
                       text-xs
                       text-slate-500
-                      dark:text-slate-400
                     "
                   >
-                    {
-                      filteredQuestions.length
-                    }{' '}
+                    {questions.length}
+                    {' '}
                     matching questions
                   </p>
+
                 </div>
               </div>
 
-              {filteredQuestions.length >
-                0 && (
+              {questions.length > 0 && (
                 <button
                   type="button"
                   onClick={
-                    selectAllFiltered
+                    selectAll
                   }
                   className="
                     px-4
-                    py-2.5
+                    py-2
                     rounded-xl
                     bg-primary-500/10
-                    text-primary-600
-                    dark:text-primary-400
+                    text-primary-500
                     text-xs
                     font-bold
-                    hover:bg-primary-500/15
-                    transition
                   "
                 >
-                  Select All Filtered
+                  Select All
                 </button>
               )}
             </div>
 
-            {/* LOADING */}
-
             {loading && (
               <div
                 className="
-                  py-16
+                  py-14
                   text-center
                 "
               >
@@ -1684,32 +1679,27 @@ export default function QuestionPaperBuilder() {
                     text-slate-500
                   "
                 >
-                  Loading NAVTA question bank...
+                  Loading questions...
                 </p>
               </div>
             )}
-
-            {/* ERROR */}
 
             {!loading &&
               error && (
                 <div
                   className="
-                    rounded-2xl
+                    rounded-xl
                     border
-                    border-red-200
-                    dark:border-red-900/50
-                    bg-red-50
-                    dark:bg-red-950/20
-                    p-5
+                    border-red-500/30
+                    bg-red-500/5
+                    p-4
                   "
                 >
                   <p
                     className="
                       text-sm
                       font-semibold
-                      text-red-600
-                      dark:text-red-400
+                      text-red-500
                     "
                   >
                     {error}
@@ -1722,7 +1712,7 @@ export default function QuestionPaperBuilder() {
                     }
                     className="
                       mt-3
-                      text-xs
+                      text-sm
                       font-bold
                       text-primary-500
                     "
@@ -1732,15 +1722,13 @@ export default function QuestionPaperBuilder() {
                 </div>
               )}
 
-            {/* EMPTY */}
-
             {!loading &&
               !error &&
-              filteredQuestions.length ===
+              questions.length ===
                 0 && (
                 <div
                   className="
-                    py-16
+                    py-14
                     text-center
                   "
                 >
@@ -1754,7 +1742,7 @@ export default function QuestionPaperBuilder() {
                     "
                   />
 
-                  <h3
+                  <p
                     className="
                       mt-4
                       font-bold
@@ -1762,8 +1750,8 @@ export default function QuestionPaperBuilder() {
                       dark:text-white
                     "
                   >
-                    No questions found
-                  </h3>
+                    No matching questions
+                  </p>
 
                   <p
                     className="
@@ -1772,23 +1760,21 @@ export default function QuestionPaperBuilder() {
                       text-slate-500
                     "
                   >
-                    Change the filters or ask
-                    the NAVTA admin to add
-                    questions for this selection.
+                    Remove filters or add a question through Admin → Navta TEST.
                   </p>
                 </div>
               )}
 
-            {/* QUESTIONS */}
-
             {!loading &&
-              !error && (
+              !error &&
+              questions.length >
+                0 && (
                 <div
                   className="
                     space-y-3
                   "
                 >
-                  {filteredQuestions.map(
+                  {questions.map(
                     (
                       question,
                       index
@@ -1804,10 +1790,11 @@ export default function QuestionPaperBuilder() {
                           key={
                             question._id
                           }
-                          onClick={() =>
-                            toggleQuestion(
-                              question
-                            )
+                          onClick={
+                            () =>
+                              toggleQuestion(
+                                question
+                              )
                           }
                           className={`
                             w-full
@@ -1815,25 +1802,19 @@ export default function QuestionPaperBuilder() {
                             rounded-2xl
                             border
                             p-4
-                            sm:p-5
-                            transition-all
-                            duration-200
+                            transition
 
                             ${
                               selected
                                 ? `
                                   border-primary-400
-                                  bg-primary-50/70
-                                  dark:bg-primary-950/20
-                                  shadow-sm
+                                  bg-primary-500/5
                                 `
                                 : `
                                   border-slate-200
-                                  dark:border-slate-700/70
-                                  bg-white/55
+                                  dark:border-slate-700
+                                  bg-white/40
                                   dark:bg-slate-900/35
-                                  hover:border-primary-300
-                                  dark:hover:border-primary-700
                                 `
                             }
                           `}
@@ -1845,31 +1826,28 @@ export default function QuestionPaperBuilder() {
                               gap-3
                             "
                           >
-                            <div
-                              className="
-                                mt-0.5
-                                shrink-0
-                              "
-                            >
-                              {selected ? (
-                                <CheckCircle2
-                                  className="
-                                    w-5
-                                    h-5
-                                    text-primary-500
-                                  "
-                                />
-                              ) : (
-                                <Circle
-                                  className="
-                                    w-5
-                                    h-5
-                                    text-slate-300
-                                    dark:text-slate-600
-                                  "
-                                />
-                              )}
-                            </div>
+                            {selected ? (
+                              <CheckCircle2
+                                className="
+                                  w-5
+                                  h-5
+                                  mt-0.5
+                                  text-primary-500
+                                  shrink-0
+                                "
+                              />
+                            ) : (
+                              <Circle
+                                className="
+                                  w-5
+                                  h-5
+                                  mt-0.5
+                                  text-slate-300
+                                  dark:text-slate-600
+                                  shrink-0
+                                "
+                              />
+                            )}
 
                             <div
                               className="
@@ -1881,44 +1859,29 @@ export default function QuestionPaperBuilder() {
                                 className="
                                   flex
                                   flex-wrap
-                                  items-center
                                   gap-2
                                   mb-2
                                 "
                               >
-                                <span
-                                  className="
-                                    text-xs
-                                    font-bold
-                                    text-slate-400
-                                  "
-                                >
-                                  Q{index + 1}
-                                </span>
-
                                 <Tag>
-                                  {
-                                    question.subject
-                                  }
+                                  {question.subject}
                                 </Tag>
 
                                 <Tag>
-                                  {
-                                    question.exam
-                                  }
+                                  {question.exam}
                                 </Tag>
 
                                 <Tag>
-                                  {
-                                    question.classLevel
-                                  }
+                                  {question.classLevel}
                                 </Tag>
 
-                                <DifficultyTag
-                                  difficulty={
-                                    question.difficulty
-                                  }
-                                />
+                                <Tag>
+                                  {question.chapter}
+                                </Tag>
+
+                                <Tag>
+                                  {question.difficulty}
+                                </Tag>
 
                                 <Tag>
                                   {getQuestionTypeLabel(
@@ -1933,36 +1896,13 @@ export default function QuestionPaperBuilder() {
                                   sm:text-[15px]
                                   font-semibold
                                   leading-6
-                                  text-slate-800
-                                  dark:text-slate-100
+                                  text-slate-900
+                                  dark:text-white
                                 "
                               >
-                                {
-                                  question.question
-                                }
+                                {index + 1}.{' '}
+                                {question.question}
                               </p>
-
-                              {question.chapter && (
-                                <p
-                                  className="
-                                    mt-2
-                                    text-xs
-                                    text-slate-500
-                                    dark:text-slate-400
-                                  "
-                                >
-                                  Chapter:{' '}
-                                  <span
-                                    className="
-                                      font-semibold
-                                    "
-                                  >
-                                    {
-                                      question.chapter
-                                    }
-                                  </span>
-                                </p>
-                              )}
 
                               {normalizeQuestionType(
                                 question.questionType
@@ -1970,10 +1910,7 @@ export default function QuestionPaperBuilder() {
                                 'mcq' &&
                                 Array.isArray(
                                   question.options
-                                ) &&
-                                question.options
-                                  .length >
-                                  0 && (
+                                ) && (
                                   <div
                                     className="
                                       mt-3
@@ -1994,12 +1931,12 @@ export default function QuestionPaperBuilder() {
                                           }
                                           className="
                                             rounded-lg
-                                            bg-slate-50/80
-                                            dark:bg-slate-800/50
+                                            bg-slate-100/70
+                                            dark:bg-slate-800/60
                                             px-3
                                             py-2
                                             text-xs
-                                            text-slate-600
+                                            text-slate-700
                                             dark:text-slate-300
                                           "
                                         >
@@ -2010,6 +1947,7 @@ export default function QuestionPaperBuilder() {
                                             )}
                                             .
                                           </strong>{' '}
+
                                           {option}
                                         </div>
                                       )
@@ -2027,21 +1965,15 @@ export default function QuestionPaperBuilder() {
           </div>
         </div>
 
-        {/* =================================================
-            RIGHT SIDE
-        ================================================= */}
+        {/* RIGHT */}
 
         <div
           className="
+            space-y-5
             xl:sticky
             xl:top-20
-            space-y-5
           "
         >
-          {/* ===============================================
-              PAPER SETTINGS
-          =============================================== */}
-
           <div
             className="
               navta-card-surface
@@ -2056,24 +1988,16 @@ export default function QuestionPaperBuilder() {
                 mb-5
               "
             >
-              <div
+              <ClipboardList
                 className="
-                  w-10
-                  h-10
-                  rounded-xl
-                  bg-emerald-500/10
+                  w-5
+                  h-5
                   text-emerald-500
-                  flex
-                  items-center
-                  justify-center
                 "
-              >
-                <ClipboardList
-                  className="w-5 h-5"
-                />
-              </div>
+              />
 
               <div>
+
                 <h2
                   className="
                     font-bold
@@ -2092,6 +2016,7 @@ export default function QuestionPaperBuilder() {
                 >
                   Information shown on PDF
                 </p>
+
               </div>
             </div>
 
@@ -2105,11 +2030,12 @@ export default function QuestionPaperBuilder() {
                 value={
                   paperDetails.instituteName
                 }
-                onChange={(value) =>
-                  updatePaperDetail(
-                    'instituteName',
-                    value
-                  )
+                onChange={
+                  (value) =>
+                    updatePaperDetail(
+                      'instituteName',
+                      value
+                    )
                 }
               />
 
@@ -2118,11 +2044,12 @@ export default function QuestionPaperBuilder() {
                 value={
                   paperDetails.title
                 }
-                onChange={(value) =>
-                  updatePaperDetail(
-                    'title',
-                    value
-                  )
+                onChange={
+                  (value) =>
+                    updatePaperDetail(
+                      'title',
+                      value
+                    )
                 }
               />
 
@@ -2131,11 +2058,12 @@ export default function QuestionPaperBuilder() {
                 value={
                   paperDetails.examName
                 }
-                onChange={(value) =>
-                  updatePaperDetail(
-                    'examName',
-                    value
-                  )
+                onChange={
+                  (value) =>
+                    updatePaperDetail(
+                      'examName',
+                      value
+                    )
                 }
               />
 
@@ -2144,11 +2072,12 @@ export default function QuestionPaperBuilder() {
                 value={
                   paperDetails.subject
                 }
-                onChange={(value) =>
-                  updatePaperDetail(
-                    'subject',
-                    value
-                  )
+                onChange={
+                  (value) =>
+                    updatePaperDetail(
+                      'subject',
+                      value
+                    )
                 }
               />
 
@@ -2157,122 +2086,96 @@ export default function QuestionPaperBuilder() {
                 value={
                   paperDetails.classLevel
                 }
-                onChange={(value) =>
-                  updatePaperDetail(
-                    'classLevel',
-                    value
-                  )
+                onChange={
+                  (value) =>
+                    updatePaperDetail(
+                      'classLevel',
+                      value
+                    )
                 }
               />
 
-              <div
-                className="
-                  grid
-                  grid-cols-2
-                  gap-3
-                "
-              >
-                <PaperInput
-                  label="Duration (min)"
-                  type="number"
-                  value={
-                    paperDetails.duration
-                  }
-                  onChange={(value) =>
+              <PaperInput
+                label="Duration (minutes)"
+                type="number"
+                value={
+                  paperDetails.duration
+                }
+                onChange={
+                  (value) =>
                     updatePaperDetail(
                       'duration',
                       value
                     )
-                  }
-                />
+                }
+              />
 
-                <PaperInput
-                  label="Date"
-                  type="date"
-                  value={
-                    paperDetails.date
-                  }
-                  onChange={(value) =>
+              <PaperInput
+                label="Date"
+                type="date"
+                value={
+                  paperDetails.date
+                }
+                onChange={
+                  (value) =>
                     updatePaperDetail(
                       'date',
                       value
                     )
-                  }
-                />
-              </div>
+                }
+              />
 
-              <div>
-                <label
-                  className="
-                    block
-                    text-xs
-                    font-bold
-                    text-slate-500
-                    dark:text-slate-400
-                    mb-1.5
-                  "
-                >
-                  Instructions
-                </label>
-
-                <textarea
-                  rows={4}
-                  value={
-                    paperDetails.instructions
-                  }
-                  onChange={(event) =>
+              <textarea
+                value={
+                  paperDetails.instructions
+                }
+                onChange={
+                  (event) =>
                     updatePaperDetail(
                       'instructions',
                       event.target.value
                     )
-                  }
-                  className="
-                    w-full
-                    rounded-xl
-                    bg-white/70
-                    dark:bg-slate-900/60
-                    border
-                    border-slate-200
-                    dark:border-slate-700
-                    px-3
-                    py-2.5
-                    text-sm
-                    text-slate-900
-                    dark:text-white
-                    resize-none
-                    focus:border-primary-400
-                  "
-                />
-              </div>
+                }
+                rows={4}
+                className="
+                  w-full
+                  rounded-xl
+                  border
+                  border-slate-200
+                  dark:border-slate-700
+                  bg-white/70
+                  dark:bg-slate-900/60
+                  px-3
+                  py-3
+                  text-sm
+                  text-slate-900
+                  dark:text-white
+                "
+              />
 
               <button
                 type="button"
                 onClick={
-                  useCurrentFiltersForPaper
+                  useFiltersForPaper
                 }
                 className="
                   w-full
-                  py-2.5
                   rounded-xl
                   bg-slate-100
                   dark:bg-slate-800
-                  text-slate-700
-                  dark:text-slate-200
+                  py-2.5
                   text-xs
                   font-bold
-                  hover:bg-slate-200
-                  dark:hover:bg-slate-700
-                  transition
+                  text-slate-700
+                  dark:text-white
                 "
               >
-                Use Current Filters
+                Use Selected Filters
               </button>
             </div>
           </div>
 
-          {/* ===============================================
-              SELECTED QUESTIONS
-          =============================================== */}
+          {/* SELECTED QUESTIONS */}
 
           <div
             className="
@@ -2283,13 +2186,13 @@ export default function QuestionPaperBuilder() {
             <div
               className="
                 flex
-                items-center
                 justify-between
                 gap-3
                 mb-4
               "
             >
               <div>
+
                 <h2
                   className="
                     font-bold
@@ -2304,15 +2207,17 @@ export default function QuestionPaperBuilder() {
                   className="
                     text-xs
                     text-slate-500
-                    mt-0.5
                   "
                 >
-                  {
-                    selectedQuestions.length
-                  }{' '}
-                  questions •{' '}
-                  {totalMarks} marks
+                  {selectedQuestions.length}
+                  {' '}
+                  questions •
+                  {' '}
+                  {totalMarks}
+                  {' '}
+                  marks
                 </p>
+
               </div>
 
               {selectedQuestions.length >
@@ -2320,13 +2225,12 @@ export default function QuestionPaperBuilder() {
                 <button
                   type="button"
                   onClick={
-                    clearPaper
+                    clearSelected
                   }
                   className="
                     text-xs
                     font-bold
                     text-red-500
-                    hover:text-red-600
                   "
                 >
                   Clear
@@ -2334,130 +2238,162 @@ export default function QuestionPaperBuilder() {
               )}
             </div>
 
-            {selectedQuestions.length ===
-            0 ? (
-              <div
-                className="
-                  py-10
-                  text-center
-                "
-              >
-                <FileText
-                  className="
-                    w-9
-                    h-9
-                    mx-auto
-                    text-slate-300
-                    dark:text-slate-600
-                  "
-                />
-
-                <p
-                  className="
-                    mt-3
-                    text-sm
-                    font-semibold
-                    text-slate-500
-                  "
-                >
-                  No questions selected
-                </p>
-
-                <p
-                  className="
-                    mt-1
-                    text-xs
-                    text-slate-400
-                  "
-                >
-                  Click questions from the
-                  bank to add them here.
-                </p>
-              </div>
-            ) : (
-              <div
-                className="
-                  space-y-2
-                  max-h-[430px]
-                  overflow-y-auto
-                  pr-1
-                "
-              >
-                {selectedQuestions.map(
-                  (
-                    question,
-                    index
-                  ) => (
+            <div
+              className="
+                space-y-2
+                max-h-[420px]
+                overflow-y-auto
+              "
+            >
+              {selectedQuestions.map(
+                (
+                  question,
+                  index
+                ) => (
+                  <div
+                    key={
+                      question._id
+                    }
+                    className="
+                      rounded-xl
+                      border
+                      border-slate-200
+                      dark:border-slate-700
+                      p-3
+                    "
+                  >
                     <div
-                      key={
-                        question._id
-                      }
                       className="
-                        rounded-xl
-                        border
-                        border-slate-200
-                        dark:border-slate-700
-                        bg-white/55
-                        dark:bg-slate-900/40
-                        p-3
+                        flex
+                        gap-2
+                      "
+                    >
+                      <span
+                        className="
+                          w-6
+                          h-6
+                          rounded-lg
+                          bg-primary-500
+                          text-white
+                          text-[11px]
+                          font-bold
+                          flex
+                          items-center
+                          justify-center
+                          shrink-0
+                        "
+                      >
+                        {index + 1}
+                      </span>
+
+                      <p
+                        className="
+                          flex-1
+                          text-xs
+                          font-semibold
+                          text-slate-700
+                          dark:text-slate-200
+                        "
+                      >
+                        {question.question}
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={
+                          () =>
+                            removeQuestion(
+                              question._id
+                            )
+                        }
+                      >
+                        <X
+                          className="
+                            w-4
+                            h-4
+                            text-slate-400
+                          "
+                        />
+                      </button>
+                    </div>
+
+                    <div
+                      className="
+                        mt-3
+                        flex
+                        items-center
+                        justify-between
                       "
                     >
                       <div
                         className="
                           flex
-                          items-start
-                          gap-2
+                          gap-1
                         "
                       >
-                        <div
+                        <button
+                          type="button"
+                          disabled={
+                            index === 0
+                          }
+                          onClick={
+                            () =>
+                              moveQuestion(
+                                index,
+                                -1
+                              )
+                          }
                           className="
-                            w-6
-                            h-6
-                            shrink-0
+                            w-7
+                            h-7
                             rounded-lg
-                            bg-primary-500
-                            text-white
-                            text-[11px]
-                            font-bold
+                            bg-slate-100
+                            dark:bg-slate-800
                             flex
                             items-center
                             justify-center
+                            disabled:opacity-30
                           "
                         >
-                          {index + 1}
-                        </div>
-
-                        <p
-                          className="
-                            flex-1
-                            text-xs
-                            leading-5
-                            font-semibold
-                            text-slate-700
-                            dark:text-slate-200
-                            line-clamp-3
-                          "
-                        >
-                          {
-                            question.question
-                          }
-                        </p>
+                          <ArrowUp
+                            className="
+                              w-3.5
+                              h-3.5
+                            "
+                          />
+                        </button>
 
                         <button
                           type="button"
-                          onClick={() =>
-                            removeQuestion(
-                              question._id
-                            )
+                          disabled={
+                            index ===
+                            selectedQuestions.length -
+                              1
+                          }
+                          onClick={
+                            () =>
+                              moveQuestion(
+                                index,
+                                1
+                              )
                           }
                           className="
-                            text-slate-400
-                            hover:text-red-500
-                            transition
+                            w-7
+                            h-7
+                            rounded-lg
+                            bg-slate-100
+                            dark:bg-slate-800
+                            flex
+                            items-center
+                            justify-center
+                            disabled:opacity-30
                           "
                         >
-                          <X
-                            className="w-4 h-4"
+                          <ArrowDown
+                            className="
+                              w-3.5
+                              h-3.5
+                            "
                           />
                         </button>
                       </div>
@@ -2466,137 +2402,52 @@ export default function QuestionPaperBuilder() {
                         className="
                           flex
                           items-center
-                          justify-between
                           gap-2
-                          mt-3
                         "
                       >
-                        <div
+                        <span
                           className="
-                            flex
-                            items-center
-                            gap-1
+                            text-xs
+                            text-slate-500
                           "
                         >
-                          <button
-                            type="button"
-                            disabled={
-                              index === 0
-                            }
-                            onClick={() =>
-                              moveQuestion(
-                                index,
-                                -1
-                              )
-                            }
-                            className="
-                              w-7
-                              h-7
-                              rounded-lg
-                              bg-slate-100
-                              dark:bg-slate-800
-                              flex
-                              items-center
-                              justify-center
-                              text-slate-500
-                              disabled:opacity-30
-                            "
-                          >
-                            <ArrowUp
-                              className="w-3.5 h-3.5"
-                            />
-                          </button>
+                          Marks
+                        </span>
 
-                          <button
-                            type="button"
-                            disabled={
-                              index ===
-                              selectedQuestions.length -
-                                1
-                            }
-                            onClick={() =>
-                              moveQuestion(
-                                index,
-                                1
-                              )
-                            }
-                            className="
-                              w-7
-                              h-7
-                              rounded-lg
-                              bg-slate-100
-                              dark:bg-slate-800
-                              flex
-                              items-center
-                              justify-center
-                              text-slate-500
-                              disabled:opacity-30
-                            "
-                          >
-                            <ArrowDown
-                              className="w-3.5 h-3.5"
-                            />
-                          </button>
-                        </div>
-
-                        <div
-                          className="
-                            flex
-                            items-center
-                            gap-2
-                          "
-                        >
-                          <span
-                            className="
-                              text-[11px]
-                              font-semibold
-                              text-slate-400
-                            "
-                          >
-                            Marks
-                          </span>
-
-                          <input
-                            type="number"
-                            min="0"
-                            value={
-                              question.paperMarks
-                            }
-                            onChange={(
-                              event
-                            ) =>
-                              updateQuestionMarks(
+                        <input
+                          type="number"
+                          min="0"
+                          value={
+                            question.paperMarks
+                          }
+                          onChange={
+                            (event) =>
+                              updateMarks(
                                 question._id,
-                                event.target
-                                  .value
+                                event.target.value
                               )
-                            }
-                            className="
-                              w-14
-                              rounded-lg
-                              border
-                              border-slate-200
-                              dark:border-slate-700
-                              bg-white
-                              dark:bg-slate-900
-                              px-2
-                              py-1
-                              text-center
-                              text-xs
-                              font-bold
-                              text-slate-800
-                              dark:text-white
-                            "
-                          />
-                        </div>
+                          }
+                          className="
+                            w-14
+                            rounded-lg
+                            border
+                            border-slate-200
+                            dark:border-slate-700
+                            bg-white
+                            dark:bg-slate-900
+                            px-2
+                            py-1
+                            text-center
+                            text-xs
+                            font-bold
+                          "
+                        />
                       </div>
                     </div>
-                  )
-                )}
-              </div>
-            )}
-
-            {/* SUMMARY */}
+                  </div>
+                )
+              )}
+            </div>
 
             <div
               className="
@@ -2607,92 +2458,41 @@ export default function QuestionPaperBuilder() {
                 dark:border-slate-700
               "
             >
-              <div
-                className="
-                  grid
-                  grid-cols-3
-                  gap-2
-                  mb-4
-                "
-              >
-                <SummaryBox
-                  icon={
-                    GraduationCap
-                  }
-                  label="Questions"
-                  value={
-                    selectedQuestions.length
-                  }
-                />
-
-                <SummaryBox
-                  icon={Award}
-                  label="Marks"
-                  value={
-                    totalMarks
-                  }
-                />
-
-                <SummaryBox
-                  icon={Clock3}
-                  label="Minutes"
-                  value={
-                    paperDetails.duration ||
-                    '-'
-                  }
-                />
-              </div>
-
               <button
                 type="button"
-                onClick={
-                  generateStudentPDF
-                }
                 disabled={
                   selectedQuestions.length ===
                   0
                 }
+                onClick={
+                  generateStudentPDF
+                }
                 className="
-                  navta-button-glow
                   w-full
-                  flex
-                  items-center
-                  justify-center
-                  gap-2
                   rounded-xl
                   bg-primary-500
                   hover:bg-primary-600
                   disabled:bg-slate-300
                   dark:disabled:bg-slate-700
-                  disabled:cursor-not-allowed
                   text-white
-                  px-4
                   py-3
                   text-sm
                   font-bold
-                  transition
+                  flex
+                  items-center
+                  justify-center
+                  gap-2
                 "
               >
                 <Printer
-                  className="w-4 h-4"
+                  className="
+                    w-4
+                    h-4
+                  "
                 />
 
                 Generate Student PDF
               </button>
-
-              <p
-                className="
-                  text-[10px]
-                  leading-4
-                  text-center
-                  text-slate-400
-                  mt-2
-                "
-              >
-                Your browser print window
-                will open. Choose “Save as
-                PDF” to download the paper.
-              </p>
             </div>
           </div>
         </div>
@@ -2708,19 +2508,19 @@ export default function QuestionPaperBuilder() {
 function FilterSelect({
   label,
   value,
-  onChange,
   options,
+  onChange,
   objectOptions = false
 }) {
   return (
     <div>
+
       <label
         className="
           block
           text-xs
           font-bold
           text-slate-500
-          dark:text-slate-400
           mb-1.5
         "
       >
@@ -2733,29 +2533,30 @@ function FilterSelect({
         "
       >
         <select
-          value={value}
-          onChange={(event) =>
-            onChange(
-              event.target.value
-            )
+          value={
+            value
+          }
+          onChange={
+            (event) =>
+              onChange(
+                event.target.value
+              )
           }
           className="
             appearance-none
             w-full
             rounded-xl
-            bg-white/70
-            dark:bg-slate-900/60
             border
             border-slate-200
             dark:border-slate-700
+            bg-white/70
+            dark:bg-slate-900/60
             px-3
             pr-9
             py-3
             text-sm
-            text-slate-700
-            dark:text-slate-200
-            focus:border-primary-400
-            transition
+            text-slate-800
+            dark:text-white
           "
         >
           <option value="">
@@ -2763,33 +2564,30 @@ function FilterSelect({
           </option>
 
           {options.map(
-            (option) => {
-              if (objectOptions) {
-                return (
-                  <option
-                    key={
-                      option.value
-                    }
-                    value={
-                      option.value
-                    }
-                  >
-                    {
-                      option.label
-                    }
-                  </option>
-                );
-              }
-
-              return (
+            (option) =>
+              objectOptions ? (
                 <option
-                  key={option}
-                  value={option}
+                  key={
+                    option.value
+                  }
+                  value={
+                    option.value
+                  }
+                >
+                  {option.label}
+                </option>
+              ) : (
+                <option
+                  key={
+                    option
+                  }
+                  value={
+                    option
+                  }
                 >
                   {option}
                 </option>
-              );
-            }
+              )
           )}
         </select>
 
@@ -2806,6 +2604,7 @@ function FilterSelect({
           "
         />
       </div>
+
     </div>
   );
 }
@@ -2822,13 +2621,13 @@ function PaperInput({
 }) {
   return (
     <div>
+
       <label
         className="
           block
           text-xs
           font-bold
           text-slate-500
-          dark:text-slate-400
           mb-1.5
         "
       >
@@ -2836,30 +2635,34 @@ function PaperInput({
       </label>
 
       <input
-        type={type}
-        value={value}
-        onChange={(event) =>
-          onChange(
-            event.target.value
-          )
+        type={
+          type
+        }
+        value={
+          value
+        }
+        onChange={
+          (event) =>
+            onChange(
+              event.target.value
+            )
         }
         className="
           w-full
           rounded-xl
-          bg-white/70
-          dark:bg-slate-900/60
           border
           border-slate-200
           dark:border-slate-700
+          bg-white/70
+          dark:bg-slate-900/60
           px-3
           py-2.5
           text-sm
           text-slate-900
           dark:text-white
-          focus:border-primary-400
-          transition
         "
       />
+
     </div>
   );
 }
@@ -2878,7 +2681,6 @@ function Tag({
   return (
     <span
       className="
-        inline-flex
         rounded-full
         bg-slate-100
         dark:bg-slate-800
@@ -2896,107 +2698,55 @@ function Tag({
 }
 
 // =====================================================
-// DIFFICULTY TAG
+// HEADER STAT
 // =====================================================
 
-function DifficultyTag({
-  difficulty
-}) {
-  if (!difficulty) {
-    return null;
-  }
-
-  let className =
-    'bg-slate-100 text-slate-500';
-
-  if (
-    difficulty === 'Easy'
-  ) {
-    className =
-      'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
-  }
-
-  if (
-    difficulty === 'Medium'
-  ) {
-    className =
-      'bg-amber-500/10 text-amber-600 dark:text-amber-400';
-  }
-
-  if (
-    difficulty === 'Hard'
-  ) {
-    className =
-      'bg-red-500/10 text-red-600 dark:text-red-400';
-  }
-
-  return (
-    <span
-      className={`
-        inline-flex
-        rounded-full
-        px-2
-        py-1
-        text-[10px]
-        font-bold
-        ${className}
-      `}
-    >
-      {difficulty}
-    </span>
-  );
-}
-
-// =====================================================
-// SUMMARY BOX
-// =====================================================
-
-function SummaryBox({
-  icon: Icon,
+function HeaderStat({
   label,
-  value
+  value,
+  blue = false,
+  green = false
 }) {
   return (
     <div
       className="
-        rounded-xl
-        bg-slate-50/80
-        dark:bg-slate-900/50
-        p-2.5
-        text-center
+        rounded-2xl
+        border
+        border-slate-200
+        dark:border-slate-700
+        bg-white/50
+        dark:bg-slate-900/40
+        px-4
+        py-3
       "
     >
-      <Icon
-        className="
-          w-4
-          h-4
-          mx-auto
-          text-primary-500
-          mb-1
-        "
-      />
-
       <p
         className="
-          text-sm
-          font-extrabold
-          text-slate-800
-          dark:text-white
-        "
-      >
-        {value}
-      </p>
-
-      <p
-        className="
-          text-[9px]
-          uppercase
+          text-[10px]
           font-bold
-          tracking-wide
+          uppercase
           text-slate-400
         "
       >
         {label}
+      </p>
+
+      <p
+        className={`
+          mt-1
+          text-xl
+          font-extrabold
+
+          ${
+            blue
+              ? 'text-sky-500'
+              : green
+                ? 'text-emerald-500'
+                : 'text-slate-900 dark:text-white'
+          }
+        `}
+      >
+        {value}
       </p>
     </div>
   );
