@@ -25,36 +25,54 @@
 }
 
 /* =========================================================
-   HTML / ROOT
+   ROOT
 ========================================================= */
 
-html {
+html,
+body,
+#root {
   min-height: 100%;
+}
+
+html {
   scroll-behavior: smooth;
 }
 
 body {
-  min-height: 100vh;
   margin: 0;
 
   @apply antialiased font-sans text-slate-800 dark:text-slate-100;
-}
 
-#root {
-  min-height: 100vh;
-}
-
-/* =========================================================
-   NAVTA DIGITAL LEARNING BACKGROUND
-========================================================= */
-
-body {
   background-color: #f8fbff;
 
   background-image:
     linear-gradient(
-      rgba(248, 251, 255, 0.76),
-      rgba(248, 251, 255, 0.76)
+      rgba(248, 251, 255, 0.72),
+      rgba(248, 251, 255, 0.72)
+    ),
+    url("./assets/navta-learning-bg.png");
+
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+#root {
+  background: transparent !important;
+}
+
+/* =========================================================
+   DARK MODE BACKGROUND
+========================================================= */
+
+.dark body {
+  background-color: #08111f;
+
+  background-image:
+    linear-gradient(
+      rgba(5, 12, 24, 0.84),
+      rgba(5, 12, 24, 0.84)
     ),
     url("./assets/navta-learning-bg.png");
 
@@ -65,16 +83,7 @@ body {
 }
 
 /* =========================================================
-   DARK MODE
-========================================================= */
-
-.dark body {
-  background-image: none;
-  background-color: #0F172A;
-}
-
-/* =========================================================
-   TRANSPARENT PAGE SUPPORT
+   GLOBAL TRANSPARENT PAGE SUPPORT
 ========================================================= */
 
 .navta-global-page {
@@ -87,7 +96,7 @@ body {
 ========================================================= */
 
 .glass {
-  background: rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.74);
 
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -103,7 +112,7 @@ body {
 ========================================================= */
 
 .dark .glass {
-  background: rgba(30, 41, 59, 0.52);
+  background: rgba(15, 23, 42, 0.62);
 
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -115,7 +124,7 @@ body {
 }
 
 /* =========================================================
-   PREMIUM NAVTA CARD
+   PREMIUM NAVTA CARDS
 ========================================================= */
 
 .navta-card-surface {
@@ -133,7 +142,7 @@ body {
 }
 
 .dark .navta-card-surface {
-  background: rgba(15, 23, 42, 0.82);
+  background: rgba(15, 23, 42, 0.72);
 
   border-color: rgba(148, 163, 184, 0.08);
 
@@ -281,7 +290,8 @@ body {
 ========================================================= */
 
 @media (max-width: 1024px) {
-  body {
+  body,
+  .dark body {
     background-size: cover;
     background-position: center top;
   }
@@ -297,8 +307,8 @@ body {
 
     background-image:
       linear-gradient(
-        rgba(248, 251, 255, 0.84),
-        rgba(248, 251, 255, 0.84)
+        rgba(248, 251, 255, 0.80),
+        rgba(248, 251, 255, 0.80)
       ),
       url("./assets/navta-learning-bg.png");
 
@@ -308,15 +318,29 @@ body {
   }
 
   .dark body {
-    background-image: none;
-    background-color: #0F172A;
+    background-attachment: scroll;
+
+    background-image:
+      linear-gradient(
+        rgba(5, 12, 24, 0.88),
+        rgba(5, 12, 24, 0.88)
+      ),
+      url("./assets/navta-learning-bg.png");
+
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
   }
 
   .glass {
-    background: rgba(255, 255, 255, 0.84);
+    background: rgba(255, 255, 255, 0.82);
 
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
+  }
+
+  .dark .glass {
+    background: rgba(15, 23, 42, 0.68);
   }
 }
 
@@ -328,8 +352,8 @@ body {
   body {
     background-image:
       linear-gradient(
-        rgba(248, 251, 255, 0.88),
-        rgba(248, 251, 255, 0.88)
+        rgba(248, 251, 255, 0.84),
+        rgba(248, 251, 255, 0.84)
       ),
       url("./assets/navta-learning-bg.png");
 
@@ -337,28 +361,13 @@ body {
   }
 
   .dark body {
-    background-image: none;
-    background-color: #0F172A;
+    background-image:
+      linear-gradient(
+        rgba(5, 12, 24, 0.90),
+        rgba(5, 12, 24, 0.90)
+      ),
+      url("./assets/navta-learning-bg.png");
+
+    background-position: center top;
   }
-}
-
-/* =========================================================
-   TEMPORARY NAVTA BACKGROUND TEST
-   IMPORTANT:
-   REMOVE THIS SECTION AFTER TESTING.
-========================================================= */
-
-html,
-body,
-#root {
-  min-height: 100%;
-}
-
-body {
-  background-image: none !important;
-  background-color: #ff00ff !important;
-}
-
-#root {
-  background: transparent !important;
 }
