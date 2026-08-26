@@ -13,12 +13,18 @@ import {
   useAuth
 } from './context/AuthContext';
 
-// Layout & Navigation
+// =====================================================
+// LAYOUT & NAVIGATION
+// =====================================================
+
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import Footer from './components/Footer';
 
-// Public Pages
+// =====================================================
+// PUBLIC PAGES
+// =====================================================
+
 import Home from './pages/Home';
 import About from './pages/About';
 import Login from './pages/Login';
@@ -26,21 +32,42 @@ import Signup from './pages/Signup';
 import Unauthorized from './pages/Unauthorized';
 import Onboarding from './pages/Onboarding';
 
-// Private Pages
+// =====================================================
+// STUDENT PAGES
+// =====================================================
+
 import StudentDashboard from './pages/StudentDashboard';
+import AnalyticsPage from './pages/AnalyticsPage';
+import RewardsPage from './pages/RewardsPage';
+import ResultDetail from './pages/ResultDetail';
+
+// =====================================================
+// TEACHER / EDUCATOR PAGES
+// =====================================================
+
 import TeacherDashboard from './pages/TeacherDashboard';
 import ExternalTeacherDashboard from './pages/ExternalTeacherDashboard';
+
+// NEW QUESTION PAPER BUILDER
+import QuestionPaperBuilder from './pages/QuestionPaperBuilder';
+
+// =====================================================
+// ADMIN PAGES
+// =====================================================
+
 import AdminDashboard from './pages/AdminDashboard';
 import AdminNavtaTest from './pages/AdminNavtaTest';
+
+// =====================================================
+// SHARED PAGES
+// =====================================================
+
 import NavtaTestPage from './pages/NavtaTestPage';
 import NotesPage from './pages/NotesPage';
 import PYQPage from './pages/PYQPage';
 import AssessmentPage from './pages/AssessmentPage';
-import AnalyticsPage from './pages/AnalyticsPage';
 import ProfilePage from './pages/ProfilePage';
-import RewardsPage from './pages/RewardsPage';
 import SettingsPage from './pages/SettingsPage';
-import ResultDetail from './pages/ResultDetail';
 
 // =====================================================
 // PUBLIC LAYOUT
@@ -48,10 +75,22 @@ import ResultDetail from './pages/ResultDetail';
 
 function PublicLayout() {
   return (
-    <div className="min-h-screen flex flex-col bg-transparent">
+    <div
+      className="
+        min-h-screen
+        flex
+        flex-col
+        bg-transparent
+      "
+    >
       <Navbar />
 
-      <main className="flex-1 bg-transparent">
+      <main
+        className="
+          flex-1
+          bg-transparent
+        "
+      >
         <Outlet />
       </main>
 
@@ -70,13 +109,40 @@ function DashboardLayout() {
     loading
   } = useAuth();
 
+  // ===================================================
+  // LOADING
+  // ===================================================
+
   if (loading) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-transparent">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+      <div
+        className="
+          h-screen
+          w-screen
+          flex
+          items-center
+          justify-center
+          bg-transparent
+        "
+      >
+        <div
+          className="
+            h-8
+            w-8
+            animate-spin
+            rounded-full
+            border-4
+            border-primary-500
+            border-t-transparent
+          "
+        />
       </div>
     );
   }
+
+  // ===================================================
+  // NOT LOGGED IN
+  // ===================================================
 
   if (!user) {
     return (
@@ -86,6 +152,10 @@ function DashboardLayout() {
       />
     );
   }
+
+  // ===================================================
+  // PROFILE COMPLETION
+  // ===================================================
 
   if (
     !user.isProfileComplete &&
@@ -100,8 +170,19 @@ function DashboardLayout() {
     );
   }
 
+  // ===================================================
+  // DASHBOARD LAYOUT
+  // ===================================================
+
   return (
-    <div className="min-h-screen flex flex-col bg-transparent">
+    <div
+      className="
+        min-h-screen
+        flex
+        flex-col
+        bg-transparent
+      "
+    >
       <Navbar />
 
       <div
@@ -180,7 +261,7 @@ function RoleGuard({
 }
 
 // =====================================================
-// APP
+// MAIN APP
 // =====================================================
 
 export default function App() {
@@ -189,43 +270,72 @@ export default function App() {
       <Router>
         <Routes>
 
-          {/* PUBLIC */}
-          <Route element={<PublicLayout />}>
+          {/* =================================================
+              PUBLIC ROUTES
+          ================================================= */}
+
+          <Route
+            element={
+              <PublicLayout />
+            }
+          >
             <Route
               path="/"
-              element={<Home />}
+              element={
+                <Home />
+              }
             />
 
             <Route
               path="/about"
-              element={<About />}
+              element={
+                <About />
+              }
             />
 
             <Route
               path="/login"
-              element={<Login />}
+              element={
+                <Login />
+              }
             />
 
             <Route
               path="/signup"
-              element={<Signup />}
+              element={
+                <Signup />
+              }
             />
 
             <Route
               path="/unauthorized"
-              element={<Unauthorized />}
+              element={
+                <Unauthorized />
+              }
             />
 
             <Route
               path="/onboarding"
-              element={<Onboarding />}
+              element={
+                <Onboarding />
+              }
             />
           </Route>
 
-          {/* SECURE */}
-          <Route element={<DashboardLayout />}>
+          {/* =================================================
+              SECURE DASHBOARD LAYOUT
+          ================================================= */}
 
-            {/* STUDENT */}
+          <Route
+            element={
+              <DashboardLayout />
+            }
+          >
+
+            {/* =================================================
+                STUDENT ONLY
+            ================================================= */}
+
             <Route
               element={
                 <RoleGuard
@@ -237,26 +347,37 @@ export default function App() {
             >
               <Route
                 path="/dashboard"
-                element={<StudentDashboard />}
+                element={
+                  <StudentDashboard />
+                }
               />
 
               <Route
                 path="/analytics"
-                element={<AnalyticsPage />}
+                element={
+                  <AnalyticsPage />
+                }
               />
 
               <Route
                 path="/rewards"
-                element={<RewardsPage />}
+                element={
+                  <RewardsPage />
+                }
               />
 
               <Route
                 path="/results/:resultId"
-                element={<ResultDetail />}
+                element={
+                  <ResultDetail />
+                }
               />
             </Route>
 
-            {/* TEACHER */}
+            {/* =================================================
+                TEACHER ONLY
+            ================================================= */}
+
             <Route
               element={
                 <RoleGuard
@@ -268,11 +389,16 @@ export default function App() {
             >
               <Route
                 path="/teacher"
-                element={<TeacherDashboard />}
+                element={
+                  <TeacherDashboard />
+                }
               />
             </Route>
 
-            {/* EXTERNAL TEACHER */}
+            {/* =================================================
+                EXTERNAL TEACHER ONLY
+            ================================================= */}
+
             <Route
               element={
                 <RoleGuard
@@ -284,11 +410,47 @@ export default function App() {
             >
               <Route
                 path="/external-teacher"
-                element={<ExternalTeacherDashboard />}
+                element={
+                  <ExternalTeacherDashboard />
+                }
               />
             </Route>
 
-            {/* ADMIN */}
+            {/* =================================================
+                QUESTION PAPER BUILDER
+                TEACHER + EXTERNAL TEACHER + ADMIN
+            ================================================= */}
+
+            <Route
+              element={
+                <RoleGuard
+                  allowedRoles={[
+                    'teacher',
+                    'external_teacher',
+                    'admin'
+                  ]}
+                />
+              }
+            >
+              <Route
+                path="/teacher/question-paper-builder"
+                element={
+                  <QuestionPaperBuilder />
+                }
+              />
+
+              <Route
+                path="/educator/question-paper-builder"
+                element={
+                  <QuestionPaperBuilder />
+                }
+              />
+            </Route>
+
+            {/* =================================================
+                ADMIN ONLY
+            ================================================= */}
+
             <Route
               element={
                 <RoleGuard
@@ -300,16 +462,31 @@ export default function App() {
             >
               <Route
                 path="/admin"
-                element={<AdminDashboard />}
+                element={
+                  <AdminDashboard />
+                }
               />
 
               <Route
                 path="/admin/navta-test"
-                element={<AdminNavtaTest />}
+                element={
+                  <AdminNavtaTest />
+                }
+              />
+
+              {/* Admin can also open Question Paper Builder */}
+              <Route
+                path="/admin/question-paper-builder"
+                element={
+                  <QuestionPaperBuilder />
+                }
               />
             </Route>
 
-            {/* SHARED */}
+            {/* =================================================
+                SHARED SECURE PAGES
+            ================================================= */}
+
             <Route
               element={
                 <RoleGuard
@@ -324,38 +501,53 @@ export default function App() {
             >
               <Route
                 path="/notes"
-                element={<NotesPage />}
+                element={
+                  <NotesPage />
+                }
               />
 
               <Route
                 path="/pyqs"
-                element={<PYQPage />}
+                element={
+                  <PYQPage />
+                }
               />
 
               <Route
                 path="/navta-test"
-                element={<NavtaTestPage />}
+                element={
+                  <NavtaTestPage />
+                }
               />
 
               <Route
                 path="/assessments"
-                element={<AssessmentPage />}
+                element={
+                  <AssessmentPage />
+                }
               />
 
               <Route
                 path="/profile"
-                element={<ProfilePage />}
+                element={
+                  <ProfilePage />
+                }
               />
 
               <Route
                 path="/settings"
-                element={<SettingsPage />}
+                element={
+                  <SettingsPage />
+                }
               />
             </Route>
 
           </Route>
 
-          {/* CATCH ALL */}
+          {/* =================================================
+              CATCH ALL
+          ================================================= */}
+
           <Route
             path="*"
             element={
