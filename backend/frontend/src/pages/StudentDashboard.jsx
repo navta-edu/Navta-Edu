@@ -242,7 +242,7 @@ export default function StudentDashboard() {
     }, [results]);
 
   // ===================================================
-  // CHART
+  // CHART DATA
   // ===================================================
 
   const chartData =
@@ -329,7 +329,8 @@ export default function StudentDashboard() {
             className="
               text-sm
               font-semibold
-              text-slate-400
+              text-slate-500
+              dark:text-slate-400
             "
           >
             Preparing your dashboard...
@@ -346,7 +347,8 @@ export default function StudentDashboard() {
         w-full
         min-w-0
         overflow-x-hidden
-        text-white
+        text-slate-900
+        dark:text-white
       "
     >
       <div
@@ -371,20 +373,28 @@ export default function StudentDashboard() {
           "
         >
 
-          {/* HERO */}
+          {/* =================================================
+              HERO
+          ================================================= */}
 
           <div
             className="
               relative
               overflow-hidden
-              rounded-[26px]
+              rounded-[28px]
               border
-              border-sky-500/25
-              bg-[#071224]/92
-              shadow-[0_24px_90px_rgba(2,132,199,0.14)]
-              backdrop-blur-xl
+              border-slate-200/70
+              bg-white/85
+              shadow-[0_20px_70px_rgba(15,23,42,0.10)]
+              backdrop-blur-2xl
+
+              dark:border-sky-500/20
+              dark:bg-[#071224]/92
+              dark:shadow-[0_24px_90px_rgba(2,132,199,0.14)]
             "
           >
+
+            {/* LIGHT MODE GLOW */}
 
             <div
               className="
@@ -395,8 +405,10 @@ export default function StudentDashboard() {
                 h-80
                 w-80
                 rounded-full
-                bg-blue-500/18
+                bg-sky-300/20
                 blur-[110px]
+
+                dark:bg-blue-500/18
               "
             />
 
@@ -409,8 +421,10 @@ export default function StudentDashboard() {
                 h-60
                 w-60
                 rounded-full
-                bg-violet-500/14
+                bg-violet-300/15
                 blur-[100px]
+
+                dark:bg-violet-500/14
               "
             />
 
@@ -439,13 +453,17 @@ export default function StudentDashboard() {
                     gap-2
                     rounded-full
                     border
-                    border-sky-500/20
-                    bg-sky-500/10
+                    border-sky-200
+                    bg-sky-50/90
                     px-3
                     py-1.5
                     text-xs
                     font-bold
-                    text-sky-300
+                    text-sky-700
+
+                    dark:border-sky-500/20
+                    dark:bg-sky-500/10
+                    dark:text-sky-300
                   "
                 >
                   <Sparkles
@@ -464,11 +482,13 @@ export default function StudentDashboard() {
                     text-3xl
                     font-black
                     tracking-tight
-                    text-white
+                    text-slate-950
                     sm:text-4xl
                     xl:text-5xl
                     2xl:text-[52px]
                     leading-[1.05]
+
+                    dark:text-white
                   "
                 >
                   Let&apos;s continue your
@@ -477,11 +497,15 @@ export default function StudentDashboard() {
                   <span
                     className="
                       bg-gradient-to-r
-                      from-sky-400
-                      via-blue-400
-                      to-violet-400
+                      from-sky-500
+                      via-blue-500
+                      to-violet-600
                       bg-clip-text
                       text-transparent
+
+                      dark:from-sky-400
+                      dark:via-blue-400
+                      dark:to-violet-400
                     "
                   >
                     learning journey!
@@ -494,8 +518,10 @@ export default function StudentDashboard() {
                     max-w-xl
                     text-sm
                     leading-6
-                    text-slate-400
+                    text-slate-600
                     sm:text-base
+
+                    dark:text-slate-400
                   "
                 >
                   Learn. Practise.
@@ -508,6 +534,8 @@ export default function StudentDashboard() {
                     mt-2
                     text-xs
                     text-slate-500
+
+                    dark:text-slate-500
                   "
                 >
                   Welcome,{' '}
@@ -515,7 +543,9 @@ export default function StudentDashboard() {
                   <span
                     className="
                       font-bold
-                      text-slate-300
+                      text-slate-700
+
+                      dark:text-slate-300
                     "
                   >
                     {user?.name ||
@@ -571,17 +601,24 @@ export default function StudentDashboard() {
                         w-full
                         rounded-xl
                         border
-                        border-slate-700
-                        bg-slate-950/60
+                        border-slate-300
+                        bg-white/80
                         px-5
                         py-3
                         text-sm
                         font-bold
-                        text-white
+                        text-slate-800
+                        shadow-sm
                         transition
-                        hover:border-sky-500
-                        hover:bg-sky-500/10
+                        hover:border-sky-400
+                        hover:bg-sky-50
                         sm:w-auto
+
+                        dark:border-slate-700
+                        dark:bg-slate-950/60
+                        dark:text-white
+                        dark:hover:border-sky-500
+                        dark:hover:bg-sky-500/10
                       "
                     >
                       Explore NAVTA TEST
@@ -591,16 +628,23 @@ export default function StudentDashboard() {
 
               </div>
 
-              {/* RIGHT SNAPSHOT */}
+              {/* =================================================
+                  RIGHT SNAPSHOT
+              ================================================= */}
 
               <div
                 className="
-                  rounded-[22px]
+                  rounded-[24px]
                   border
-                  border-slate-800
-                  bg-slate-950/74
+                  border-slate-200
+                  bg-white/82
                   p-4
-                  shadow-2xl
+                  shadow-[0_16px_50px_rgba(15,23,42,0.09)]
+                  backdrop-blur-xl
+
+                  dark:border-slate-800
+                  dark:bg-slate-950/74
+                  dark:shadow-2xl
                 "
               >
 
@@ -619,7 +663,9 @@ export default function StudentDashboard() {
                         font-black
                         uppercase
                         tracking-[0.18em]
-                        text-sky-400
+                        text-sky-600
+
+                        dark:text-sky-400
                       "
                     >
                       NAVTA Intelligence
@@ -630,7 +676,9 @@ export default function StudentDashboard() {
                         mt-1
                         text-sm
                         font-bold
-                        text-white
+                        text-slate-900
+
+                        dark:text-white
                       "
                     >
                       Your learning
@@ -646,14 +694,18 @@ export default function StudentDashboard() {
                       items-center
                       justify-center
                       rounded-xl
-                      bg-violet-500/10
+                      bg-violet-100
+
+                      dark:bg-violet-500/10
                     "
                   >
                     <BrainCircuit
                       className="
                         h-5
                         w-5
-                        text-violet-400
+                        text-violet-600
+
+                        dark:text-violet-400
                       "
                     />
                   </div>
@@ -685,9 +737,12 @@ export default function StudentDashboard() {
                     mt-3
                     rounded-2xl
                     border
-                    border-slate-800
-                    bg-slate-900/75
+                    border-slate-200
+                    bg-slate-50/85
                     p-4
+
+                    dark:border-slate-800
+                    dark:bg-slate-900/75
                   "
                 >
                   <div
@@ -702,7 +757,9 @@ export default function StudentDashboard() {
                         className="
                           text-xs
                           font-bold
-                          text-slate-400
+                          text-slate-500
+
+                          dark:text-slate-400
                         "
                       >
                         Weekly Progress
@@ -713,7 +770,9 @@ export default function StudentDashboard() {
                           mt-1
                           text-xl
                           font-black
-                          text-sky-400
+                          text-sky-600
+
+                          dark:text-sky-400
                         "
                       >
                         {levelProgress}%
@@ -724,7 +783,9 @@ export default function StudentDashboard() {
                       className="
                         h-6
                         w-6
-                        text-sky-400
+                        text-sky-500
+
+                        dark:text-sky-400
                       "
                     />
                   </div>
@@ -735,7 +796,9 @@ export default function StudentDashboard() {
                       h-2
                       overflow-hidden
                       rounded-full
-                      bg-slate-800
+                      bg-slate-200
+
+                      dark:bg-slate-800
                     "
                   >
                     <div
@@ -758,6 +821,8 @@ export default function StudentDashboard() {
                       mt-2
                       text-[10px]
                       text-slate-500
+
+                      dark:text-slate-500
                     "
                   >
                     {currentXP} /{' '}
@@ -770,7 +835,9 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* UPCOMING */}
+          {/* =================================================
+              UPCOMING
+          ================================================= */}
 
           <DashboardPanel
             title="Upcoming"
@@ -800,8 +867,11 @@ export default function StudentDashboard() {
                       border-transparent
                       p-3
                       transition
-                      hover:border-slate-800
-                      hover:bg-white/[0.02]
+                      hover:border-slate-200
+                      hover:bg-slate-50/80
+
+                      dark:hover:border-slate-800
+                      dark:hover:bg-white/[0.02]
                     "
                   >
                     <div
@@ -813,14 +883,18 @@ export default function StudentDashboard() {
                         items-center
                         justify-center
                         rounded-xl
-                        bg-violet-500/10
+                        bg-violet-100
+
+                        dark:bg-violet-500/10
                       "
                     >
                       <CalendarDays
                         className="
                           h-5
                           w-5
-                          text-violet-400
+                          text-violet-600
+
+                          dark:text-violet-400
                         "
                       />
                     </div>
@@ -834,7 +908,9 @@ export default function StudentDashboard() {
                       <p
                         className="
                           text-[9px]
-                          text-slate-500
+                          text-slate-400
+
+                          dark:text-slate-500
                         "
                       >
                         {item.time}
@@ -845,7 +921,9 @@ export default function StudentDashboard() {
                           truncate
                           text-sm
                           font-bold
-                          text-white
+                          text-slate-900
+
+                          dark:text-white
                         "
                       >
                         {item.title}
@@ -856,6 +934,8 @@ export default function StudentDashboard() {
                           truncate
                           text-xs
                           text-slate-500
+
+                          dark:text-slate-500
                         "
                       >
                         {item.subtitle}
@@ -866,9 +946,12 @@ export default function StudentDashboard() {
                       className="
                         h-4
                         w-4
-                        text-slate-600
+                        text-slate-400
                         transition
-                        group-hover:text-sky-400
+                        group-hover:text-sky-500
+
+                        dark:text-slate-600
+                        dark:group-hover:text-sky-400
                       "
                     />
                   </div>
@@ -891,6 +974,7 @@ export default function StudentDashboard() {
             xl:grid-cols-4
           "
         >
+
           <MetricCard
             icon={Flame}
             value={
@@ -899,8 +983,8 @@ export default function StudentDashboard() {
             }
             label="Day Streak"
             subtext="Keep it going!"
-            iconClass="text-orange-400"
-            iconBg="bg-orange-500/10"
+            iconClass="text-orange-500"
+            iconBg="bg-orange-100 dark:bg-orange-500/10"
           />
 
           <MetricCard
@@ -911,19 +995,25 @@ export default function StudentDashboard() {
             }
             label="Coins Balance"
             subtext="Earn more by learning"
-            iconClass="text-yellow-400"
-            iconBg="bg-yellow-500/10"
+            iconClass="text-yellow-500"
+            iconBg="bg-yellow-100 dark:bg-yellow-500/10"
           />
+
+          {/* LEVEL */}
 
           <div
             className="
               rounded-[22px]
               border
-              border-slate-800
-              bg-[#081326]/92
+              border-slate-200/80
+              bg-white/88
               p-5
-              shadow-xl
+              shadow-[0_14px_40px_rgba(15,23,42,0.08)]
               backdrop-blur-xl
+
+              dark:border-slate-800
+              dark:bg-[#081326]/92
+              dark:shadow-xl
             "
           >
             <div
@@ -942,14 +1032,18 @@ export default function StudentDashboard() {
                   items-center
                   justify-center
                   rounded-xl
-                  bg-violet-500/10
+                  bg-violet-100
+
+                  dark:bg-violet-500/10
                 "
               >
                 <Award
                   className="
                     h-5
                     w-5
-                    text-violet-400
+                    text-violet-600
+
+                    dark:text-violet-400
                   "
                 />
               </div>
@@ -964,7 +1058,9 @@ export default function StudentDashboard() {
                   className="
                     text-xl
                     font-black
-                    text-white
+                    text-slate-950
+
+                    dark:text-white
                   "
                 >
                   Level {level}
@@ -976,7 +1072,9 @@ export default function StudentDashboard() {
                     font-bold
                     uppercase
                     tracking-wider
-                    text-slate-500
+                    text-slate-400
+
+                    dark:text-slate-500
                   "
                 >
                   Current Level
@@ -988,7 +1086,9 @@ export default function StudentDashboard() {
                     h-1.5
                     overflow-hidden
                     rounded-full
-                    bg-slate-800
+                    bg-slate-200
+
+                    dark:bg-slate-800
                   "
                 >
                   <div
@@ -1010,7 +1110,9 @@ export default function StudentDashboard() {
                   className="
                     mt-1.5
                     text-[9px]
-                    text-sky-400
+                    text-sky-600
+
+                    dark:text-sky-400
                   "
                 >
                   {currentXP} /{' '}
@@ -1029,8 +1131,8 @@ export default function StudentDashboard() {
                 ? 'Keep improving'
                 : 'Take your first quiz'
             }
-            iconClass="text-emerald-400"
-            iconBg="bg-emerald-500/10"
+            iconClass="text-emerald-500"
+            iconBg="bg-emerald-100 dark:bg-emerald-500/10"
           />
 
         </section>
@@ -1100,19 +1202,19 @@ export default function StudentDashboard() {
                   <CartesianGrid
                     strokeDasharray="3 3"
                     vertical={false}
-                    stroke="#1e293b"
+                    stroke="#cbd5e1"
                   />
 
                   <XAxis
                     dataKey="date"
-                    stroke="#64748b"
+                    stroke="#94a3b8"
                     fontSize={10}
                     tickLine={false}
                     axisLine={false}
                   />
 
                   <YAxis
-                    stroke="#64748b"
+                    stroke="#94a3b8"
                     fontSize={10}
                     tickLine={false}
                     axisLine={false}
@@ -1125,13 +1227,15 @@ export default function StudentDashboard() {
                   <Tooltip
                     contentStyle={{
                       background:
-                        '#081326',
+                        '#ffffff',
                       border:
-                        '1px solid #1e293b',
+                        '1px solid #e2e8f0',
                       borderRadius:
                         '12px',
                       color:
-                        '#ffffff'
+                        '#0f172a',
+                      boxShadow:
+                        '0 10px 30px rgba(15,23,42,0.10)'
                     }}
                   />
 
@@ -1146,6 +1250,8 @@ export default function StudentDashboard() {
               </ResponsiveContainer>
             </div>
           </DashboardPanel>
+
+          {/* DAILY GOALS */}
 
           <DashboardPanel
             title="Daily Goals"
@@ -1169,9 +1275,12 @@ export default function StudentDashboard() {
                       gap-3
                       rounded-2xl
                       border
-                      border-slate-800/70
-                      bg-slate-950/35
+                      border-slate-200
+                      bg-slate-50/75
                       p-3
+
+                      dark:border-slate-800/70
+                      dark:bg-slate-950/35
                     "
                   >
                     <div
@@ -1186,8 +1295,8 @@ export default function StudentDashboard() {
                         rounded-xl
                         ${
                           goal.done
-                            ? 'bg-emerald-500/10'
-                            : 'bg-slate-800'
+                            ? 'bg-emerald-100 dark:bg-emerald-500/10'
+                            : 'bg-slate-200 dark:bg-slate-800'
                         }
                       `}
                     >
@@ -1196,7 +1305,9 @@ export default function StudentDashboard() {
                           className="
                             h-5
                             w-5
-                            text-emerald-400
+                            text-emerald-500
+
+                            dark:text-emerald-400
                           "
                         />
                       ) : (
@@ -1222,8 +1333,8 @@ export default function StudentDashboard() {
                           leading-5
                           ${
                             goal.done
-                              ? 'text-slate-500 line-through'
-                              : 'text-slate-200'
+                              ? 'text-slate-400 line-through dark:text-slate-500'
+                              : 'text-slate-700 dark:text-slate-200'
                           }
                         `}
                       >
@@ -1234,7 +1345,9 @@ export default function StudentDashboard() {
                         className="
                           mt-1
                           text-[9px]
-                          text-sky-400
+                          text-sky-600
+
+                          dark:text-sky-400
                         "
                       >
                         Earn{' '}
@@ -1246,6 +1359,8 @@ export default function StudentDashboard() {
               )}
             </div>
           </DashboardPanel>
+
+          {/* SUBJECTS */}
 
           <DashboardPanel
             title="Top Subjects"
@@ -1291,6 +1406,7 @@ export default function StudentDashboard() {
             2xl:grid-cols-[minmax(0,1fr)_280px]
           "
         >
+
           <DashboardPanel
             title="What would you like to do today?"
             subtitle="Jump directly into your learning tools"
@@ -1310,8 +1426,8 @@ export default function StudentDashboard() {
                 icon={BookOpen}
                 title="Study Notes"
                 desc="Explore chapters"
-                color="text-sky-400"
-                background="bg-sky-500/10"
+                color="text-sky-500"
+                background="bg-sky-100 dark:bg-sky-500/10"
               />
 
               <QuickAction
@@ -1319,8 +1435,8 @@ export default function StudentDashboard() {
                 icon={Target}
                 title="NAVTA TEST"
                 desc="Timed smart tests"
-                color="text-violet-400"
-                background="bg-violet-500/10"
+                color="text-violet-500"
+                background="bg-violet-100 dark:bg-violet-500/10"
               />
 
               <QuickAction
@@ -1328,8 +1444,8 @@ export default function StudentDashboard() {
                 icon={FileText}
                 title="PYQ Papers"
                 desc="Past-year papers"
-                color="text-pink-400"
-                background="bg-pink-500/10"
+                color="text-pink-500"
+                background="bg-pink-100 dark:bg-pink-500/10"
               />
 
               <QuickAction
@@ -1337,8 +1453,8 @@ export default function StudentDashboard() {
                 icon={ClipboardCheck}
                 title="Assessments"
                 desc="Practice quizzes"
-                color="text-yellow-400"
-                background="bg-yellow-500/10"
+                color="text-yellow-500"
+                background="bg-yellow-100 dark:bg-yellow-500/10"
               />
 
               <QuickAction
@@ -1346,11 +1462,13 @@ export default function StudentDashboard() {
                 icon={BarChart3}
                 title="Analytics"
                 desc="Track progress"
-                color="text-cyan-400"
-                background="bg-cyan-500/10"
+                color="text-cyan-500"
+                background="bg-cyan-100 dark:bg-cyan-500/10"
               />
             </div>
           </DashboardPanel>
+
+          {/* QUOTE */}
 
           <div
             className="
@@ -1358,13 +1476,19 @@ export default function StudentDashboard() {
               overflow-hidden
               rounded-[24px]
               border
-              border-violet-500/20
+              border-violet-200
               bg-gradient-to-br
-              from-[#0b1530]
-              via-[#111743]
-              to-[#170b3c]
+              from-violet-50
+              via-white
+              to-sky-50
               p-6
-              shadow-xl
+              shadow-[0_18px_55px_rgba(99,102,241,0.10)]
+
+              dark:border-violet-500/20
+              dark:from-[#0b1530]
+              dark:via-[#111743]
+              dark:to-[#170b3c]
+              dark:shadow-xl
             "
           >
             <div
@@ -1376,8 +1500,10 @@ export default function StudentDashboard() {
                 h-40
                 w-40
                 rounded-full
-                bg-violet-500/20
+                bg-violet-300/20
                 blur-[70px]
+
+                dark:bg-violet-500/20
               "
             />
 
@@ -1391,7 +1517,9 @@ export default function StudentDashboard() {
                   text-5xl
                   font-black
                   leading-none
-                  text-violet-500/40
+                  text-violet-300
+
+                  dark:text-violet-500/40
                 "
               >
                 “
@@ -1403,7 +1531,9 @@ export default function StudentDashboard() {
                   text-xl
                   font-black
                   leading-8
-                  text-white
+                  text-slate-900
+
+                  dark:text-white
                 "
               >
                 Discipline today
@@ -1418,7 +1548,9 @@ export default function StudentDashboard() {
                   font-bold
                   uppercase
                   tracking-widest
-                  text-violet-300
+                  text-violet-600
+
+                  dark:text-violet-300
                 "
               >
                 — NAVTA
@@ -1461,12 +1593,15 @@ export default function StudentDashboard() {
                       gap-3
                       rounded-2xl
                       border
-                      border-slate-800
-                      bg-slate-950/35
+                      border-slate-200
+                      bg-slate-50/75
                       p-4
                       sm:flex-row
                       sm:items-center
                       sm:justify-between
+
+                      dark:border-slate-800
+                      dark:bg-slate-950/35
                     "
                   >
                     <div
@@ -1486,14 +1621,18 @@ export default function StudentDashboard() {
                           items-center
                           justify-center
                           rounded-xl
-                          bg-sky-500/10
+                          bg-sky-100
+
+                          dark:bg-sky-500/10
                         "
                       >
                         <GraduationCap
                           className="
                             h-5
                             w-5
-                            text-sky-400
+                            text-sky-500
+
+                            dark:text-sky-400
                           "
                         />
                       </div>
@@ -1508,7 +1647,9 @@ export default function StudentDashboard() {
                             truncate
                             text-sm
                             font-bold
-                            text-white
+                            text-slate-900
+
+                            dark:text-white
                           "
                         >
                           {result.test?.title ||
@@ -1547,8 +1688,8 @@ export default function StudentDashboard() {
                           font-black
                           ${
                             result.isPassed
-                              ? 'text-emerald-400'
-                              : 'text-rose-400'
+                              ? 'text-emerald-500'
+                              : 'text-rose-500'
                           }
                         `}
                       >
@@ -1565,15 +1706,22 @@ export default function StudentDashboard() {
                           className="
                             rounded-lg
                             border
-                            border-slate-700
+                            border-slate-300
+                            bg-white
                             px-3
                             py-2
                             text-xs
                             font-bold
-                            text-slate-300
+                            text-slate-700
                             transition
-                            hover:border-sky-500
-                            hover:text-white
+                            hover:border-sky-400
+                            hover:text-sky-600
+
+                            dark:border-slate-700
+                            dark:bg-transparent
+                            dark:text-slate-300
+                            dark:hover:border-sky-500
+                            dark:hover:text-white
                           "
                         >
                           Review
@@ -1597,7 +1745,9 @@ export default function StudentDashboard() {
                     mx-auto
                     h-9
                     w-9
-                    text-slate-700
+                    text-slate-300
+
+                    dark:text-slate-700
                   "
                 />
 
@@ -1621,8 +1771,10 @@ export default function StudentDashboard() {
                     gap-1
                     text-xs
                     font-bold
-                    text-sky-400
+                    text-sky-600
                     hover:underline
+
+                    dark:text-sky-400
                   "
                 >
                   Take your first quiz
@@ -1659,12 +1811,17 @@ function DashboardPanel({
       className={`
         rounded-[24px]
         border
-        border-slate-800
-        bg-[#081326]/92
+        border-slate-200/80
+        bg-white/88
         p-5
-        shadow-[0_20px_60px_rgba(0,0,0,0.20)]
+        shadow-[0_18px_55px_rgba(15,23,42,0.08)]
         backdrop-blur-xl
         sm:p-6
+
+        dark:border-slate-800
+        dark:bg-[#081326]/92
+        dark:shadow-[0_20px_60px_rgba(0,0,0,0.20)]
+
         ${className}
       `}
     >
@@ -1672,8 +1829,10 @@ function DashboardPanel({
         className="
           text-base
           font-black
-          text-white
+          text-slate-950
           sm:text-lg
+
+          dark:text-white
         "
       >
         {title}
@@ -1686,6 +1845,8 @@ function DashboardPanel({
             text-[10px]
             text-slate-500
             sm:text-xs
+
+            dark:text-slate-500
           "
         >
           {subtitle}
@@ -1714,12 +1875,16 @@ function MetricCard({
       className="
         rounded-[22px]
         border
-        border-slate-800
-        bg-[#081326]/92
+        border-slate-200/80
+        bg-white/88
         p-4
-        shadow-xl
+        shadow-[0_14px_40px_rgba(15,23,42,0.08)]
         backdrop-blur-xl
         sm:p-5
+
+        dark:border-slate-800
+        dark:bg-[#081326]/92
+        dark:shadow-xl
       "
     >
       <div
@@ -1757,8 +1922,10 @@ function MetricCard({
             className="
               text-xl
               font-black
-              text-white
+              text-slate-950
               sm:text-2xl
+
+              dark:text-white
             "
           >
             {value}
@@ -1770,7 +1937,9 @@ function MetricCard({
               font-bold
               uppercase
               tracking-wider
-              text-slate-500
+              text-slate-400
+
+              dark:text-slate-500
             "
           >
             {label}
@@ -1781,8 +1950,10 @@ function MetricCard({
               mt-1
               hidden
               text-[9px]
-              text-slate-600
+              text-slate-400
               sm:block
+
+              dark:text-slate-600
             "
           >
             {subtext}
@@ -1819,14 +1990,19 @@ function QuickAction({
           h-full
           rounded-2xl
           border
-          border-slate-800
-          bg-slate-950/35
+          border-slate-200
+          bg-slate-50/75
           p-4
           transition
           duration-200
           hover:-translate-y-1
-          hover:border-sky-500/40
-          hover:bg-sky-500/[0.04]
+          hover:border-sky-300
+          hover:bg-sky-50
+
+          dark:border-slate-800
+          dark:bg-slate-950/35
+          dark:hover:border-sky-500/40
+          dark:hover:bg-sky-500/[0.04]
         "
       >
         <div
@@ -1854,7 +2030,9 @@ function QuickAction({
             mt-4
             text-sm
             font-bold
-            text-white
+            text-slate-900
+
+            dark:text-white
           "
         >
           {title}
@@ -1875,10 +2053,13 @@ function QuickAction({
             mt-4
             h-4
             w-4
-            text-slate-600
+            text-slate-400
             transition
             group-hover:translate-x-1
-            group-hover:text-sky-400
+            group-hover:text-sky-500
+
+            dark:text-slate-600
+            dark:group-hover:text-sky-400
           "
         />
       </div>
@@ -1909,7 +2090,9 @@ function SubjectProgress({
           className="
             text-xs
             font-bold
-            text-slate-300
+            text-slate-700
+
+            dark:text-slate-300
           "
         >
           {subject}
@@ -1931,7 +2114,9 @@ function SubjectProgress({
           h-1.5
           overflow-hidden
           rounded-full
-          bg-slate-800
+          bg-slate-200
+
+          dark:bg-slate-800
         "
       >
         <div
@@ -1966,16 +2151,21 @@ function MiniHeroCard({
       className="
         rounded-2xl
         border
-        border-slate-800
-        bg-slate-900/75
+        border-slate-200
+        bg-slate-50/85
         p-3
+
+        dark:border-slate-800
+        dark:bg-slate-900/75
       "
     >
       <Icon
         className="
           h-4
           w-4
-          text-sky-400
+          text-sky-500
+
+          dark:text-sky-400
         "
       />
 
@@ -1984,7 +2174,9 @@ function MiniHeroCard({
           mt-3
           text-sm
           font-black
-          text-white
+          text-slate-950
+
+          dark:text-white
         "
       >
         {value}
@@ -1996,7 +2188,9 @@ function MiniHeroCard({
           text-[9px]
           uppercase
           tracking-wider
-          text-slate-500
+          text-slate-400
+
+          dark:text-slate-500
         "
       >
         {label}
