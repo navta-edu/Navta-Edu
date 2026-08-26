@@ -7,19 +7,53 @@ const {
   getQuestions,
   deleteQuestion,
   generateTest,
+  evaluateWrittenAnswer,
 } = require("../controllers/navtaTestController");
 
-// Admin
+// ============================================
+// ADMIN - CREATE NAVTA TEST QUESTION
+// ============================================
 
-router.post("/questions", createQuestion);
+router.post(
+  "/questions",
+  createQuestion
+);
 
-// Admin
-router.post("/generate", generateTest);
+// ============================================
+// STUDENT - GENERATE NAVTA TEST
+// ============================================
 
-// Admin
-router.get("/questions", getQuestions);
+router.post(
+  "/generate",
+  generateTest
+);
 
-// Admin
-router.delete("/questions/:id", deleteQuestion);
+// ============================================
+// STUDENT - AI EVALUATE WRITTEN ANSWER
+// BOARDS SHORT / LONG ANSWERS ONLY
+// ============================================
+
+router.post(
+  "/evaluate-answer",
+  evaluateWrittenAnswer
+);
+
+// ============================================
+// ADMIN - GET NAVTA TEST QUESTIONS
+// ============================================
+
+router.get(
+  "/questions",
+  getQuestions
+);
+
+// ============================================
+// ADMIN - DELETE NAVTA TEST QUESTION
+// ============================================
+
+router.delete(
+  "/questions/:id",
+  deleteQuestion
+);
 
 module.exports = router;
