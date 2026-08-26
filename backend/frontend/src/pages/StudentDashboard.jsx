@@ -1,21 +1,31 @@
-import React, { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { studentAPI } from '../utils/api';
-import Card from '../components/Card';
-import ProgressBar from '../components/ProgressBar';
-import Button from '../components/Button';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { useAuth } from '../context/AuthContext';
+import { studentAPI } from '../utils/api';
+
+import Button from '../components/Button';
+
 import {
-  Flame,
-  Coins,
-  Award,
-  Zap,
   ArrowRight,
-  CheckCircle,
-  HelpCircle,
-  Calendar,
-  BookOpen
+  Award,
+  BarChart3,
+  Bell,
+  BookOpen,
+  BrainCircuit,
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardCheck,
+  Coins,
+  FileText,
+  Flame,
+  GraduationCap,
+  LineChart,
+  Sparkles,
+  Target,
+  Trophy,
+  Zap
 } from 'lucide-react';
 
 import {
@@ -28,819 +38,1842 @@ import {
   CartesianGrid
 } from 'recharts';
 
+// =====================================================
+// FALLBACK CHART DATA
+// =====================================================
+
+const FALLBACK_CHART = [
+  { date: 'Mon', score: 48 },
+  { date: 'Tue', score: 65 },
+  { date: 'Wed', score: 53 },
+  { date: 'Thu', score: 74 },
+  { date: 'Fri', score: 82 },
+  { date: 'Sat', score: 78 },
+  { date: 'Sun', score: 86 }
+];
+
+// =====================================================
+// UPCOMING ACTIVITIES
+// You can later replace these with backend/calendar data.
+// =====================================================
+
+const UPCOMING = [
+  {
+    title: 'Chemistry Quiz',
+    subtitle: 'Organic Chemistry',
+    time: 'Today, 6:00 PM'
+  },
+  {
+    title: 'Physics Test',
+    subtitle: 'Mechanics',
+    time: 'Tomorrow, 5:00 PM'
+  },
+  {
+    title: 'Maths Practice',
+    subtitle: 'Trigonometry',
+    time: 'Next session'
+  }
+];
+
+// =====================================================
+// SUBJECT FALLBACK
+// =====================================================
+
+const SUBJECT_PROGRESS = [
+  {
+    subject: 'Physics',
+    value: 72
+  },
+  {
+    subject: 'Chemistry',
+    value: 64
+  },
+  {
+    subject: 'Mathematics',
+    value: 70
+  },
+  {
+    subject: 'Biology',
+    value: 68
+  }
+];
+
 export default function StudentDashboard() {
-  const { user, profile, streak } = useAuth();
+  const {
+    user,
+    profile,
+    streak
+  } = useAuth();
 
   const [results, setResults] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  /*
-  |--------------------------------------------------------------------------
-  | FETCH STUDENT DATA
-  |--------------------------------------------------------------------------
-  */
+  // =====================================================
+  // LOAD STUDENT DATA
+  // =====================================================
 
   useEffect(() => {
-    const fetchData = async () => {
+    const loadDashboard = async () => {
       try {
-        const resList = await studentAPI.getResults();
-        setResults(resList?.data || []);
+        const resultResponse =
+          await studentAPI.getResults();
 
-        const anal = await studentAPI.getAnalytics();
+        setResults(
+          resultResponse?.data || []
+        );
 
-        /*
-         * Some APIs return:
-         *   response.data
-         *
-         * Some return:
-         *   response
-         *
-         * Support both.
-         */
+        const analyticsResponse =
+          await studentAPI.getAnalytics();
 
-        setAnalytics(anal?.data || anal || null);
-      } catch (err) {
-        console.error('Failed to load student data:', err);
+        setAnalytics(
+          analyticsResponse?.data ||
+          analyticsResponse ||
+          null
+        );
+      } catch (error) {
+        console.error(
+          'Failed to load student dashboard:',
+          error
+        );
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
+    loadDashboard();
   }, []);
 
-  /*
-  |--------------------------------------------------------------------------
-  | XP / LEVEL
-  |--------------------------------------------------------------------------
-  */
+  // =====================================================
+  // XP / LEVEL
+  // =====================================================
 
-  const totalXP = Number(profile?.xp || 0);
+  const totalXP =
+    Number(profile?.xp || 0);
 
-  const currentXPInLevel = totalXP % 500;
+  const level =
+    Number(profile?.level || 1);
 
-  const xpNeededForNextLevel = 500;
+  const xpPerLevel = 500;
 
-  const level = Number(profile?.level || 1);
+  const currentXP =
+    totalXP % xpPerLevel;
 
-  /*
-  |--------------------------------------------------------------------------
-  | AVERAGE SCORE
-  |--------------------------------------------------------------------------
-  */
+  const levelProgress =
+    Math.min(
+      100,
+      Math.round(
+        (currentXP / xpPerLevel) * 100
+      )
+    );
 
-  const averageScore =
-    results.length > 0
-      ? Math.round(
-          results.reduce(
-            (acc, curr) => acc + Number(curr?.percentage || 0),
-            0
-          ) / results.length
-        )
-      : 0;
+  // =====================================================
+  // SCORE
+  // =====================================================
 
-  /*
-  |--------------------------------------------------------------------------
-  | DAILY GOALS
-  |--------------------------------------------------------------------------
-  */
+  const averageScore = useMemo(() => {
+    if (!results.length) {
+      return 0;
+    }
+
+    const total =
+      results.reduce(
+        (sum, result) =>
+          sum +
+          Number(
+            result?.percentage || 0
+          ),
+        0
+      );
+
+    return Math.round(
+      total / results.length
+    );
+  }, [results]);
+
+  // =====================================================
+  // CHART DATA
+  // =====================================================
+
+  const chartData = useMemo(() => {
+    const progression =
+      analytics?.progression;
+
+    if (
+      Array.isArray(progression) &&
+      progression.length
+    ) {
+      return progression;
+    }
+
+    return FALLBACK_CHART;
+  }, [analytics]);
+
+  // =====================================================
+  // DAILY GOALS
+  // =====================================================
 
   const dailyGoals = [
     {
-      text: 'Read one chapter summary note',
+      title:
+        'Read one chapter summary',
+      reward: '+10 XP',
       done: true
     },
     {
-      text: 'Score 70% or more on a Chapter Quiz',
+      title:
+        'Score 70% or more on a chapter quiz',
+      reward: '+20 XP',
       done: false
     },
     {
-      text: 'Keep up login streak milestones',
-      done: true
+      title:
+        'Maintain your login streak',
+      reward: '+30 XP',
+      done:
+        Number(
+          streak?.currentStreak || 0
+        ) > 0
     }
   ];
 
-  /*
-  |--------------------------------------------------------------------------
-  | CHART DATA
-  |--------------------------------------------------------------------------
-  */
-
-  const progression = Array.isArray(analytics?.progression)
-    ? analytics.progression
-    : [];
-
-  const chartData =
-    progression.length > 0
-      ? progression
-      : [
-          { date: 'Mon', score: 40 },
-          { date: 'Tue', score: 65 },
-          { date: 'Wed', score: 50 },
-          { date: 'Thu', score: 75 },
-          { date: 'Fri', score: 80 }
-        ];
-
-  /*
-  |--------------------------------------------------------------------------
-  | LOADING
-  |--------------------------------------------------------------------------
-  */
+  // =====================================================
+  // LOADING
+  // =====================================================
 
   if (loading) {
     return (
-      <div className="min-h-[70vh] w-full flex items-center justify-center px-4">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+      <div
+        className="
+          min-h-[75vh]
+          flex
+          items-center
+          justify-center
+        "
+      >
+        <div className="flex flex-col items-center gap-4">
+          <div
+            className="
+              h-10
+              w-10
+              animate-spin
+              rounded-full
+              border-4
+              border-sky-500
+              border-t-transparent
+            "
+          />
 
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Loading your dashboard...
+          <p
+            className="
+              text-sm
+              font-semibold
+              text-slate-400
+            "
+          >
+            Preparing your dashboard...
           </p>
         </div>
       </div>
     );
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | MAIN DASHBOARD
-  |--------------------------------------------------------------------------
-  */
-
   return (
-    <div className="w-full min-w-0 overflow-x-hidden">
-      <div className="w-full max-w-[1600px] mx-auto space-y-5 sm:space-y-6">
+    <div
+      className="
+        relative
+        w-full
+        min-w-0
+        overflow-x-hidden
+        text-white
+      "
+    >
+      {/* =====================================================
+          MAIN DASHBOARD GRID
+      ===================================================== */}
 
-        {/* ================================================================
-            WELCOME BANNER
-        ================================================================= */}
+      <div
+        className="
+          mx-auto
+          w-full
+          max-w-[1500px]
+          space-y-5
+        "
+      >
 
-        <section className="relative overflow-hidden glass rounded-2xl sm:rounded-3xl border border-slate-100 dark:border-slate-800/40 shadow-sm">
+        {/* =================================================
+            HERO + UPCOMING
+        ================================================= */}
 
-          {/* Background decoration */}
+        <section
+          className="
+            grid
+            grid-cols-1
+            gap-5
+            xl:grid-cols-[minmax(0,1fr)_300px]
+          "
+        >
 
-          <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 sm:h-64 sm:w-64 rounded-full bg-primary-500/10 blur-[70px] dark:bg-primary-500/5" />
+          {/* HERO */}
 
-          <div className="relative p-4 sm:p-6 lg:p-8">
+          <div
+            className="
+              relative
+              overflow-hidden
+              rounded-[26px]
+              border
+              border-sky-500/25
+              bg-[#071224]/90
+              shadow-[0_20px_80px_rgba(2,132,199,0.12)]
+              backdrop-blur-xl
+            "
+          >
 
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 lg:gap-8">
+            {/* Hero glow */}
 
-              {/* Welcome text */}
+            <div
+              className="
+                pointer-events-none
+                absolute
+                -right-20
+                -top-24
+                h-72
+                w-72
+                rounded-full
+                bg-blue-500/20
+                blur-[100px]
+              "
+            />
 
-              <div className="min-w-0 flex-1">
+            <div
+              className="
+                pointer-events-none
+                absolute
+                bottom-0
+                right-[25%]
+                h-52
+                w-52
+                rounded-full
+                bg-violet-500/15
+                blur-[90px]
+              "
+            />
 
-                <div className="flex items-center gap-2 mb-2">
+            <div
+              className="
+                relative
+                grid
+                gap-8
+                p-6
+                sm:p-8
+                lg:grid-cols-[1fr_360px]
+                lg:items-center
+              "
+            >
 
-                  <div className="p-2 rounded-xl bg-primary-500/10 shrink-0">
-                    <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-primary-500" />
-                  </div>
+              {/* Hero text */}
 
-                  <span className="text-xs font-bold uppercase tracking-wider text-primary-500">
-                    Student Dashboard
-                  </span>
+              <div className="min-w-0">
 
+                <div
+                  className="
+                    mb-4
+                    inline-flex
+                    items-center
+                    gap-2
+                    rounded-full
+                    border
+                    border-sky-500/20
+                    bg-sky-500/10
+                    px-3
+                    py-1.5
+                    text-xs
+                    font-bold
+                    text-sky-300
+                  "
+                >
+                  <Sparkles className="h-4 w-4" />
+
+                  Welcome back
                 </div>
 
-                <h1 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight break-words">
-                  Welcome back, {user?.name || 'Student'}!
+                <h1
+                  className="
+                    text-3xl
+                    font-black
+                    tracking-tight
+                    text-white
+                    sm:text-4xl
+                    lg:text-5xl
+                  "
+                >
+                  Let&apos;s continue your
+                  <br />
+
+                  <span
+                    className="
+                      bg-gradient-to-r
+                      from-sky-400
+                      via-blue-400
+                      to-violet-400
+                      bg-clip-text
+                      text-transparent
+                    "
+                  >
+                    learning journey.
+                  </span>
                 </h1>
 
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-2 leading-relaxed max-w-2xl">
-                  Stream:{' '}
-                  <span className="font-bold text-slate-700 dark:text-slate-200">
-                    {profile?.stream || 'Science'}
-                  </span>
-                  . Let's finish your daily quizzes to earn rewards today.
+                <p
+                  className="
+                    mt-4
+                    max-w-xl
+                    text-sm
+                    leading-6
+                    text-slate-400
+                    sm:text-base
+                  "
+                >
+                  Learn. Practise. Test.
+                  Analyse. Improve. Earn.
                 </p>
+
+                <p
+                  className="
+                    mt-2
+                    text-xs
+                    text-slate-500
+                  "
+                >
+                  Welcome,{' '}
+                  <span className="font-bold text-slate-300">
+                    {user?.name ||
+                      'Student'}
+                  </span>
+                  {' • '}
+                  {profile?.stream ||
+                    'Science'}
+                </p>
+
+                <div
+                  className="
+                    mt-7
+                    flex
+                    flex-col
+                    gap-3
+                    sm:flex-row
+                  "
+                >
+                  <Link
+                    to="/assessments"
+                    className="w-full sm:w-auto"
+                  >
+                    <Button
+                      icon={ArrowRight}
+                      className="w-full justify-center sm:w-auto"
+                    >
+                      Resume Study
+                    </Button>
+                  </Link>
+
+                  <Link
+                    to="/navta-test"
+                    className="w-full sm:w-auto"
+                  >
+                    <button
+                      type="button"
+                      className="
+                        w-full
+                        rounded-xl
+                        border
+                        border-slate-700
+                        bg-slate-950/60
+                        px-5
+                        py-3
+                        text-sm
+                        font-bold
+                        text-white
+                        transition
+                        hover:border-sky-500
+                        hover:bg-sky-500/10
+                        sm:w-auto
+                      "
+                    >
+                      Explore NAVTA TEST
+                    </button>
+                  </Link>
+                </div>
 
               </div>
 
-              {/* CTA */}
+              {/* AI learning preview */}
 
-              <div className="w-full lg:w-auto shrink-0">
+              <div
+                className="
+                  rounded-[22px]
+                  border
+                  border-slate-800
+                  bg-slate-950/70
+                  p-4
+                  shadow-xl
+                "
+              >
 
-                <Link
-                  to="/assessments"
-                  className="block w-full lg:w-auto"
+                <div
+                  className="
+                    flex
+                    items-center
+                    justify-between
+                    gap-3
+                  "
                 >
-                  <Button
-                    icon={ArrowRight}
-                    className="w-full lg:w-auto justify-center"
+                  <div>
+                    <p
+                      className="
+                        text-[10px]
+                        font-black
+                        uppercase
+                        tracking-[0.18em]
+                        text-sky-400
+                      "
+                    >
+                      NAVTA Intelligence
+                    </p>
+
+                    <p
+                      className="
+                        mt-1
+                        text-sm
+                        font-bold
+                        text-white
+                      "
+                    >
+                      Your learning snapshot
+                    </p>
+                  </div>
+
+                  <div
+                    className="
+                      flex
+                      h-10
+                      w-10
+                      items-center
+                      justify-center
+                      rounded-xl
+                      bg-violet-500/10
+                    "
                   >
-                    Resume Study Quizzes
-                  </Button>
-                </Link>
+                    <BrainCircuit
+                      className="
+                        h-5
+                        w-5
+                        text-violet-400
+                      "
+                    />
+                  </div>
+                </div>
+
+                <div
+                  className="
+                    mt-4
+                    grid
+                    grid-cols-2
+                    gap-3
+                  "
+                >
+                  <MiniHeroCard
+                    label="Current Level"
+                    value={`Level ${level}`}
+                    icon={Award}
+                  />
+
+                  <MiniHeroCard
+                    label="Average Score"
+                    value={`${averageScore}%`}
+                    icon={TrendingIcon}
+                  />
+                </div>
+
+                <div
+                  className="
+                    mt-3
+                    rounded-2xl
+                    border
+                    border-slate-800
+                    bg-slate-900/70
+                    p-4
+                  "
+                >
+                  <div
+                    className="
+                      flex
+                      items-center
+                      justify-between
+                    "
+                  >
+                    <div>
+                      <p
+                        className="
+                          text-xs
+                          font-bold
+                          text-slate-400
+                        "
+                      >
+                        Weekly Progress
+                      </p>
+
+                      <p
+                        className="
+                          mt-1
+                          text-xl
+                          font-black
+                          text-sky-400
+                        "
+                      >
+                        {levelProgress}%
+                      </p>
+                    </div>
+
+                    <LineChart
+                      className="
+                        h-6
+                        w-6
+                        text-sky-400
+                      "
+                    />
+                  </div>
+
+                  <div
+                    className="
+                      mt-3
+                      h-2
+                      overflow-hidden
+                      rounded-full
+                      bg-slate-800
+                    "
+                  >
+                    <div
+                      className="
+                        h-full
+                        rounded-full
+                        bg-gradient-to-r
+                        from-sky-500
+                        to-violet-500
+                      "
+                      style={{
+                        width:
+                          `${levelProgress}%`
+                      }}
+                    />
+                  </div>
+
+                  <p
+                    className="
+                      mt-2
+                      text-[10px]
+                      text-slate-500
+                    "
+                  >
+                    {currentXP} /{' '}
+                    {xpPerLevel} XP
+                  </p>
+                </div>
 
               </div>
 
             </div>
+          </div>
 
+          {/* UPCOMING */}
+
+          <DashboardPanel
+            title="Upcoming"
+            subtitle="Your next activities"
+            className="h-full"
+          >
+            <div className="space-y-2">
+              {UPCOMING.map(
+                (item, index) => (
+                  <div
+                    key={index}
+                    className="
+                      group
+                      flex
+                      items-center
+                      gap-3
+                      rounded-2xl
+                      border
+                      border-transparent
+                      p-3
+                      transition
+                      hover:border-slate-800
+                      hover:bg-white/[0.02]
+                    "
+                  >
+                    <div
+                      className="
+                        flex
+                        h-10
+                        w-10
+                        shrink-0
+                        items-center
+                        justify-center
+                        rounded-xl
+                        bg-violet-500/10
+                      "
+                    >
+                      <CalendarDays
+                        className="
+                          h-5
+                          w-5
+                          text-violet-400
+                        "
+                      />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="
+                          text-[10px]
+                          text-slate-500
+                        "
+                      >
+                        {item.time}
+                      </p>
+
+                      <p
+                        className="
+                          truncate
+                          text-sm
+                          font-bold
+                          text-white
+                        "
+                      >
+                        {item.title}
+                      </p>
+
+                      <p
+                        className="
+                          truncate
+                          text-xs
+                          text-slate-500
+                        "
+                      >
+                        {item.subtitle}
+                      </p>
+                    </div>
+
+                    <ChevronRight
+                      className="
+                        h-4
+                        w-4
+                        text-slate-600
+                        transition
+                        group-hover:text-sky-400
+                      "
+                    />
+                  </div>
+                )
+              )}
+            </div>
+          </DashboardPanel>
+
+        </section>
+
+        {/* =================================================
+            STAT CARDS
+        ================================================= */}
+
+        <section
+          className="
+            grid
+            grid-cols-2
+            gap-3
+            lg:grid-cols-4
+          "
+        >
+
+          <MetricCard
+            icon={Flame}
+            value={
+              streak?.currentStreak || 1
+            }
+            label="Day Streak"
+            subtext="Keep it going!"
+            iconClass="text-orange-400"
+            iconBg="bg-orange-500/10"
+          />
+
+          <MetricCard
+            icon={Coins}
+            value={
+              profile?.coins ?? 0
+            }
+            label="Coins Balance"
+            subtext="Earn more by learning"
+            iconClass="text-yellow-400"
+            iconBg="bg-yellow-500/10"
+          />
+
+          <div
+            className="
+              rounded-[22px]
+              border
+              border-slate-800
+              bg-[#081326]/90
+              p-5
+              shadow-xl
+              backdrop-blur-xl
+            "
+          >
+            <div className="flex items-center gap-4">
+
+              <div
+                className="
+                  flex
+                  h-11
+                  w-11
+                  shrink-0
+                  items-center
+                  justify-center
+                  rounded-xl
+                  bg-violet-500/10
+                "
+              >
+                <Award
+                  className="
+                    h-5
+                    w-5
+                    text-violet-400
+                  "
+                />
+              </div>
+
+              <div className="min-w-0 flex-1">
+
+                <p
+                  className="
+                    text-xl
+                    font-black
+                    text-white
+                  "
+                >
+                  Level {level}
+                </p>
+
+                <p
+                  className="
+                    text-[10px]
+                    uppercase
+                    tracking-wider
+                    text-slate-500
+                  "
+                >
+                  Current Level
+                </p>
+
+                <div
+                  className="
+                    mt-3
+                    h-1.5
+                    overflow-hidden
+                    rounded-full
+                    bg-slate-800
+                  "
+                >
+                  <div
+                    className="
+                      h-full
+                      rounded-full
+                      bg-gradient-to-r
+                      from-sky-500
+                      to-violet-500
+                    "
+                    style={{
+                      width:
+                        `${levelProgress}%`
+                    }}
+                  />
+                </div>
+
+                <p
+                  className="
+                    mt-1.5
+                    text-[9px]
+                    text-sky-400
+                  "
+                >
+                  {currentXP} /{' '}
+                  {xpPerLevel} XP
+                </p>
+
+              </div>
+            </div>
+          </div>
+
+          <MetricCard
+            icon={BarChart3}
+            value={`${averageScore}%`}
+            label="Average Score"
+            subtext={
+              averageScore > 0
+                ? 'Keep improving'
+                : 'Take your first quiz'
+            }
+            iconClass="text-emerald-400"
+            iconBg="bg-emerald-500/10"
+          />
+
+        </section>
+
+        {/* =================================================
+            PERFORMANCE + GOALS + SUBJECTS
+        ================================================= */}
+
+        <section
+          className="
+            grid
+            grid-cols-1
+            gap-5
+            xl:grid-cols-[minmax(0,1.6fr)_minmax(260px,0.75fr)_minmax(250px,0.7fr)]
+          "
+        >
+
+          {/* PERFORMANCE */}
+
+          <DashboardPanel
+            title="Your Performance Overview"
+            subtitle="Score trend over recent activity"
+          >
+            <div
+              className="
+                mt-5
+                h-[290px]
+                w-full
+              "
+            >
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+                minWidth={0}
+              >
+                <AreaChart
+                  data={chartData}
+                  margin={{
+                    top: 10,
+                    right: 10,
+                    left: -20,
+                    bottom: 0
+                  }}
+                >
+                  <defs>
+                    <linearGradient
+                      id="navtaScoreGradient"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="5%"
+                        stopColor="#0ea5e9"
+                        stopOpacity={0.35}
+                      />
+
+                      <stop
+                        offset="95%"
+                        stopColor="#0ea5e9"
+                        stopOpacity={0}
+                      />
+                    </linearGradient>
+                  </defs>
+
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                    stroke="#1e293b"
+                  />
+
+                  <XAxis
+                    dataKey="date"
+                    stroke="#64748b"
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+
+                  <YAxis
+                    stroke="#64748b"
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={false}
+                    domain={[0, 100]}
+                  />
+
+                  <Tooltip
+                    contentStyle={{
+                      background:
+                        '#081326',
+                      border:
+                        '1px solid #1e293b',
+                      borderRadius:
+                        '12px',
+                      color:
+                        '#ffffff'
+                    }}
+                  />
+
+                  <Area
+                    type="monotone"
+                    dataKey="score"
+                    stroke="#0ea5e9"
+                    strokeWidth={3}
+                    fill="url(#navtaScoreGradient)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </DashboardPanel>
+
+          {/* GOALS */}
+
+          <DashboardPanel
+            title="Daily Goals"
+            subtitle="Complete goals to earn more"
+          >
+            <div className="mt-3 space-y-3">
+
+              {dailyGoals.map(
+                (goal, index) => (
+                  <div
+                    key={index}
+                    className="
+                      flex
+                      gap-3
+                      rounded-2xl
+                      border
+                      border-slate-800/70
+                      bg-slate-950/35
+                      p-3
+                    "
+                  >
+                    <div
+                      className={`
+                        mt-0.5
+                        flex
+                        h-9
+                        w-9
+                        shrink-0
+                        items-center
+                        justify-center
+                        rounded-xl
+                        ${
+                          goal.done
+                            ? 'bg-emerald-500/10'
+                            : 'bg-slate-800'
+                        }
+                      `}
+                    >
+                      {goal.done ? (
+                        <CheckCircle2
+                          className="
+                            h-5
+                            w-5
+                            text-emerald-400
+                          "
+                        />
+                      ) : (
+                        <Target
+                          className="
+                            h-5
+                            w-5
+                            text-slate-500
+                          "
+                        />
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+
+                      <p
+                        className={`
+                          text-xs
+                          font-semibold
+                          leading-5
+                          ${
+                            goal.done
+                              ? 'text-slate-500 line-through'
+                              : 'text-slate-200'
+                          }
+                        `}
+                      >
+                        {goal.title}
+                      </p>
+
+                      <p
+                        className="
+                          mt-1
+                          text-[9px]
+                          text-sky-400
+                        "
+                      >
+                        Earn {goal.reward}
+                      </p>
+
+                    </div>
+                  </div>
+                )
+              )}
+
+            </div>
+          </DashboardPanel>
+
+          {/* TOP SUBJECTS */}
+
+          <DashboardPanel
+            title="Top Subjects"
+            subtitle="Your current progress"
+          >
+            <div className="mt-4 space-y-5">
+
+              {SUBJECT_PROGRESS.map(
+                (item) => (
+                  <SubjectProgress
+                    key={
+                      item.subject
+                    }
+                    subject={
+                      item.subject
+                    }
+                    value={
+                      item.value
+                    }
+                  />
+                )
+              )}
+
+            </div>
+          </DashboardPanel>
+
+        </section>
+
+        {/* =================================================
+            QUICK ACTIONS + QUOTE
+        ================================================= */}
+
+        <section
+          className="
+            grid
+            grid-cols-1
+            gap-5
+            xl:grid-cols-[minmax(0,1fr)_280px]
+          "
+        >
+
+          <DashboardPanel
+            title="What would you like to do today?"
+            subtitle="Jump directly into your learning tools"
+          >
+            <div
+              className="
+                mt-4
+                grid
+                grid-cols-2
+                gap-3
+                md:grid-cols-3
+                xl:grid-cols-5
+              "
+            >
+
+              <QuickAction
+                to="/notes"
+                icon={BookOpen}
+                title="Study Notes"
+                desc="Explore chapters"
+                color="text-sky-400"
+                background="bg-sky-500/10"
+              />
+
+              <QuickAction
+                to="/navta-test"
+                icon={Target}
+                title="NAVTA TEST"
+                desc="Timed smart tests"
+                color="text-violet-400"
+                background="bg-violet-500/10"
+              />
+
+              <QuickAction
+                to="/pyqs"
+                icon={FileText}
+                title="PYQ Papers"
+                desc="Past-year papers"
+                color="text-pink-400"
+                background="bg-pink-500/10"
+              />
+
+              <QuickAction
+                to="/assessments"
+                icon={ClipboardCheck}
+                title="Assessments"
+                desc="Practice quizzes"
+                color="text-yellow-400"
+                background="bg-yellow-500/10"
+              />
+
+              <QuickAction
+                to="/analytics"
+                icon={BarChart3}
+                title="Analytics"
+                desc="Track progress"
+                color="text-cyan-400"
+                background="bg-cyan-500/10"
+              />
+
+            </div>
+          </DashboardPanel>
+
+          <div
+            className="
+              relative
+              overflow-hidden
+              rounded-[24px]
+              border
+              border-violet-500/20
+              bg-gradient-to-br
+              from-[#0b1530]
+              via-[#111743]
+              to-[#170b3c]
+              p-6
+              shadow-xl
+            "
+          >
+
+            <div
+              className="
+                pointer-events-none
+                absolute
+                -right-12
+                -top-12
+                h-40
+                w-40
+                rounded-full
+                bg-violet-500/20
+                blur-[70px]
+              "
+            />
+
+            <div className="relative">
+
+              <p
+                className="
+                  text-5xl
+                  font-black
+                  leading-none
+                  text-violet-500/40
+                "
+              >
+                “
+              </p>
+
+              <p
+                className="
+                  mt-2
+                  text-xl
+                  font-black
+                  leading-8
+                  text-white
+                "
+              >
+                Discipline today leads to
+                success tomorrow.
+              </p>
+
+              <p
+                className="
+                  mt-5
+                  text-xs
+                  font-bold
+                  uppercase
+                  tracking-widest
+                  text-violet-300
+                "
+              >
+                — NAVTA
+              </p>
+
+            </div>
           </div>
 
         </section>
 
-
-        {/* ================================================================
-            STAT CARDS
-        ================================================================= */}
-
-        <section className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
-
-          {/* --------------------------------------------------------------
-              STREAK
-          -------------------------------------------------------------- */}
-
-          <Card className="min-w-0 h-full">
-            <div className="flex items-center gap-3 sm:gap-4">
-
-              <div className="p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-amber-50 dark:bg-amber-950/20 text-amber-500 shrink-0">
-                <Flame className="w-5 h-5 sm:w-6 sm:h-6 fill-amber-500 animate-bounce" />
-              </div>
-
-              <div className="min-w-0">
-                <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                  {streak?.currentStreak || 1}
-                </p>
-
-                <p className="text-[9px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider leading-tight">
-                  Active Streak
-                </p>
-              </div>
-
-            </div>
-          </Card>
-
-
-          {/* --------------------------------------------------------------
-              COINS
-          -------------------------------------------------------------- */}
-
-          <Card className="min-w-0 h-full">
-            <div className="flex items-center gap-3 sm:gap-4">
-
-              <div className="p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-yellow-50 dark:bg-yellow-950/20 text-yellow-500 shrink-0">
-                <Coins className="w-5 h-5 sm:w-6 sm:h-6" />
-              </div>
-
-              <div className="min-w-0">
-                <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white truncate">
-                  {profile?.coins ?? 0}
-                </p>
-
-                <p className="text-[9px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider leading-tight">
-                  Coins Balance
-                </p>
-              </div>
-
-            </div>
-          </Card>
-
-
-          {/* --------------------------------------------------------------
-              LEVEL
-          -------------------------------------------------------------- */}
-
-          <Card className="min-w-0 h-full">
-            <div className="flex items-center gap-3 sm:gap-4">
-
-              <div className="p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 shrink-0">
-                <Award className="w-5 h-5 sm:w-6 sm:h-6" />
-              </div>
-
-              <div className="flex-1 min-w-0">
-
-                <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
-                  Level {level}
-                </p>
-
-                <ProgressBar
-                  value={currentXPInLevel}
-                  max={xpNeededForNextLevel}
-                  color="bg-indigo-500"
-                  className="mt-1.5"
-                />
-
-                <p className="text-[9px] sm:text-[10px] text-slate-400 mt-1 truncate">
-                  {currentXPInLevel} / {xpNeededForNextLevel} XP
-                </p>
-
-              </div>
-
-            </div>
-          </Card>
-
-
-          {/* --------------------------------------------------------------
-              AVERAGE PERFORMANCE
-          -------------------------------------------------------------- */}
-
-          <Card className="min-w-0 h-full">
-            <div className="flex items-center gap-3 sm:gap-4">
-
-              <div className="p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 text-emerald-500 shrink-0">
-                <Zap className="w-5 h-5 sm:w-6 sm:h-6" />
-              </div>
-
-              <div className="min-w-0">
-
-                <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                  {averageScore}%
-                </p>
-
-                <p className="text-[9px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider leading-tight">
-                  Average Score
-                </p>
-
-              </div>
-
-            </div>
-          </Card>
-
-        </section>
-
-
-        {/* ================================================================
-            CHART + DAILY GOALS
-        ================================================================= */}
-
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6">
-
-          {/* --------------------------------------------------------------
-              SCORE CHART
-          -------------------------------------------------------------- */}
-
-          <Card
-            className="lg:col-span-2 min-w-0 overflow-hidden"
-            title="Score History Progression"
-            subtitle="Visualizing your exam percentages over time"
-          >
-
-            <div className="mt-4 w-full min-w-0">
-
-              {/* Chart wrapper has explicit responsive heights */}
-
-              <div className="h-[220px] sm:h-[260px] lg:h-[300px] w-full min-w-0">
-
-                <ResponsiveContainer
-                  width="100%"
-                  height="100%"
-                  minWidth={0}
-                >
-
-                  <AreaChart
-                    data={chartData}
-                    margin={{
-                      top: 10,
-                      right: 8,
-                      left: -22,
-                      bottom: 0
-                    }}
-                  >
-
-                    <defs>
-
-                      <linearGradient
-                        id="colorScore"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-
-                        <stop
-                          offset="5%"
-                          stopColor="#0ea5e9"
-                          stopOpacity={0.2}
-                        />
-
-                        <stop
-                          offset="95%"
-                          stopColor="#0ea5e9"
-                          stopOpacity={0}
-                        />
-
-                      </linearGradient>
-
-                    </defs>
-
-
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      vertical={false}
-                      stroke="#E2E8F0"
-                      className="dark:hidden"
-                    />
-
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      vertical={false}
-                      stroke="#334155"
-                      className="hidden dark:block"
-                    />
-
-
-                    <XAxis
-                      dataKey="date"
-                      stroke="#94A3B8"
-                      fontSize={10}
-                      tickLine={false}
-                      axisLine={false}
-                      minTickGap={15}
-                    />
-
-                    <YAxis
-                      stroke="#94A3B8"
-                      fontSize={10}
-                      tickLine={false}
-                      axisLine={false}
-                      domain={[0, 100]}
-                      width={32}
-                    />
-
-
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1E293B',
-                        border: 'none',
-                        borderRadius: '12px',
-                        color: '#fff',
-                        fontSize: '12px'
-                      }}
-                    />
-
-
-                    <Area
-                      type="monotone"
-                      dataKey="score"
-                      stroke="#0ea5e9"
-                      strokeWidth={2}
-                      fillOpacity={1}
-                      fill="url(#colorScore)"
-                    />
-
-                  </AreaChart>
-
-                </ResponsiveContainer>
-
-              </div>
-
-            </div>
-
-          </Card>
-
-
-          {/* --------------------------------------------------------------
-              DAILY GOALS
-          -------------------------------------------------------------- */}
-
-          <Card
-            className="min-w-0"
-            title="Daily Study Goals"
-            subtitle="Consistent actions yield higher badges"
-          >
-
-            <div className="space-y-3 sm:space-y-4 mt-4">
-
-              {dailyGoals.map((goal, idx) => (
-
-                <div
-                  key={idx}
-                  className="flex items-start gap-3 p-3 rounded-xl sm:rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 border border-slate-100 dark:border-slate-800/40"
-                >
-
-                  {goal.done ? (
-                    <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-                  ) : (
-                    <Calendar className="w-5 h-5 text-slate-300 dark:text-slate-600 shrink-0 mt-0.5" />
-                  )}
-
-                  <div className="min-w-0">
-
-                    <p
-                      className={`text-xs sm:text-sm font-semibold leading-relaxed ${
-                        goal.done
-                          ? 'text-slate-400 dark:text-slate-500 line-through'
-                          : 'text-slate-700 dark:text-slate-300'
-                      }`}
-                    >
-                      {goal.text}
-                    </p>
-
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      {goal.done ? 'Earned +10 XP' : 'Incomplete'}
-                    </p>
-
-                  </div>
-
-                </div>
-
-              ))}
-
-            </div>
-
-          </Card>
-
-        </section>
-
-
-        {/* ================================================================
-            RECENT QUIZ + BADGES
-        ================================================================= */}
-
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6">
-
-          {/* --------------------------------------------------------------
-              RECENT QUIZ ATTEMPTS
-          -------------------------------------------------------------- */}
-
-          <Card
-            className="lg:col-span-2 min-w-0 overflow-hidden"
-            title="Recent Quiz Attempts"
-            subtitle="Check score details and solutions"
-          >
-
-            <div className="mt-4 space-y-3">
-
-              {results.slice(0, 3).map((result) => (
-
+        {/* =================================================
+            RECENT RESULTS
+        ================================================= */}
+
+        <DashboardPanel
+          title="Recent Quiz Attempts"
+          subtitle="Review your latest performance"
+        >
+          <div className="mt-4 space-y-3">
+
+            {results
+              .slice(0, 3)
+              .map((result) => (
                 <div
                   key={result._id}
-                  className="rounded-xl sm:rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 border border-slate-100 dark:border-slate-800/40 p-3 sm:p-4"
+                  className="
+                    flex
+                    flex-col
+                    gap-3
+                    rounded-2xl
+                    border
+                    border-slate-800
+                    bg-slate-950/35
+                    p-4
+                    sm:flex-row
+                    sm:items-center
+                    sm:justify-between
+                  "
                 >
 
-                  {/* Mobile and desktop layout */}
-
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-
-                    {/* Quiz information */}
-
-                    <div className="flex items-center gap-3 min-w-0">
-
-                      <div
-                        className={`p-2.5 rounded-xl shrink-0 ${
-                          result.isPassed
-                            ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-500'
-                            : 'bg-red-50 dark:bg-red-950/20 text-red-500'
-                        }`}
-                      >
-
-                        <CheckCircle className="w-5 h-5" />
-
-                      </div>
-
-
-                      <div className="min-w-0">
-
-                        <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-white truncate">
-                          {result.test?.title || 'Laws of Motion Quiz'}
-                        </h4>
-
-                        <p className="text-[10px] text-slate-400 mt-0.5 capitalize">
-                          {result.test?.type || 'Quiz'} • Scorecard
-                        </p>
-
-                      </div>
-
-                    </div>
-
-
-                    {/* Score + review */}
-
-                    <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
-
-                      <div className="text-left sm:text-right">
-
-                        <p
-                          className={`text-sm font-extrabold ${
-                            result.isPassed
-                              ? 'text-emerald-500'
-                              : 'text-rose-500'
-                          }`}
-                        >
-                          {result.percentage}%
-                        </p>
-
-                        <p className="text-[9px] text-slate-400">
-                          {result.correctAnswers}/{result.totalQuestions} Correct
-                        </p>
-
-                      </div>
-
-
-                      <Link
-                        to={`/results/${result._id}`}
-                        className="shrink-0"
-                      >
-                        <Button
-                          variant="secondary"
-                          className="px-3 py-1.5 text-xs whitespace-nowrap"
-                        >
-                          Review
-                        </Button>
-                      </Link>
-
-                    </div>
-
-                  </div>
-
-                </div>
-
-              ))}
-
-
-              {/* No results */}
-
-              {results.length === 0 && (
-
-                <div className="text-center py-8 sm:py-10 px-4">
-
-                  <HelpCircle className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    No assessments taken yet.
-                  </p>
-
-                  <Link
-                    to="/assessments"
-                    className="text-xs text-primary-500 font-bold mt-2 inline-block hover:underline"
+                  <div
+                    className="
+                      flex
+                      min-w-0
+                      items-center
+                      gap-3
+                    "
                   >
-                    Take a practice quiz now
-                  </Link>
+                    <div
+                      className="
+                        flex
+                        h-10
+                        w-10
+                        shrink-0
+                        items-center
+                        justify-center
+                        rounded-xl
+                        bg-sky-500/10
+                      "
+                    >
+                      <GraduationCap
+                        className="
+                          h-5
+                          w-5
+                          text-sky-400
+                        "
+                      />
+                    </div>
 
-                </div>
+                    <div className="min-w-0">
 
-              )}
+                      <p
+                        className="
+                          truncate
+                          text-sm
+                          font-bold
+                          text-white
+                        "
+                      >
+                        {result.test?.title ||
+                          'Chapter Quiz'}
+                      </p>
 
-            </div>
+                      <p
+                        className="
+                          mt-0.5
+                          text-[10px]
+                          text-slate-500
+                        "
+                      >
+                        {result.correctAnswers ||
+                          0}{' '}
+                        /{' '}
+                        {result.totalQuestions ||
+                          0}{' '}
+                        correct
+                      </p>
 
-          </Card>
-
-
-          {/* --------------------------------------------------------------
-              BADGES
-          -------------------------------------------------------------- */}
-
-          <Card
-            className="min-w-0"
-            title="Achievement Badges"
-            subtitle="Show off your learning accomplishments"
-          >
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-2 sm:gap-3 mt-4">
-
-              {profile?.badges?.map((badge, idx) => (
-
-                <div
-                  key={idx}
-                  className="flex flex-col items-center text-center p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 border border-slate-100 dark:border-slate-800/40 min-w-0"
-                  title={
-                    badge.earnedAt
-                      ? `Earned on ${new Date(
-                          badge.earnedAt
-                        ).toLocaleDateString()}`
-                      : badge.name
-                  }
-                >
-
-                  <div className="p-2.5 sm:p-3 rounded-full bg-primary-50 dark:bg-primary-950/30 text-primary-500 mb-2">
-
-                    <Award className="w-4 h-4 sm:w-5 sm:h-5 fill-primary-400" />
-
+                    </div>
                   </div>
 
-                  <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-700 dark:text-slate-300 line-clamp-2 break-words w-full">
-                    {badge.name}
-                  </p>
+                  <div
+                    className="
+                      flex
+                      items-center
+                      justify-between
+                      gap-4
+                      sm:justify-end
+                    "
+                  >
+                    <p
+                      className={`
+                        text-lg
+                        font-black
+                        ${
+                          result.isPassed
+                            ? 'text-emerald-400'
+                            : 'text-rose-400'
+                        }
+                      `}
+                    >
+                      {result.percentage || 0}%
+                    </p>
+
+                    <Link
+                      to={`/results/${result._id}`}
+                    >
+                      <button
+                        type="button"
+                        className="
+                          rounded-lg
+                          border
+                          border-slate-700
+                          px-3
+                          py-2
+                          text-xs
+                          font-bold
+                          text-slate-300
+                          transition
+                          hover:border-sky-500
+                          hover:text-white
+                        "
+                      >
+                        Review
+                      </button>
+                    </Link>
+                  </div>
 
                 </div>
-
               ))}
 
+            {results.length === 0 && (
+              <div
+                className="
+                  py-10
+                  text-center
+                "
+              >
+                <Trophy
+                  className="
+                    mx-auto
+                    h-9
+                    w-9
+                    text-slate-700
+                  "
+                />
 
-              {(!profile?.badges || profile.badges.length === 0) && (
+                <p
+                  className="
+                    mt-3
+                    text-sm
+                    text-slate-500
+                  "
+                >
+                  No assessments taken yet.
+                </p>
 
-                <div className="col-span-full text-center py-6 px-3">
+                <Link
+                  to="/assessments"
+                  className="
+                    mt-3
+                    inline-flex
+                    items-center
+                    gap-1
+                    text-xs
+                    font-bold
+                    text-sky-400
+                    hover:underline
+                  "
+                >
+                  Take your first quiz
 
-                  <div className="w-12 h-12 rounded-full bg-primary-500/10 flex items-center justify-center mx-auto mb-3">
-
-                    <Award className="w-6 h-6 text-primary-500" />
-
-                  </div>
-
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Lock-in streaks to win your first badge!
-                  </p>
-
-                </div>
-
-              )}
-
-            </div>
-
-          </Card>
-
-        </section>
-
-
-        {/* ================================================================
-            QUICK ACTIONS
-        ================================================================= */}
-
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-
-          <Link
-            to="/assessments"
-            className="group"
-          >
-
-            <div className="h-full p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/40 hover:border-primary-500 hover:bg-primary-500/5 transition-all">
-
-              <div className="flex items-center justify-between gap-3">
-
-                <div className="min-w-0">
-
-                  <p className="text-sm font-bold text-slate-900 dark:text-white">
-                    Practice Tests
-                  </p>
-
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Test your preparation
-                  </p>
-
-                </div>
-
-                <ArrowRight className="w-5 h-5 text-slate-400 group-hover:text-primary-500 group-hover:translate-x-1 transition-all shrink-0" />
-
+                  <ArrowRight
+                    className="
+                      h-3
+                      w-3
+                    "
+                  />
+                </Link>
               </div>
+            )}
 
-            </div>
-
-          </Link>
-
-
-          <Link
-            to="/notes"
-            className="group"
-          >
-
-            <div className="h-full p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/40 hover:border-primary-500 hover:bg-primary-500/5 transition-all">
-
-              <div className="flex items-center justify-between gap-3">
-
-                <div className="min-w-0">
-
-                  <p className="text-sm font-bold text-slate-900 dark:text-white">
-                    Study Notes
-                  </p>
-
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Revise your chapters
-                  </p>
-
-                </div>
-
-                <ArrowRight className="w-5 h-5 text-slate-400 group-hover:text-primary-500 group-hover:translate-x-1 transition-all shrink-0" />
-
-              </div>
-
-            </div>
-
-          </Link>
-
-
-          <Link
-            to="/results"
-            className="group sm:col-span-2 lg:col-span-1"
-          >
-
-            <div className="h-full p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/40 hover:border-primary-500 hover:bg-primary-500/5 transition-all">
-
-              <div className="flex items-center justify-between gap-3">
-
-                <div className="min-w-0">
-
-                  <p className="text-sm font-bold text-slate-900 dark:text-white">
-                    My Results
-                  </p>
-
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    View your performance
-                  </p>
-
-                </div>
-
-                <ArrowRight className="w-5 h-5 text-slate-400 group-hover:text-primary-500 group-hover:translate-x-1 transition-all shrink-0" />
-
-              </div>
-
-            </div>
-
-          </Link>
-
-        </section>
+          </div>
+        </DashboardPanel>
 
       </div>
     </div>
+  );
+}
+
+// =====================================================
+// PANEL
+// =====================================================
+
+function DashboardPanel({
+  title,
+  subtitle,
+  children,
+  className = ''
+}) {
+  return (
+    <div
+      className={`
+        rounded-[24px]
+        border
+        border-slate-800
+        bg-[#081326]/90
+        p-5
+        shadow-[0_20px_60px_rgba(0,0,0,0.20)]
+        backdrop-blur-xl
+        sm:p-6
+        ${className}
+      `}
+    >
+      <h2
+        className="
+          text-base
+          font-black
+          text-white
+          sm:text-lg
+        "
+      >
+        {title}
+      </h2>
+
+      {subtitle && (
+        <p
+          className="
+            mt-1
+            text-[10px]
+            text-slate-500
+            sm:text-xs
+          "
+        >
+          {subtitle}
+        </p>
+      )}
+
+      {children}
+    </div>
+  );
+}
+
+// =====================================================
+// METRIC CARD
+// =====================================================
+
+function MetricCard({
+  icon: Icon,
+  value,
+  label,
+  subtext,
+  iconClass,
+  iconBg
+}) {
+  return (
+    <div
+      className="
+        rounded-[22px]
+        border
+        border-slate-800
+        bg-[#081326]/90
+        p-4
+        shadow-xl
+        backdrop-blur-xl
+        sm:p-5
+      "
+    >
+      <div
+        className="
+          flex
+          items-center
+          gap-3
+          sm:gap-4
+        "
+      >
+        <div
+          className={`
+            flex
+            h-11
+            w-11
+            shrink-0
+            items-center
+            justify-center
+            rounded-xl
+            ${iconBg}
+          `}
+        >
+          <Icon
+            className={`
+              h-5
+              w-5
+              ${iconClass}
+            `}
+          />
+        </div>
+
+        <div className="min-w-0">
+
+          <p
+            className="
+              text-xl
+              font-black
+              text-white
+              sm:text-2xl
+            "
+          >
+            {value}
+          </p>
+
+          <p
+            className="
+              text-[9px]
+              font-bold
+              uppercase
+              tracking-wider
+              text-slate-500
+            "
+          >
+            {label}
+          </p>
+
+          <p
+            className="
+              mt-1
+              hidden
+              text-[9px]
+              text-slate-600
+              sm:block
+            "
+          >
+            {subtext}
+          </p>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// QUICK ACTION
+// =====================================================
+
+function QuickAction({
+  to,
+  icon: Icon,
+  title,
+  desc,
+  color,
+  background
+}) {
+  return (
+    <Link
+      to={to}
+      className="
+        group
+        min-w-0
+      "
+    >
+      <div
+        className="
+          h-full
+          rounded-2xl
+          border
+          border-slate-800
+          bg-slate-950/35
+          p-4
+          transition
+          duration-200
+          hover:-translate-y-1
+          hover:border-sky-500/40
+          hover:bg-sky-500/[0.04]
+        "
+      >
+        <div
+          className={`
+            flex
+            h-10
+            w-10
+            items-center
+            justify-center
+            rounded-xl
+            ${background}
+          `}
+        >
+          <Icon
+            className={`
+              h-5
+              w-5
+              ${color}
+            `}
+          />
+        </div>
+
+        <p
+          className="
+            mt-4
+            text-sm
+            font-bold
+            text-white
+          "
+        >
+          {title}
+        </p>
+
+        <p
+          className="
+            mt-1
+            text-[10px]
+            text-slate-500
+          "
+        >
+          {desc}
+        </p>
+
+        <ArrowRight
+          className="
+            mt-4
+            h-4
+            w-4
+            text-slate-600
+            transition
+            group-hover:translate-x-1
+            group-hover:text-sky-400
+          "
+        />
+      </div>
+    </Link>
+  );
+}
+
+// =====================================================
+// SUBJECT PROGRESS
+// =====================================================
+
+function SubjectProgress({
+  subject,
+  value
+}) {
+  return (
+    <div>
+      <div
+        className="
+          mb-2
+          flex
+          items-center
+          justify-between
+          gap-3
+        "
+      >
+        <p
+          className="
+            text-xs
+            font-bold
+            text-slate-300
+          "
+        >
+          {subject}
+        </p>
+
+        <p
+          className="
+            text-xs
+            font-bold
+            text-slate-500
+          "
+        >
+          {value}%
+        </p>
+      </div>
+
+      <div
+        className="
+          h-1.5
+          overflow-hidden
+          rounded-full
+          bg-slate-800
+        "
+      >
+        <div
+          className="
+            h-full
+            rounded-full
+            bg-gradient-to-r
+            from-sky-500
+            to-violet-500
+          "
+          style={{
+            width:
+              `${value}%`
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// HERO SMALL CARD
+// =====================================================
+
+function MiniHeroCard({
+  icon: Icon,
+  label,
+  value
+}) {
+  return (
+    <div
+      className="
+        rounded-2xl
+        border
+        border-slate-800
+        bg-slate-900/70
+        p-3
+      "
+    >
+      <Icon
+        className="
+          h-4
+          w-4
+          text-sky-400
+        "
+      />
+
+      <p
+        className="
+          mt-3
+          text-sm
+          font-black
+          text-white
+        "
+      >
+        {value}
+      </p>
+
+      <p
+        className="
+          mt-0.5
+          text-[9px]
+          uppercase
+          tracking-wider
+          text-slate-500
+        "
+      >
+        {label}
+      </p>
+    </div>
+  );
+}
+
+// =====================================================
+// SMALL TREND ICON
+// =====================================================
+
+function TrendingIcon(props) {
+  return (
+    <Zap {...props} />
   );
 }
