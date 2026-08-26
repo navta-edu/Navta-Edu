@@ -157,12 +157,17 @@ const emptyForm = {
   classLevel: "",
   chapter: "",
   difficulty: "",
+  questionType: "mcq",
   question: "",
   optionA: "",
   optionB: "",
   optionC: "",
   optionD: "",
   correctAnswer: "",
+  modelAnswer: "",
+  keyPoints: "",
+  maxMarks: "",
+  evaluationInstructions: "",
   explanation: "",
 };
 
@@ -202,6 +207,23 @@ export default function AdminNavtaTest() {
     }));
   };
 
+  const handleExamChange = (value) => {
+    setForm((previous) => ({
+      ...previous,
+      exam: value,
+      questionType: value === "Boards" ? "mcq" : "mcq",
+      optionA: "",
+      optionB: "",
+      optionC: "",
+      optionD: "",
+      correctAnswer: "",
+      modelAnswer: "",
+      keyPoints: "",
+      maxMarks: "",
+      evaluationInstructions: "",
+    }));
+  };
+
   const availableExams = form.subject
     ? SUBJECT_EXAMS[form.subject] || []
     : [];
@@ -236,17 +258,56 @@ export default function AdminNavtaTest() {
             classLevel: form.classLevel,
             chapter: form.chapter,
             difficulty: form.difficulty,
+            questionType:
+              form.exam === "Boards"
+                ? form.questionType
+                : "mcq",
 
             question: form.question.trim(),
 
-            options: [
-              form.optionA.trim(),
-              form.optionB.trim(),
-              form.optionC.trim(),
-              form.optionD.trim(),
-            ],
+            options:
+              form.exam !== "Boards" ||
+              form.questionType === "mcq"
+                ? [
+                    form.optionA.trim(),
+                    form.optionB.trim(),
+                    form.optionC.trim(),
+                    form.optionD.trim(),
+                  ]
+                : [],
 
-            correctAnswer: Number(form.correctAnswer),
+            correctAnswer:
+              form.exam !== "Boards" ||
+              form.questionType === "mcq"
+                ? Number(form.correctAnswer)
+                : undefined,
+
+            modelAnswer:
+              form.exam === "Boards" &&
+              form.questionType !== "mcq"
+                ? form.modelAnswer.trim()
+                : "",
+
+            keyPoints:
+              form.exam === "Boards" &&
+              form.questionType !== "mcq"
+                ? form.keyPoints
+                    .split("\n")
+                    .map((item) => item.trim())
+                    .filter(Boolean)
+                : [],
+
+            maxMarks:
+              form.exam === "Boards" &&
+              form.questionType !== "mcq"
+                ? Number(form.maxMarks)
+                : undefined,
+
+            evaluationInstructions:
+              form.exam === "Boards" &&
+              form.questionType !== "mcq"
+                ? form.evaluationInstructions.trim()
+                : "",
 
             explanation: form.explanation.trim(),
           }),
@@ -490,10 +551,10 @@ export default function AdminNavtaTest() {
           </p>
 
           <div className="admin-navta-info">
-            Select Subject → Preparation → Class → Chapter → Difficulty,
-            then add the question and its explanation. The explanation is
-            stored with the question but is shown to the student only when
-            the student answers that question incorrectly.
+            Select Subject → Preparation → Class → Chapter → Difficulty.
+            For Boards, you can then choose MCQ, Short Answer or Long Answer.
+            MCQ uses 1 minute/question, Short Answer uses 3 minutes/question,
+            and Long Answer uses 6 minutes/question.
           </div>
 
           <div className="admin-navta-test-card">
@@ -549,8 +610,7 @@ export default function AdminNavtaTest() {
                       className="admin-navta-select"
                       value={form.exam}
                       onChange={(e) =>
-                        updateField(
-                          "exam",
+                        handleExamChange(
                           e.target.value
                         )
                       }
@@ -671,6 +731,36 @@ export default function AdminNavtaTest() {
                     </select>
                   </div>
 
+                  {form.exam === "Boards" && (
+                    <div className="admin-navta-field full">
+                      <label className="admin-navta-label">
+                        Question Type
+                      </label>
+
+                      <select
+                        className="admin-navta-select"
+                        value={form.questionType}
+                        onChange={(e) =>
+                          updateField(
+                            "questionType",
+                            e.target.value
+                          )
+                        }
+                        required
+                      >
+                        <option value="mcq">
+                          MCQ / Option — 1 min per question
+                        </option>
+                        <option value="short">
+                          Short Answer — 3 min per question
+                        </option>
+                        <option value="long">
+                          Long Answer — 6 min per question
+                        </option>
+                      </select>
+                    </div>
+                  )}
+
                 </div>
               </div>
 
@@ -701,128 +791,224 @@ export default function AdminNavtaTest() {
                     />
                   </div>
 
-                  <div className="admin-navta-field">
-                    <label className="admin-navta-label">
-                      Option A
-                    </label>
+                  {(form.exam !== "Boards" ||
+                    form.questionType === "mcq") && (
+                    <>
+                      <div className="admin-navta-field">
+                        <label className="admin-navta-label">
+                          Option A
+                        </label>
 
-                    <input
-                      className="admin-navta-input"
-                      placeholder="Enter Option A"
-                      value={form.optionA}
-                      onChange={(e) =>
-                        updateField(
-                          "optionA",
-                          e.target.value
-                        )
-                      }
-                      required
-                    />
-                  </div>
+                        <input
+                          className="admin-navta-input"
+                          placeholder="Enter Option A"
+                          value={form.optionA}
+                          onChange={(e) =>
+                            updateField(
+                              "optionA",
+                              e.target.value
+                            )
+                          }
+                          required
+                        />
+                      </div>
 
-                  <div className="admin-navta-field">
-                    <label className="admin-navta-label">
-                      Option B
-                    </label>
+                      <div className="admin-navta-field">
+                        <label className="admin-navta-label">
+                          Option B
+                        </label>
 
-                    <input
-                      className="admin-navta-input"
-                      placeholder="Enter Option B"
-                      value={form.optionB}
-                      onChange={(e) =>
-                        updateField(
-                          "optionB",
-                          e.target.value
-                        )
-                      }
-                      required
-                    />
-                  </div>
+                        <input
+                          className="admin-navta-input"
+                          placeholder="Enter Option B"
+                          value={form.optionB}
+                          onChange={(e) =>
+                            updateField(
+                              "optionB",
+                              e.target.value
+                            )
+                          }
+                          required
+                        />
+                      </div>
 
-                  <div className="admin-navta-field">
-                    <label className="admin-navta-label">
-                      Option C
-                    </label>
+                      <div className="admin-navta-field">
+                        <label className="admin-navta-label">
+                          Option C
+                        </label>
 
-                    <input
-                      className="admin-navta-input"
-                      placeholder="Enter Option C"
-                      value={form.optionC}
-                      onChange={(e) =>
-                        updateField(
-                          "optionC",
-                          e.target.value
-                        )
-                      }
-                      required
-                    />
-                  </div>
+                        <input
+                          className="admin-navta-input"
+                          placeholder="Enter Option C"
+                          value={form.optionC}
+                          onChange={(e) =>
+                            updateField(
+                              "optionC",
+                              e.target.value
+                            )
+                          }
+                          required
+                        />
+                      </div>
 
-                  <div className="admin-navta-field">
-                    <label className="admin-navta-label">
-                      Option D
-                    </label>
+                      <div className="admin-navta-field">
+                        <label className="admin-navta-label">
+                          Option D
+                        </label>
 
-                    <input
-                      className="admin-navta-input"
-                      placeholder="Enter Option D"
-                      value={form.optionD}
-                      onChange={(e) =>
-                        updateField(
-                          "optionD",
-                          e.target.value
-                        )
-                      }
-                      required
-                    />
-                  </div>
+                        <input
+                          className="admin-navta-input"
+                          placeholder="Enter Option D"
+                          value={form.optionD}
+                          onChange={(e) =>
+                            updateField(
+                              "optionD",
+                              e.target.value
+                            )
+                          }
+                          required
+                        />
+                      </div>
+
+                      <div className="admin-navta-field full">
+                        <label className="admin-navta-label">
+                          Correct Answer
+                        </label>
+
+                        <select
+                          className="admin-navta-select"
+                          value={form.correctAnswer}
+                          onChange={(e) =>
+                            updateField(
+                              "correctAnswer",
+                              e.target.value
+                            )
+                          }
+                          required
+                        >
+                          <option value="">
+                            Select Correct Answer
+                          </option>
+
+                          <option value="0">
+                            Option A
+                          </option>
+
+                          <option value="1">
+                            Option B
+                          </option>
+
+                          <option value="2">
+                            Option C
+                          </option>
+
+                          <option value="3">
+                            Option D
+                          </option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+
+                  {form.exam === "Boards" &&
+                    form.questionType !== "mcq" && (
+                      <>
+                        <div className="admin-navta-field full">
+                          <label className="admin-navta-label">
+                            Model Answer
+                          </label>
+
+                          <textarea
+                            className="admin-navta-textarea"
+                            placeholder="Enter the model / ideal answer"
+                            value={form.modelAnswer}
+                            onChange={(e) =>
+                              updateField(
+                                "modelAnswer",
+                                e.target.value
+                              )
+                            }
+                            required
+                          />
+                        </div>
+
+                        <div className="admin-navta-field full">
+                          <label className="admin-navta-label">
+                            Key Points
+                          </label>
+
+                          <textarea
+                            className="admin-navta-textarea"
+                            placeholder={
+                              "Enter one key point per line\nExample:\nDefinition\nFormula\nCorrect unit"
+                            }
+                            value={form.keyPoints}
+                            onChange={(e) =>
+                              updateField(
+                                "keyPoints",
+                                e.target.value
+                              )
+                            }
+                            required
+                          />
+                        </div>
+
+                        <div className="admin-navta-field">
+                          <label className="admin-navta-label">
+                            Maximum Marks
+                          </label>
+
+                          <input
+                            type="number"
+                            min="1"
+                            className="admin-navta-input"
+                            placeholder="e.g. 3 or 5"
+                            value={form.maxMarks}
+                            onChange={(e) =>
+                              updateField(
+                                "maxMarks",
+                                e.target.value
+                              )
+                            }
+                            required
+                          />
+                        </div>
+
+                        <div className="admin-navta-field">
+                          <label className="admin-navta-label">
+                            Evaluation Instructions
+                          </label>
+
+                          <input
+                            className="admin-navta-input"
+                            placeholder="Optional AI marking guidance"
+                            value={
+                              form.evaluationInstructions
+                            }
+                            onChange={(e) =>
+                              updateField(
+                                "evaluationInstructions",
+                                e.target.value
+                              )
+                            }
+                          />
+                        </div>
+                      </>
+                    )}
 
                   <div className="admin-navta-field full">
                     <label className="admin-navta-label">
-                      Correct Answer
-                    </label>
-
-                    <select
-                      className="admin-navta-select"
-                      value={form.correctAnswer}
-                      onChange={(e) =>
-                        updateField(
-                          "correctAnswer",
-                          e.target.value
-                        )
-                      }
-                      required
-                    >
-                      <option value="">
-                        Select Correct Answer
-                      </option>
-
-                      <option value="0">
-                        Option A
-                      </option>
-
-                      <option value="1">
-                        Option B
-                      </option>
-
-                      <option value="2">
-                        Option C
-                      </option>
-
-                      <option value="3">
-                        Option D
-                      </option>
-                    </select>
-                  </div>
-
-                  <div className="admin-navta-field full">
-                    <label className="admin-navta-label">
-                      Explanation
+                      Explanation / Feedback
                     </label>
 
                     <textarea
                       className="admin-navta-textarea admin-navta-explanation"
-                      placeholder="Enter explanation — shown to the student only after a wrong answer"
+                      placeholder={
+                        form.exam === "Boards" &&
+                        form.questionType !== "mcq"
+                          ? "Feedback shown after AI evaluation"
+                          : "Shown to the student only after a wrong MCQ answer"
+                      }
                       value={form.explanation}
                       onChange={(e) =>
                         updateField(
