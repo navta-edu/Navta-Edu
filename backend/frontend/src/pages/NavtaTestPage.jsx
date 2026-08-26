@@ -65,6 +65,33 @@ const PREPARATION_OPTIONS = {
   },
 };
 
+
+const TEST_CONFIG = {
+  NEET: {
+    minutesPerQuestion: 1,
+    durations: [10, 15, 20, 30, 45, 60],
+  },
+  JEE: {
+    minutesPerQuestion: 2,
+    durations: [10, 20, 30, 40, 60, 90],
+  },
+};
+
+const DIFFICULTY_INFO = {
+  Easy: {
+    icon: "🌱",
+    description: "Build your fundamentals",
+  },
+  Medium: {
+    icon: "⚡",
+    description: "Exam-level practice",
+  },
+  Hard: {
+    icon: "🔥",
+    description: "Advanced questions",
+  },
+};
+
 const BIOLOGY_CLASSES = {
   "Class 11": [
     "The Living World",
@@ -383,6 +410,18 @@ function getQuestions(subject, chapter, difficulty) {
   ];
 }
 
+function shuffleQuestions(items) {
+  return [...items].sort(() => Math.random() - 0.5);
+}
+
+function getQuestionCount(preparation, duration) {
+  const config = TEST_CONFIG[preparation];
+
+  if (!config || !duration) return 0;
+
+  return Math.floor(duration / config.minutesPerQuestion);
+}
+
 export default function NavtaTestPage() {
   const [step, setStep] = useState("subject");
   const [subject, setSubject] = useState("");
@@ -390,19 +429,35 @@ export default function NavtaTestPage() {
   const [biologyClass, setBiologyClass] = useState("");
   const [chapter, setChapter] = useState("");
   const [difficulty, setDifficulty] = useState("");
+  const [selectedDuration, setSelectedDuration] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(30 * 60);
   const [submitted, setSubmitted] = useState(false);
 
+  const requestedQuestionCount = useMemo(() => {
+    return getQuestionCount(preparation, selectedDuration);
+  }, [preparation, selectedDuration]);
+
+  const isTimedCompetitiveTest =
+    preparation === "NEET" || preparation === "JEE";
+
   const startTest = () => {
-    const testQuestions = getQuestions(subject, chapter, difficulty);
+    const questionPool = getQuestions(subject, chapter, difficulty);
+
+    const testQuestions = isTimedCompetitiveTest
+      ? shuffleQuestions(questionPool).slice(0, requestedQuestionCount)
+      : shuffleQuestions(questionPool);
 
     setQuestions(testQuestions);
     setCurrentQuestion(0);
     setAnswers({});
-    setTimeLeft(30 * 60);
+    setTimeLeft(
+      isTimedCompetitiveTest && selectedDuration
+        ? selectedDuration * 60
+        : 30 * 60
+    );
     setSubmitted(false);
     setStep("test");
   };
@@ -452,6 +507,7 @@ export default function NavtaTestPage() {
     setBiologyClass("");
     setChapter("");
     setDifficulty("");
+    setSelectedDuration(null);
     setQuestions([]);
     setCurrentQuestion(0);
     setAnswers({});
@@ -464,6 +520,7 @@ export default function NavtaTestPage() {
     setBiologyClass("");
     setChapter("");
     setDifficulty("");
+    setSelectedDuration(null);
     setStep("preparation");
   };
 
@@ -473,12 +530,14 @@ export default function NavtaTestPage() {
     setBiologyClass("");
     setChapter("");
     setDifficulty("");
+    setSelectedDuration(null);
     setStep("subject");
   };
 
   const goToChapter = () => {
     setChapter("");
     setDifficulty("");
+    setSelectedDuration(null);
     setStep("chapter");
   };
 
@@ -557,6 +616,105 @@ export default function NavtaTestPage() {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
           gap: 20px;
+        }
+
+        .navta-duration-grid {
+          max-width: 900px;
+          margin: 30px auto;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 18px;
+        }
+
+        .navta-duration-card {
+          min-height: 120px;
+          padding: 22px;
+          border-radius: 16px;
+          border: 2px solid #334155;
+          background: #151d2d;
+          color: #ffffff;
+          cursor: pointer;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          transition: 0.2s ease;
+        }
+
+        .navta-duration-card:hover {
+          transform: translateY(-2px);
+          border-color: #0ea5e9;
+        }
+
+        .navta-duration-card.active {
+          border-color: #0ea5e9;
+          background: #102a43;
+          box-shadow: 0 0 0 1px #0ea5e9;
+        }
+
+        .navta-duration-time {
+          font-size: 20px;
+          font-weight: 800;
+        }
+
+        .navta-duration-questions {
+          color: #94a3b8;
+          font-size: 14px;
+        }
+
+        .navta-rule-banner {
+          max-width: 900px;
+          margin: 0 auto 10px;
+          padding: 14px 18px;
+          border: 1px solid #243047;
+          border-radius: 12px;
+          background: #111827;
+          color: #cbd5e1;
+          text-align: center;
+        }
+
+        .navta-summary-card {
+          max-width: 760px;
+          margin: 35px auto;
+          padding: 28px;
+          border-radius: 18px;
+          background: #151d2d;
+          border: 1px solid #243047;
+        }
+
+        .navta-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 14px;
+          margin-top: 20px;
+        }
+
+        .navta-summary-item {
+          padding: 14px;
+          border-radius: 12px;
+          background: #0f172a;
+          border: 1px solid #243047;
+        }
+
+        .navta-summary-label {
+          display: block;
+          color: #94a3b8;
+          font-size: 12px;
+          margin-bottom: 5px;
+        }
+
+        .navta-summary-value {
+          font-weight: 700;
+          color: #ffffff;
+        }
+
+        .navta-bank-note {
+          max-width: 760px;
+          margin: -20px auto 25px;
+          color: #fbbf24;
+          font-size: 13px;
+          text-align: center;
         }
 
         .navta-test-header {
@@ -648,6 +806,15 @@ export default function NavtaTestPage() {
             margin: 25px auto;
           }
 
+          .navta-duration-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+          }
+
+          .navta-summary-grid {
+            grid-template-columns: 1fr;
+          }
+
           .navta-test-header {
             flex-direction: column;
             align-items: stretch;
@@ -723,6 +890,10 @@ export default function NavtaTestPage() {
           .navta-timer {
             font-size: 20px !important;
           }
+
+          .navta-duration-grid {
+            grid-template-columns: 1fr;
+          }
         }
       `}</style>
 
@@ -756,6 +927,7 @@ export default function NavtaTestPage() {
                   setBiologyClass("");
                   setChapter("");
                   setDifficulty("");
+                  setSelectedDuration(null);
                   setStep("preparation");
                 }}
                 className="navta-subject-card"
@@ -808,6 +980,7 @@ export default function NavtaTestPage() {
                   key={key}
                   onClick={() => {
                     setPreparation(key);
+                    setSelectedDuration(null);
 
                     if (subject === "Biology") {
                       setBiologyClass("");
@@ -923,6 +1096,7 @@ export default function NavtaTestPage() {
                 onClick={() => {
                   setChapter(item);
                   setDifficulty("");
+                  setSelectedDuration(null);
                   setStep("difficulty");
                 }}
                 style={styles.chapterCard}
@@ -962,7 +1136,10 @@ export default function NavtaTestPage() {
             {["Easy", "Medium", "Hard"].map((level) => (
               <button
                 key={level}
-                onClick={() => setDifficulty(level)}
+                onClick={() => {
+                  setDifficulty(level);
+                  setSelectedDuration(null);
+                }}
                 style={{
                   ...styles.difficultyCard,
                   ...(difficulty === level
@@ -970,20 +1147,183 @@ export default function NavtaTestPage() {
                     : {}),
                 }}
               >
+                <div style={{ fontSize: "30px", marginBottom: "10px" }}>
+                  {DIFFICULTY_INFO[level].icon}
+                </div>
                 <h2>{level}</h2>
-                <p>30 minute test</p>
+                <p style={{ color: "#94a3b8", marginBottom: 0 }}>
+                  {DIFFICULTY_INFO[level].description}
+                </p>
               </button>
             ))}
           </div>
 
+          {difficulty && isTimedCompetitiveTest && (
+            <button
+              onClick={() => setStep("duration")}
+              style={styles.startButton}
+            >
+              Choose Test Duration →
+            </button>
+          )}
+
+          {difficulty && preparation === "Boards" && (
+            <button onClick={startTest} style={styles.startButton}>
+              Start Navta TEST →
+            </button>
+          )}
+        </div>
+      )}
+
+      {step === "duration" && isTimedCompetitiveTest && (
+        <div className="navta-test-page">
+          <div className="navta-header">
+            <div>
+              <h1 className="navta-title">Select Test Duration</h1>
+              <p className="navta-subtitle">
+                {subject} → {preparation} → {chapter} → {difficulty}
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                setSelectedDuration(null);
+                setStep("difficulty");
+              }}
+              className="navta-back-button"
+              style={styles.backButton}
+            >
+              ← Difficulty
+            </button>
+          </div>
+
+          <div className="navta-rule-banner">
+            {preparation === "NEET"
+              ? "NEET Mode • 1 minute allocated per question"
+              : "JEE Mode • 2 minutes allocated per question"}
+          </div>
+
+          <div className="navta-duration-grid">
+            {TEST_CONFIG[preparation].durations.map((duration) => {
+              const count = getQuestionCount(preparation, duration);
+
+              return (
+                <button
+                  key={duration}
+                  type="button"
+                  onClick={() => setSelectedDuration(duration)}
+                  className={`navta-duration-card${
+                    selectedDuration === duration ? " active" : ""
+                  }`}
+                >
+                  <span className="navta-duration-time">
+                    ⏱ {duration} Minutes
+                  </span>
+                  <span className="navta-duration-questions">
+                    {count} Questions
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           <button
-            disabled={!difficulty}
-            onClick={startTest}
+            disabled={!selectedDuration}
+            onClick={() => setStep("summary")}
             style={{
               ...styles.startButton,
-              opacity: difficulty ? 1 : 0.5,
+              opacity: selectedDuration ? 1 : 0.5,
             }}
           >
+            Review Test →
+          </button>
+        </div>
+      )}
+
+      {step === "summary" && isTimedCompetitiveTest && selectedDuration && (
+        <div className="navta-test-page">
+          <div className="navta-header">
+            <div>
+              <h1 className="navta-title">Test Summary</h1>
+              <p className="navta-subtitle">Check your test setup before starting.</p>
+            </div>
+
+            <button
+              onClick={() => setStep("duration")}
+              className="navta-back-button"
+              style={styles.backButton}
+            >
+              ← Duration
+            </button>
+          </div>
+
+          <div className="navta-summary-card">
+            <h2 style={{ marginTop: 0 }}>Navta TEST</h2>
+
+            <div className="navta-summary-grid">
+              <div className="navta-summary-item">
+                <span className="navta-summary-label">Subject</span>
+                <span className="navta-summary-value">{subject}</span>
+              </div>
+
+              <div className="navta-summary-item">
+                <span className="navta-summary-label">Preparation</span>
+                <span className="navta-summary-value">{preparation}</span>
+              </div>
+
+              {subject === "Biology" && (
+                <div className="navta-summary-item">
+                  <span className="navta-summary-label">Class</span>
+                  <span className="navta-summary-value">{biologyClass}</span>
+                </div>
+              )}
+
+              <div className="navta-summary-item">
+                <span className="navta-summary-label">Chapter</span>
+                <span className="navta-summary-value">{chapter}</span>
+              </div>
+
+              <div className="navta-summary-item">
+                <span className="navta-summary-label">Difficulty</span>
+                <span className="navta-summary-value">{difficulty}</span>
+              </div>
+
+              <div className="navta-summary-item">
+                <span className="navta-summary-label">Duration</span>
+                <span className="navta-summary-value">
+                  {selectedDuration} Minutes
+                </span>
+              </div>
+
+              <div className="navta-summary-item">
+                <span className="navta-summary-label">Questions</span>
+                <span className="navta-summary-value">
+                  {requestedQuestionCount} Questions
+                </span>
+              </div>
+
+              <div className="navta-summary-item">
+                <span className="navta-summary-label">Time Allocation</span>
+                <span className="navta-summary-value">
+                  {TEST_CONFIG[preparation].minutesPerQuestion} minute
+                  {TEST_CONFIG[preparation].minutesPerQuestion !== 1 ? "s" : ""}
+                  /question
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {getQuestions(subject, chapter, difficulty).length <
+            requestedQuestionCount && (
+            <p className="navta-bank-note">
+              Development note: this local question bank currently contains only{" "}
+              {getQuestions(subject, chapter, difficulty).length} matching question(s).
+              After the Admin Portal is connected, NAVTA will fetch the full requested
+              question count automatically.
+            </p>
+          )}
+
+          <button onClick={startTest} style={styles.startButton}>
             Start Navta TEST →
           </button>
         </div>
