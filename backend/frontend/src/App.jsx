@@ -13,18 +13,12 @@ import {
   useAuth
 } from './context/AuthContext';
 
-// =====================================================
-// LAYOUT & NAVIGATION
-// =====================================================
-
+// Layout & Navigation
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import Footer from './components/Footer';
 
-// =====================================================
-// PUBLIC PAGES
-// =====================================================
-
+// Public Pages
 import Home from './pages/Home';
 import About from './pages/About';
 import Login from './pages/Login';
@@ -32,19 +26,13 @@ import Signup from './pages/Signup';
 import Unauthorized from './pages/Unauthorized';
 import Onboarding from './pages/Onboarding';
 
-// =====================================================
-// PRIVATE PAGES
-// =====================================================
-
+// Private Pages
 import StudentDashboard from './pages/StudentDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
 import ExternalTeacherDashboard from './pages/ExternalTeacherDashboard';
-
 import AdminDashboard from './pages/AdminDashboard';
 import AdminNavtaTest from './pages/AdminNavtaTest';
-
 import NavtaTestPage from './pages/NavtaTestPage';
-
 import NotesPage from './pages/NotesPage';
 import PYQPage from './pages/PYQPage';
 import AssessmentPage from './pages/AssessmentPage';
@@ -85,17 +73,7 @@ function DashboardLayout() {
   if (loading) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-transparent">
-        <div
-          className="
-            h-8
-            w-8
-            animate-spin
-            rounded-full
-            border-4
-            border-primary-500
-            border-t-transparent
-          "
-        />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
       </div>
     );
   }
@@ -123,14 +101,7 @@ function DashboardLayout() {
   }
 
   return (
-    <div
-      className="
-        min-h-screen
-        flex
-        flex-col
-        bg-transparent
-      "
-    >
+    <div className="min-h-screen flex flex-col bg-transparent">
       <Navbar />
 
       <div
@@ -140,7 +111,7 @@ function DashboardLayout() {
           flex-col
           md:flex-row
           w-full
-          max-w-7xl
+          max-w-[1600px]
           mx-auto
           bg-transparent
         "
@@ -150,7 +121,10 @@ function DashboardLayout() {
         <main
           className="
             flex-1
-            p-6
+            p-3
+            sm:p-4
+            lg:p-5
+            xl:p-6
             overflow-x-hidden
             bg-transparent
           "
@@ -206,7 +180,7 @@ function RoleGuard({
 }
 
 // =====================================================
-// MAIN APP
+// APP
 // =====================================================
 
 export default function App() {
@@ -215,13 +189,8 @@ export default function App() {
       <Router>
         <Routes>
 
-          {/* =====================================================
-              PUBLIC ROUTES
-          ===================================================== */}
-
-          <Route
-            element={<PublicLayout />}
-          >
+          {/* PUBLIC */}
+          <Route element={<PublicLayout />}>
             <Route
               path="/"
               element={<Home />}
@@ -253,18 +222,10 @@ export default function App() {
             />
           </Route>
 
-          {/* =====================================================
-              SECURE DASHBOARD LAYOUT
-          ===================================================== */}
+          {/* SECURE */}
+          <Route element={<DashboardLayout />}>
 
-          <Route
-            element={<DashboardLayout />}
-          >
-
-            {/* =================================================
-                STUDENT ONLY
-            ================================================= */}
-
+            {/* STUDENT */}
             <Route
               element={
                 <RoleGuard
@@ -295,10 +256,7 @@ export default function App() {
               />
             </Route>
 
-            {/* =================================================
-                TEACHER ONLY
-            ================================================= */}
-
+            {/* TEACHER */}
             <Route
               element={
                 <RoleGuard
@@ -314,10 +272,7 @@ export default function App() {
               />
             </Route>
 
-            {/* =================================================
-                EXTERNAL TEACHER ONLY
-            ================================================= */}
-
+            {/* EXTERNAL TEACHER */}
             <Route
               element={
                 <RoleGuard
@@ -333,10 +288,7 @@ export default function App() {
               />
             </Route>
 
-            {/* =================================================
-                ADMIN ONLY
-            ================================================= */}
-
+            {/* ADMIN */}
             <Route
               element={
                 <RoleGuard
@@ -357,10 +309,7 @@ export default function App() {
               />
             </Route>
 
-            {/* =================================================
-                SHARED SECURE PAGES
-            ================================================= */}
-
+            {/* SHARED */}
             <Route
               element={
                 <RoleGuard
@@ -406,10 +355,7 @@ export default function App() {
 
           </Route>
 
-          {/* =====================================================
-              CATCH ALL
-          ===================================================== */}
-
+          {/* CATCH ALL */}
           <Route
             path="*"
             element={
