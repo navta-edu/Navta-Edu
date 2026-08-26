@@ -7,8 +7,11 @@ const Test = require('../models/Test');
 const Student = require('../models/Student');
 const Result = require('../models/Result');
 
-// IMPORTANT:
-// Same collection used by Admin Navta TEST
+// =====================================================
+// NAVTA TEST QUESTION BANK
+// SAME MODEL USED BY ADMIN NAVTA TEST
+// =====================================================
+
 const NavtaQuestion = require('../models/NavtaQuestion');
 
 // =====================================================
@@ -28,10 +31,9 @@ exports.createChapter = async (req, res) => {
       description
     } = req.body;
 
-    const subject =
-      await Subject.findById(
-        subjectId
-      );
+    const subject = await Subject.findById(
+      subjectId
+    );
 
     if (!subject) {
       return res.status(404).json({
@@ -40,13 +42,12 @@ exports.createChapter = async (req, res) => {
       });
     }
 
-    const chapter =
-      await Chapter.create({
-        subject: subjectId,
-        title,
-        chapterNumber,
-        description
-      });
+    const chapter = await Chapter.create({
+      subject: subjectId,
+      title,
+      chapterNumber,
+      description
+    });
 
     return res.status(201).json({
       success: true,
@@ -82,10 +83,9 @@ exports.createNote = async (req, res) => {
       pdfUrl
     } = req.body;
 
-    const chapter =
-      await Chapter.findById(
-        chapterId
-      );
+    const chapter = await Chapter.findById(
+      chapterId
+    );
 
     if (!chapter) {
       return res.status(404).json({
@@ -94,14 +94,13 @@ exports.createNote = async (req, res) => {
       });
     }
 
-    const note =
-      await Note.create({
-        chapter: chapterId,
-        title,
-        content,
-        pdfUrl,
-        uploadedBy: req.user.id
-      });
+    const note = await Note.create({
+      chapter: chapterId,
+      title,
+      content,
+      pdfUrl,
+      uploadedBy: req.user.id
+    });
 
     return res.status(201).json({
       success: true,
@@ -124,7 +123,7 @@ exports.createNote = async (req, res) => {
 // CREATE PYQ
 // =====================================================
 
-// @desc    Upload past year paper details
+// @desc    Upload past year paper
 // @route   POST /api/teacher/pyqs
 // @access  Private (Teacher/Admin)
 
@@ -139,17 +138,15 @@ exports.createPYQ = async (req, res) => {
       pdfUrl
     } = req.body;
 
-    const pyq =
-      await PYQ.create({
-        subject: subjectId,
-        chapter:
-          chapterId || null,
-        year,
-        examName,
-        title,
-        pdfUrl,
-        uploadedBy: req.user.id
-      });
+    const pyq = await PYQ.create({
+      subject: subjectId,
+      chapter: chapterId || null,
+      year,
+      examName,
+      title,
+      pdfUrl,
+      uploadedBy: req.user.id
+    });
 
     return res.status(201).json({
       success: true,
@@ -191,7 +188,7 @@ exports.createTest = async (req, res) => {
     } = req.body;
 
     if (
-      !questions ||
+      !Array.isArray(questions) ||
       questions.length === 0
     ) {
       return res.status(400).json({
@@ -201,78 +198,74 @@ exports.createTest = async (req, res) => {
       });
     }
 
-    // ==========================================
+    // =================================================
     // CREATE QUESTIONS
-    // ==========================================
+    // =================================================
 
     const questionIds = [];
 
     for (const q of questions) {
-      const question =
-        await Question.create({
-          subject: subjectId,
+      const question = await Question.create({
+        subject: subjectId,
 
-          chapter:
-            chapterId || null,
+        chapter:
+          chapterId || null,
 
-          questionType:
-            q.questionType ||
-            'mcq',
+        questionType:
+          q.questionType || 'mcq',
 
-          text: q.text,
+        text: q.text,
 
-          options:
-            q.options,
+        options:
+          q.options || [],
 
-          correctOption:
-            q.correctOption,
+        correctOption:
+          q.correctOption,
 
-          correctAnswer:
-            q.correctAnswer,
+        correctAnswer:
+          q.correctAnswer,
 
-          explanation:
-            q.explanation || '',
+        explanation:
+          q.explanation || '',
 
-          difficulty:
-            q.difficulty ||
-            'medium'
-        });
+        difficulty:
+          q.difficulty || 'medium'
+      });
 
       questionIds.push(
         question._id
       );
     }
 
-    // ==========================================
+    // =================================================
     // CREATE TEST
-    // ==========================================
+    // =================================================
 
-    const test =
-      await Test.create({
-        title,
-        description,
+    const test = await Test.create({
+      title,
+      description,
 
-        subject:
-          subjectId,
+      subject:
+        subjectId,
 
-        chapter:
-          chapterId || null,
+      chapter:
+        chapterId || null,
 
-        duration,
+      duration,
 
-        type:
-          type || 'Quiz',
+      type:
+        type || 'Quiz',
 
-        questions:
-          questionIds,
+      questions:
+        questionIds,
 
-        totalMarks:
-          totalMarks ||
-          questions.length * 10,
+      totalMarks:
+        totalMarks ||
+        questions.length * 10,
 
-        passingScore:
-          passingScore || 40
-      });
+      passingScore:
+        passingScore || 40
+    });
 
     return res.status(201).json({
       success: true,
@@ -299,155 +292,147 @@ exports.createTest = async (req, res) => {
 // @route   GET /api/teacher/student-metrics
 // @access  Private (Teacher/Admin)
 
-exports.getStudentMetrics =
-  async (req, res) => {
-    try {
-      const students =
-        await Student.find()
-          .populate(
-            'user',
-            'name email'
-          );
-
-      const results =
-        await Result.find()
-          .populate(
-            'user',
-            'name'
-          )
-          .populate(
-            'test',
-            'title type'
-          )
-          .sort({
-            createdAt: -1
-          });
-
-      const totalSubmissions =
-        results.length;
-
-      const passedCount =
-        results.filter(
-          (result) =>
-            result.isPassed
-        ).length;
-
-      const passPercentage =
-        totalSubmissions > 0
-          ? Math.round(
-              (
-                passedCount /
-                totalSubmissions
-              ) * 100
-            )
-          : 0;
-
-      return res.status(200).json({
-        success: true,
-
-        data: {
-          studentsCount:
-            students.length,
-
-          totalSubmissions,
-
-          passPercentage,
-
-          students:
-            students.map(
-              (student) => ({
-                id:
-                  student._id,
-
-                name:
-                  student.user
-                    ? student.user
-                        .name
-                    : 'Unknown',
-
-                email:
-                  student.user
-                    ? student.user
-                        .email
-                    : 'N/A',
-
-                xp:
-                  student.xp,
-
-                level:
-                  student.level,
-
-                badgesCount:
-                  Array.isArray(
-                    student.badges
-                  )
-                    ? student.badges
-                        .length
-                    : 0
-              })
-            ),
-
-          recentSubmissions:
-            results
-              .slice(0, 10)
-              .map(
-                (result) => ({
-                  id:
-                    result._id,
-
-                  studentName:
-                    result.user
-                      ? result.user
-                          .name
-                      : 'Unknown',
-
-                  testTitle:
-                    result.test
-                      ? result.test
-                          .title
-                      : 'Deleted Test',
-
-                  testType:
-                    result.test
-                      ? result.test
-                          .type
-                      : 'N/A',
-
-                  percentage:
-                    result.percentage,
-
-                  isPassed:
-                    result.isPassed,
-
-                  date:
-                    result.createdAt
-                      ? result.createdAt
-                          .toLocaleDateString()
-                      : ''
-                })
-              )
-        }
-      });
-    } catch (err) {
-      console.error(
-        'STUDENT METRICS ERROR:',
-        err
+exports.getStudentMetrics = async (
+  req,
+  res
+) => {
+  try {
+    const students = await Student.find()
+      .populate(
+        'user',
+        'name email'
       );
 
-      return res.status(500).json({
-        success: false,
-        message: err.message
+    const results = await Result.find()
+      .populate(
+        'user',
+        'name'
+      )
+      .populate(
+        'test',
+        'title type'
+      )
+      .sort({
+        createdAt: -1
       });
-    }
-  };
+
+    const totalSubmissions =
+      results.length;
+
+    const passedCount =
+      results.filter(
+        (result) =>
+          result.isPassed
+      ).length;
+
+    const passPercentage =
+      totalSubmissions > 0
+        ? Math.round(
+            (
+              passedCount /
+              totalSubmissions
+            ) * 100
+          )
+        : 0;
+
+    return res.status(200).json({
+      success: true,
+
+      data: {
+        studentsCount:
+          students.length,
+
+        totalSubmissions,
+
+        passPercentage,
+
+        students:
+          students.map(
+            (student) => ({
+              id:
+                student._id,
+
+              name:
+                student.user
+                  ? student.user.name
+                  : 'Unknown',
+
+              email:
+                student.user
+                  ? student.user.email
+                  : 'N/A',
+
+              xp:
+                student.xp,
+
+              level:
+                student.level,
+
+              badgesCount:
+                Array.isArray(
+                  student.badges
+                )
+                  ? student.badges.length
+                  : 0
+            })
+          ),
+
+        recentSubmissions:
+          results
+            .slice(0, 10)
+            .map(
+              (result) => ({
+                id:
+                  result._id,
+
+                studentName:
+                  result.user
+                    ? result.user.name
+                    : 'Unknown',
+
+                testTitle:
+                  result.test
+                    ? result.test.title
+                    : 'Deleted Test',
+
+                testType:
+                  result.test
+                    ? result.test.type
+                    : 'N/A',
+
+                percentage:
+                  result.percentage,
+
+                isPassed:
+                  result.isPassed,
+
+                date:
+                  result.createdAt
+                    ? result.createdAt.toLocaleDateString()
+                    : ''
+              })
+            )
+      }
+    });
+  } catch (err) {
+    console.error(
+      'STUDENT METRICS ERROR:',
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};
 
 // =====================================================
-// NAVTA QUESTION BANK
-// TEACHER / EDUCATOR
+// NAVTA TEST QUESTION BANK FOR PAPER BUILDER
 // =====================================================
 
 // @desc
-// Get questions uploaded by Admin in Navta TEST.
+// Get questions uploaded through Admin -> Navta TEST
 //
 // @route
 // GET /api/teacher/question-bank
@@ -455,201 +440,260 @@ exports.getStudentMetrics =
 // @access
 // Teacher / External Teacher / Admin
 
-exports.getQuestionBank =
-  async (req, res) => {
-    try {
-      const {
-        subject,
-        exam,
-        classLevel,
-        chapter,
-        difficulty,
-        questionType,
-        search
-      } = req.query;
+exports.getQuestionBank = async (
+  req,
+  res
+) => {
+  try {
+    const {
+      subject,
+      exam,
+      classLevel,
+      chapter,
+      difficulty,
+      questionType,
+      search
+    } = req.query;
 
-      // ==========================================
-      // BASE FILTER
-      // ==========================================
+    // =================================================
+    // BASE FILTER
+    // =================================================
 
-      const filter = {
-        isActive: true
+    const filter = {
+      isActive: true
+    };
+
+    // =================================================
+    // OPTIONAL FILTERS
+    // =================================================
+
+    if (subject) {
+      filter.subject =
+        subject;
+    }
+
+    if (exam) {
+      filter.exam =
+        exam;
+    }
+
+    if (classLevel) {
+      filter.classLevel =
+        classLevel;
+    }
+
+    if (chapter) {
+      filter.chapter =
+        chapter;
+    }
+
+    if (difficulty) {
+      filter.difficulty =
+        difficulty;
+    }
+
+    if (questionType) {
+      filter.questionType =
+        questionType;
+    }
+
+    // =================================================
+    // SEARCH QUESTION TEXT
+    // =================================================
+
+    if (
+      search &&
+      String(search).trim()
+    ) {
+      filter.question = {
+        $regex:
+          String(search).trim(),
+
+        $options: 'i'
       };
+    }
 
-      // ==========================================
-      // SUBJECT
-      // ==========================================
+    // =================================================
+    // FETCH FROM SAME COLLECTION AS NAVTA TEST
+    // =================================================
 
-      if (subject) {
-        filter.subject =
-          subject;
-      }
+    const questions =
+      await NavtaQuestion.find(
+        filter
+      )
+        .sort({
+          subject: 1,
+          exam: 1,
+          classLevel: 1,
+          chapter: 1,
+          difficulty: 1,
+          createdAt: -1
+        })
+        .lean();
 
-      // ==========================================
-      // EXAM
-      // ==========================================
+    // =================================================
+    // FORMAT FOR PAPER BUILDER
+    // =================================================
 
-      if (exam) {
-        filter.exam =
-          exam;
-      }
+    const formattedQuestions =
+      questions.map(
+        (question) => {
+          let type =
+            question.questionType ||
+            'mcq';
 
-      // ==========================================
-      // CLASS
-      // ==========================================
+          type = String(type)
+            .trim()
+            .toLowerCase();
 
-      if (classLevel) {
-        filter.classLevel =
-          classLevel;
-      }
+          if (
+            type ===
+              'short answer' ||
+            type ===
+              'short-answer' ||
+            type ===
+              'short_answer'
+          ) {
+            type = 'short';
+          }
 
-      // ==========================================
-      // CHAPTER
-      // ==========================================
+          if (
+            type ===
+              'long answer' ||
+            type ===
+              'long-answer' ||
+            type ===
+              'long_answer'
+          ) {
+            type = 'long';
+          }
 
-      if (chapter) {
-        filter.chapter =
-          chapter;
-      }
+          if (
+            ![
+              'mcq',
+              'short',
+              'long'
+            ].includes(type)
+          ) {
+            type = 'mcq';
+          }
 
-      // ==========================================
-      // DIFFICULTY
-      // ==========================================
+          // ---------------------------------------------
+          // DEFAULT MARKS
+          // ---------------------------------------------
 
-      if (difficulty) {
-        filter.difficulty =
-          difficulty;
-      }
+          let defaultMarks =
+            Number(
+              question.maxMarks
+            );
 
-      // ==========================================
-      // QUESTION TYPE
-      // ==========================================
+          if (
+            !Number.isFinite(
+              defaultMarks
+            ) ||
+            defaultMarks <= 0
+          ) {
+            if (
+              type === 'long'
+            ) {
+              defaultMarks = 5;
+            } else if (
+              type === 'short'
+            ) {
+              defaultMarks = 3;
+            } else {
+              defaultMarks = 1;
+            }
+          }
 
-      if (questionType) {
-        filter.questionType =
-          questionType;
-      }
+          return {
+            _id:
+              question._id,
 
-      // ==========================================
-      // SEARCH QUESTION TEXT
-      // ==========================================
+            subject:
+              question.subject,
 
-      if (
-        search &&
-        String(search).trim()
-      ) {
-        filter.question = {
-          $regex:
-            String(
-              search
-            ).trim(),
+            exam:
+              question.exam,
 
-          $options: 'i'
-        };
-      }
+            classLevel:
+              question.classLevel,
 
-      // ==========================================
-      // GET NAVTA QUESTIONS
-      // ==========================================
+            chapter:
+              question.chapter,
 
-      const questions =
-        await NavtaQuestion
-          .find(filter)
-          .sort({
-            createdAt: -1
-          });
+            difficulty:
+              question.difficulty,
 
-      // ==========================================
-      // RESPONSE
-      // ==========================================
+            questionType:
+              type,
 
-      return res.status(200).json({
-        success: true,
+            question:
+              question.question,
 
-        count:
-          questions.length,
+            // ===========================================
+            // MCQ OPTIONS
+            // These are displayed in Paper Builder
+            // and printed in the student PDF.
+            // ===========================================
 
-        questions:
-          questions.map(
-            (question) => ({
-              _id:
-                question._id,
+            options:
+              Array.isArray(
+                question.options
+              )
+                ? question.options
+                : [],
 
-              subject:
-                question.subject,
+            // ===========================================
+            // MARKS
+            // ===========================================
 
-              exam:
-                question.exam,
+            maxMarks:
+              defaultMarks,
 
-              classLevel:
-                question.classLevel,
+            // ===========================================
+            // SOURCE
+            // ===========================================
 
-              chapter:
-                question.chapter,
+            source:
+              'NAVTA Admin Bank',
 
-              difficulty:
-                question.difficulty,
+            sourceType:
+              'navta-test',
 
-              questionType:
-                question.questionType,
-
-              question:
-                question.question,
-
-              options:
-                question.options ||
-                [],
-
-              correctAnswer:
-                question.correctAnswer,
-
-              explanation:
-                question.explanation ||
-                '',
-
-              modelAnswer:
-                question.modelAnswer ||
-                '',
-
-              keyPoints:
-                question.keyPoints ||
-                [],
-
-              maxMarks:
-                question.maxMarks ||
-                (
-                  question.questionType ===
-                  'mcq'
-                    ? 1
-                    : null
-                ),
-
-              evaluationInstructions:
-                question.evaluationInstructions ||
-                '',
-
-              source:
-                'NAVTA Admin Bank',
-
-              createdAt:
-                question.createdAt
-            })
-          )
-      });
-    } catch (err) {
-      console.error(
-        'TEACHER NAVTA QUESTION BANK ERROR:',
-        err
+            createdAt:
+              question.createdAt
+          };
+        }
       );
 
-      return res.status(500).json({
-        success: false,
+    // =================================================
+    // RESPONSE
+    // =================================================
 
-        message:
-          'Failed to load NAVTA question bank.',
+    return res.status(200).json({
+      success: true,
 
-        error:
-          err.message
-      });
-    }
-  };
+      count:
+        formattedQuestions.length,
+
+      questions:
+        formattedQuestions
+    });
+  } catch (error) {
+    console.error(
+      'GET NAVTA QUESTION BANK ERROR:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+
+      message:
+        'Failed to load Navta TEST question bank.',
+
+      error:
+        error.message
+    });
+  }
+};
