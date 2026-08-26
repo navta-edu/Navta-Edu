@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { adminAPI, contentAPI } from '../utils/api';
 import Card from '../components/Card';
@@ -69,6 +69,7 @@ export default function AdminDashboard() {
 
   const { user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
 
   /*
@@ -1513,6 +1514,13 @@ export default function AdminDashboard() {
             id: 'questions',
             label: 'Question Bank',
             icon: PlusSquare
+          },
+
+          {
+            id: 'navtaTest',
+            label: 'Navta TEST',
+            icon: Target,
+            isRoute: true
           }
 
         ].map(
@@ -1526,6 +1534,11 @@ export default function AdminDashboard() {
               <button
                 key={tab.id}
                 onClick={() => {
+                  if (tab.isRoute) {
+                    navigate('/admin/navta-test');
+                    return;
+                  }
+
                   window.location.hash =
                     tab.id;
                 }}
