@@ -60,8 +60,7 @@ import ResultDetail from './pages/ResultDetail';
 
 function PublicLayout() {
   return (
-    <div className="min-h-screen flex flex-col bg-transparent dark:bg-[#0B0F19]">
-
+    <div className="min-h-screen flex flex-col bg-transparent">
       <Navbar />
 
       <main className="flex-1 bg-transparent">
@@ -69,7 +68,6 @@ function PublicLayout() {
       </main>
 
       <Footer />
-
     </div>
   );
 }
@@ -79,20 +77,14 @@ function PublicLayout() {
 // =====================================================
 
 function DashboardLayout() {
-
   const {
     user,
     loading
   } = useAuth();
 
-  // ===================================================
-  // LOADING STATE
-  // ===================================================
-
   if (loading) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-transparent dark:bg-darkbg">
-
+      <div className="h-screen w-screen flex items-center justify-center bg-transparent">
         <div
           className="
             h-8
@@ -104,14 +96,9 @@ function DashboardLayout() {
             border-t-transparent
           "
         />
-
       </div>
     );
   }
-
-  // ===================================================
-  // USER NOT LOGGED IN
-  // ===================================================
 
   if (!user) {
     return (
@@ -121,10 +108,6 @@ function DashboardLayout() {
       />
     );
   }
-
-  // ===================================================
-  // PROFILE COMPLETION CHECK
-  // ===================================================
 
   if (
     !user.isProfileComplete &&
@@ -139,10 +122,6 @@ function DashboardLayout() {
     );
   }
 
-  // ===================================================
-  // DASHBOARD LAYOUT
-  // ===================================================
-
   return (
     <div
       className="
@@ -150,10 +129,8 @@ function DashboardLayout() {
         flex
         flex-col
         bg-transparent
-        dark:bg-[#0B0F19]
       "
     >
-
       <Navbar />
 
       <div
@@ -168,7 +145,6 @@ function DashboardLayout() {
           bg-transparent
         "
       >
-
         <Sidebar />
 
         <main
@@ -181,11 +157,9 @@ function DashboardLayout() {
         >
           <Outlet />
         </main>
-
       </div>
 
       <Footer />
-
     </div>
   );
 }
@@ -197,7 +171,6 @@ function DashboardLayout() {
 function RoleGuard({
   allowedRoles
 }) {
-
   const {
     user,
     loading
@@ -237,12 +210,9 @@ function RoleGuard({
 // =====================================================
 
 export default function App() {
-
   return (
     <AuthProvider>
-
       <Router>
-
         <Routes>
 
           {/* =====================================================
@@ -250,11 +220,8 @@ export default function App() {
           ===================================================== */}
 
           <Route
-            element={
-              <PublicLayout />
-            }
+            element={<PublicLayout />}
           >
-
             <Route
               path="/"
               element={<Home />}
@@ -284,7 +251,6 @@ export default function App() {
               path="/onboarding"
               element={<Onboarding />}
             />
-
           </Route>
 
           {/* =====================================================
@@ -292,9 +258,7 @@ export default function App() {
           ===================================================== */}
 
           <Route
-            element={
-              <DashboardLayout />
-            }
+            element={<DashboardLayout />}
           >
 
             {/* =================================================
@@ -310,35 +274,25 @@ export default function App() {
                 />
               }
             >
-
               <Route
                 path="/dashboard"
-                element={
-                  <StudentDashboard />
-                }
+                element={<StudentDashboard />}
               />
 
               <Route
                 path="/analytics"
-                element={
-                  <AnalyticsPage />
-                }
+                element={<AnalyticsPage />}
               />
 
               <Route
                 path="/rewards"
-                element={
-                  <RewardsPage />
-                }
+                element={<RewardsPage />}
               />
 
               <Route
                 path="/results/:resultId"
-                element={
-                  <ResultDetail />
-                }
+                element={<ResultDetail />}
               />
-
             </Route>
 
             {/* =================================================
@@ -354,14 +308,10 @@ export default function App() {
                 />
               }
             >
-
               <Route
                 path="/teacher"
-                element={
-                  <TeacherDashboard />
-                }
+                element={<TeacherDashboard />}
               />
-
             </Route>
 
             {/* =================================================
@@ -377,14 +327,10 @@ export default function App() {
                 />
               }
             >
-
               <Route
                 path="/external-teacher"
-                element={
-                  <ExternalTeacherDashboard />
-                }
+                element={<ExternalTeacherDashboard />}
               />
-
             </Route>
 
             {/* =================================================
@@ -400,21 +346,15 @@ export default function App() {
                 />
               }
             >
-
               <Route
                 path="/admin"
-                element={
-                  <AdminDashboard />
-                }
+                element={<AdminDashboard />}
               />
 
               <Route
                 path="/admin/navta-test"
-                element={
-                  <AdminNavtaTest />
-                }
+                element={<AdminNavtaTest />}
               />
-
             </Route>
 
             {/* =================================================
@@ -433,55 +373,41 @@ export default function App() {
                 />
               }
             >
-
               <Route
                 path="/notes"
-                element={
-                  <NotesPage />
-                }
+                element={<NotesPage />}
               />
 
               <Route
                 path="/pyqs"
-                element={
-                  <PYQPage />
-                }
+                element={<PYQPage />}
               />
 
               <Route
                 path="/navta-test"
-                element={
-                  <NavtaTestPage />
-                }
+                element={<NavtaTestPage />}
               />
 
               <Route
                 path="/assessments"
-                element={
-                  <AssessmentPage />
-                }
+                element={<AssessmentPage />}
               />
 
               <Route
                 path="/profile"
-                element={
-                  <ProfilePage />
-                }
+                element={<ProfilePage />}
               />
 
               <Route
                 path="/settings"
-                element={
-                  <SettingsPage />
-                }
+                element={<SettingsPage />}
               />
-
             </Route>
 
           </Route>
 
           {/* =====================================================
-              CATCH-ALL
+              CATCH ALL
           ===================================================== */}
 
           <Route
@@ -495,9 +421,7 @@ export default function App() {
           />
 
         </Routes>
-
       </Router>
-
     </AuthProvider>
   );
 }
