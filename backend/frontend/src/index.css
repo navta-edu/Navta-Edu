@@ -5,7 +5,7 @@
   --color-darkcard: #1E293B;
   --color-darkborder: #334155;
   --font-sans: "Outfit", "Inter", sans-serif;
-  
+
   --color-primary-50: #f0f9ff;
   --color-primary-100: #e0f2fe;
   --color-primary-200: #bae6fd;
@@ -19,44 +19,168 @@
   --color-primary-950: #082f49;
 }
 
-/* Base Body Style */
-body {
-  @apply antialiased font-sans text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-darkbg;
+/* =========================================================
+   GLOBAL ROOT
+========================================================= */
+
+html {
+  min-height: 100%;
+  scroll-behavior: smooth;
 }
 
-/* Glassmorphism Styles */
-.glass {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+body {
+  min-height: 100vh;
+  margin: 0;
+
+  @apply antialiased font-sans text-slate-800 dark:text-slate-100;
+
+  background-color: #f8fbff;
+
+  background-image:
+    linear-gradient(
+      rgba(248, 251, 255, 0.82),
+      rgba(248, 251, 255, 0.82)
+    ),
+    url("./assets/navta-learning-bg.png");
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
+
+/* =========================================================
+   DARK MODE
+   Keep NAVTA dark mode clean and readable
+========================================================= */
+
+.dark body {
+  background-image: none;
+  background-color: #0F172A;
+}
+
+/* =========================================================
+   APP ROOT
+========================================================= */
+
+#root {
+  min-height: 100vh;
+}
+
+/* =========================================================
+   OPTIONAL GLOBAL PAGE BACKGROUND
+   Makes transparent page areas show the background image
+========================================================= */
+
+.navta-global-page {
+  min-height: 100vh;
+  background: transparent;
+}
+
+/* =========================================================
+   LIGHT MODE GLASSMORPHISM
+========================================================= */
+
+.glass {
+  background: rgba(255, 255, 255, 0.78);
+
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  border: 1px solid rgba(255, 255, 255, 0.42);
+
+  box-shadow:
+    0 8px 30px rgba(15, 23, 42, 0.06);
+}
+
+/* =========================================================
+   DARK MODE GLASSMORPHISM
+========================================================= */
 
 .dark .glass {
-  background: rgba(30, 41, 59, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(30, 41, 59, 0.52);
+
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
   border: 1px solid rgba(255, 255, 255, 0.05);
+
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.18);
 }
 
-/* Custom Grids and Elements */
+/* =========================================================
+   PREMIUM CARD SUPPORT
+========================================================= */
+
+.navta-card-surface {
+  background: rgba(255, 255, 255, 0.82);
+
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+
+  border: 1px solid rgba(148, 163, 184, 0.14);
+
+  box-shadow:
+    0 10px 30px rgba(15, 23, 42, 0.06);
+
+  border-radius: 18px;
+}
+
+.dark .navta-card-surface {
+  background: rgba(15, 23, 42, 0.82);
+
+  border-color: rgba(148, 163, 184, 0.08);
+
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.22);
+}
+
+/* =========================================================
+   CUSTOM GRID PATTERN
+========================================================= */
+
 .bg-grid-pattern {
   background-size: 40px 40px;
-  background-image: linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-                    linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+
+  background-image:
+    linear-gradient(
+      to right,
+      rgba(148, 163, 184, 0.05) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(148, 163, 184, 0.05) 1px,
+      transparent 1px
+    );
 }
 
 .dark .bg-grid-pattern {
-  background-image: linear-gradient(to right, rgba(51, 65, 85, 0.15) 1px, transparent 1px),
-                    linear-gradient(to bottom, rgba(51, 65, 85, 0.15) 1px, transparent 1px);
+  background-image:
+    linear-gradient(
+      to right,
+      rgba(51, 65, 85, 0.15) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(51, 65, 85, 0.15) 1px,
+      transparent 1px
+    );
 }
 
-/* Animated Glows */
+/* =========================================================
+   ANIMATED GLOWS
+========================================================= */
+
 @keyframes pulseGlow {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 0.5;
   }
+
   50% {
     transform: scale(1.05);
     opacity: 0.8;
@@ -67,18 +191,23 @@ body {
   animation: pulseGlow 3s infinite ease-in-out;
 }
 
-/* Hide scrollbar for Chrome, Safari and Opera */
+/* =========================================================
+   HIDE SCROLLBAR
+========================================================= */
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
 
-/* Hide scrollbar for IE, Edge and Firefox */
 .no-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-/* Custom Scrollbars */
+/* =========================================================
+   CUSTOM SCROLLBARS
+========================================================= */
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -92,7 +221,10 @@ body {
   @apply bg-slate-300 dark:bg-slate-700 rounded-full hover:bg-slate-400 dark:hover:bg-slate-600;
 }
 
-/* Styled Gradient Text */
+/* =========================================================
+   GRADIENT TEXT
+========================================================= */
+
 .gradient-text {
   @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-500 to-indigo-600 dark:from-primary-400 dark:to-indigo-400 font-extrabold;
 }
@@ -101,22 +233,97 @@ body {
   @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-500 to-rose-500 font-extrabold;
 }
 
-/* Animation utils */
+/* =========================================================
+   FADE IN
+========================================================= */
+
 .animate-fadeIn {
   animation: fadeIn 0.3s ease-out forwards;
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
+
+/* =========================================================
+   SLOW SPIN
+========================================================= */
 
 .animate-spin-slow {
   animation: spin 8s linear infinite;
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
+/* =========================================================
+   MOBILE / TABLET OPTIMISATION
+========================================================= */
+
+@media (max-width: 1024px) {
+  body {
+    background-size: cover;
+    background-position: center top;
+  }
+}
+
+@media (max-width: 768px) {
+  body {
+    background-attachment: scroll;
+
+    background-image:
+      linear-gradient(
+        rgba(248, 251, 255, 0.88),
+        rgba(248, 251, 255, 0.88)
+      ),
+      url("./assets/navta-learning-bg.png");
+
+    background-size: cover;
+    background-position: center top;
+  }
+
+  .dark body {
+    background-image: none;
+    background-color: #0F172A;
+  }
+
+  .glass {
+    background: rgba(255, 255, 255, 0.86);
+
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    background-image:
+      linear-gradient(
+        rgba(248, 251, 255, 0.91),
+        rgba(248, 251, 255, 0.91)
+      ),
+      url("./assets/navta-learning-bg.png");
+
+    background-position: center top;
+  }
+
+  .dark body {
+    background-image: none;
+    background-color: #0F172A;
+  }
+}
