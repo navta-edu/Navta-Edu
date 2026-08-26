@@ -1,5 +1,13 @@
 const NavtaQuestion = require("../models/NavtaQuestion");
 
+const {
+  extractTextFromNavtaFile,
+} = require("../services/navtaFileExtractor");
+
+const {
+  analyzeNavtaQuestions,
+} = require("../services/navtaQuestionAI");
+
 // ============================================
 // TEST RULES
 // ============================================
@@ -112,6 +120,162 @@ function isAllowedDuration(
 }
 
 // ============================================
+// AI IMPORT HELPERS
+// ============================================
+
+function normalizeQuestionText(
+  value
+) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(
+      /[^\p{L}\p{N}\s]/gu,
+      ""
+    )
+    .trim();
+}
+
+function cleanStringArray(
+  value
+) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) =>
+      String(item || "").trim()
+    )
+    .filter(Boolean);
+}
+
+function buildAIImportPayload(
+  item
+) {
+  const resolvedQuestionType =
+    normaliseQuestionType(
+      item.exam,
+      item.questionType
+    );
+
+  const payload = {
+    subject:
+      String(
+        item.subject || ""
+      ).trim(),
+
+    exam:
+      String(
+        item.exam || ""
+      ).trim(),
+
+    classLevel:
+      String(
+        item.classLevel || ""
+      ).trim(),
+
+    chapter:
+      String(
+        item.chapter || ""
+      ).trim(),
+
+    difficulty:
+      String(
+        item.difficulty || ""
+      ).trim(),
+
+    questionType:
+      resolvedQuestionType,
+
+    question:
+      String(
+        item.question || ""
+      ).trim(),
+
+    explanation:
+      String(
+        item.explanation || ""
+      ).trim(),
+
+    isActive: true,
+  };
+
+  // ========================================
+  // MCQ QUESTION
+  // ========================================
+
+  if (
+    resolvedQuestionType ===
+    "mcq"
+  ) {
+    payload.options =
+      cleanStringArray(
+        item.options
+      );
+
+    payload.correctAnswer =
+      Number(
+        item.correctAnswer
+      );
+
+    payload.modelAnswer = "";
+
+    payload.keyPoints = [];
+
+    payload.evaluationInstructions =
+      "";
+
+    payload.maxMarks =
+      Number(item.maxMarks) > 0
+        ? Number(item.maxMarks)
+        : 1;
+  }
+
+  // ========================================
+  // SHORT / LONG ANSWER
+  // ========================================
+
+  if (
+    resolvedQuestionType ===
+      "short" ||
+    resolvedQuestionType ===
+      "long"
+  ) {
+    payload.options = [];
+
+    payload.correctAnswer =
+      undefined;
+
+    payload.modelAnswer =
+      String(
+        item.modelAnswer || ""
+      ).trim();
+
+    payload.keyPoints =
+      cleanStringArray(
+        item.keyPoints
+      );
+
+    payload.maxMarks =
+      Number(item.maxMarks) > 0
+        ? Number(item.maxMarks)
+        : resolvedQuestionType ===
+            "short"
+          ? 3
+          : 5;
+
+    payload.evaluationInstructions =
+      String(
+        item.evaluationInstructions ||
+          ""
+      ).trim();
+  }
+
+  return payload;
+}
+
+// ============================================
 // CREATE QUESTION - ADMIN
 // ============================================
 
@@ -173,7 +337,9 @@ exports.createQuestion = async (
     // ========================================
 
     if (
-      !allowedExams[subject].includes(exam)
+      !allowedExams[
+        subject
+      ].includes(exam)
     ) {
       return res.status(400).json({
         success: false,
@@ -208,7 +374,8 @@ exports.createQuestion = async (
     ) {
       return res.status(400).json({
         success: false,
-        message: "Invalid difficulty.",
+        message:
+          "Invalid difficulty.",
       });
     }
 
@@ -229,14 +396,17 @@ exports.createQuestion = async (
     ) {
       return res.status(400).json({
         success: false,
-        message: "Invalid question type.",
+        message:
+          "Invalid question type.",
       });
     }
 
     // NEET and JEE are MCQ only
+
     if (
       exam !== "Boards" &&
-      resolvedQuestionType !== "mcq"
+      resolvedQuestionType !==
+        "mcq"
     ) {
       return res.status(400).json({
         success: false,
@@ -251,14 +421,17 @@ exports.createQuestion = async (
     // ========================================
 
     const payload = {
-      subject: subject.trim(),
+      subject:
+        subject.trim(),
 
-      exam: exam.trim(),
+      exam:
+        exam.trim(),
 
       classLevel:
         classLevel.trim(),
 
-      chapter: chapter.trim(),
+      chapter:
+        chapter.trim(),
 
       difficulty:
         difficulty.trim(),
@@ -282,13 +455,16 @@ exports.createQuestion = async (
     // ========================================
 
     if (
-      resolvedQuestionType === "mcq"
+      resolvedQuestionType ===
+      "mcq"
     ) {
       // --------------------------------------
       // OPTIONS
       // --------------------------------------
 
-      if (!Array.isArray(options)) {
+      if (
+        !Array.isArray(options)
+      ) {
         return res.status(400).json({
           success: false,
 
@@ -297,7 +473,9 @@ exports.createQuestion = async (
         });
       }
 
-      if (options.length !== 4) {
+      if (
+        options.length !== 4
+      ) {
         return res.status(400).json({
           success: false,
 
@@ -353,18 +531,26 @@ exports.createQuestion = async (
       payload.correctAnswer =
         answerIndex;
 
-      payload.modelAnswer = "";
+      payload.modelAnswer =
+        "";
 
       payload.keyPoints = [];
 
       payload.evaluationInstructions =
         "";
 
+      payload.maxMarks =
+        Number(maxMarks) > 0
+          ? Number(maxMarks)
+          : 1;
+
       // Explanation is required because
       // it will be shown when the student
       // selects a wrong MCQ answer.
 
-      if (!payload.explanation) {
+      if (
+        !payload.explanation
+      ) {
         return res.status(400).json({
           success: false,
 
@@ -389,7 +575,9 @@ exports.createQuestion = async (
       // MUST BE BOARDS
       // --------------------------------------
 
-      if (exam !== "Boards") {
+      if (
+        exam !== "Boards"
+      ) {
         return res.status(400).json({
           success: false,
 
@@ -441,7 +629,8 @@ exports.createQuestion = async (
           .filter(Boolean);
 
       if (
-        cleanedKeyPoints.length === 0
+        cleanedKeyPoints.length ===
+        0
       ) {
         return res.status(400).json({
           success: false,
@@ -670,6 +859,760 @@ exports.deleteQuestion = async (
 };
 
 // ============================================
+// AI IMPORT - ANALYSE UPLOADED FILE
+// ADMIN ONLY
+// ============================================
+
+exports.importQuestionsWithAI =
+  async (req, res) => {
+    try {
+      // ======================================
+      // FILE CHECK
+      // ======================================
+
+      if (!req.file) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "Please upload a PDF, DOCX or TXT file.",
+          });
+      }
+
+      // ======================================
+      // AI CONFIG CHECK
+      // ======================================
+
+      if (
+        !process.env
+          .OPENAI_API_KEY
+      ) {
+        return res
+          .status(503)
+          .json({
+            success: false,
+
+            message:
+              "AI import is not configured. OPENAI_API_KEY is missing.",
+          });
+      }
+
+      // ======================================
+      // OPTIONAL ADMIN HINTS
+      // ======================================
+
+      const context = {
+        subject:
+          String(
+            req.body.subject ||
+              ""
+          ).trim(),
+
+        exam:
+          String(
+            req.body.exam ||
+              ""
+          ).trim(),
+
+        classLevel:
+          String(
+            req.body.classLevel ||
+              ""
+          ).trim(),
+      };
+
+      // ======================================
+      // EXTRACT FILE TEXT
+      // ======================================
+
+      const extractedText =
+        await extractTextFromNavtaFile(
+          req.file
+        );
+
+      if (
+        !extractedText ||
+        !String(
+          extractedText
+        ).trim()
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "No readable text could be extracted from the uploaded file.",
+          });
+      }
+
+      // ======================================
+      // AI ANALYSIS
+      // ======================================
+
+      const result =
+        await analyzeNavtaQuestions(
+          {
+            text:
+              extractedText,
+
+            context,
+          }
+        );
+
+      const accepted =
+        Array.isArray(
+          result.acceptedQuestions
+        )
+          ? result.acceptedQuestions
+          : [];
+
+      const dropped =
+        Array.isArray(
+          result.droppedQuestions
+        )
+          ? [
+              ...result.droppedQuestions,
+            ]
+          : [];
+
+      // ======================================
+      // DUPLICATE DETECTION
+      // ======================================
+
+      const existingQuestions =
+        await NavtaQuestion.find(
+          {},
+          {
+            question: 1,
+          }
+        ).lean();
+
+      const existingQuestionSet =
+        new Set(
+          existingQuestions.map(
+            (item) =>
+              normalizeQuestionText(
+                item.question
+              )
+          )
+        );
+
+      const uniqueAccepted = [];
+
+      for (
+        const item of accepted
+      ) {
+        const normalized =
+          normalizeQuestionText(
+            item.question
+          );
+
+        if (!normalized) {
+          dropped.push({
+            ...item,
+
+            drop: true,
+
+            dropReason:
+              "Question text is empty or incomplete.",
+          });
+
+          continue;
+        }
+
+        if (
+          existingQuestionSet.has(
+            normalized
+          )
+        ) {
+          dropped.push({
+            ...item,
+
+            drop: true,
+
+            dropReason:
+              "Duplicate question already exists in NAVTA.",
+          });
+
+          continue;
+        }
+
+        uniqueAccepted.push(
+          item
+        );
+
+        // Prevent duplicate questions
+        // inside the same uploaded file.
+
+        existingQuestionSet.add(
+          normalized
+        );
+      }
+
+      // ======================================
+      // RESPONSE
+      //
+      // NOTHING IS SAVED YET.
+      // ADMIN MUST APPROVE FIRST.
+      // ======================================
+
+      return res
+        .status(200)
+        .json({
+          success: true,
+
+          message:
+            "AI analysis completed. Review the questions before importing.",
+
+          file: {
+            name:
+              req.file.originalname,
+
+            size:
+              req.file.size,
+
+            type:
+              req.file.mimetype,
+          },
+
+          summary: {
+            detected:
+              uniqueAccepted.length +
+              dropped.length,
+
+            accepted:
+              uniqueAccepted.length,
+
+            dropped:
+              dropped.length,
+          },
+
+          acceptedQuestions:
+            uniqueAccepted,
+
+          droppedQuestions:
+            dropped,
+        });
+    } catch (error) {
+      console.error(
+        "NAVTA AI IMPORT ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+
+          message:
+            "Failed to analyse uploaded questions.",
+
+          error:
+            error.message,
+        });
+    }
+  };
+
+// ============================================
+// AI IMPORT - CONFIRM QUESTIONS
+// ADMIN ONLY
+// ============================================
+
+exports.confirmAIImport =
+  async (req, res) => {
+    try {
+      const {
+        questions,
+      } = req.body;
+
+      // ======================================
+      // VALIDATE REQUEST
+      // ======================================
+
+      if (
+        !Array.isArray(
+          questions
+        ) ||
+        questions.length === 0
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "No approved questions were provided.",
+          });
+      }
+
+      if (
+        questions.length >
+        500
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "A maximum of 500 questions can be imported at once.",
+          });
+      }
+
+      // ======================================
+      // EXISTING QUESTIONS
+      // ======================================
+
+      const existingQuestions =
+        await NavtaQuestion.find(
+          {},
+          {
+            question: 1,
+          }
+        ).lean();
+
+      const existingSet =
+        new Set(
+          existingQuestions.map(
+            (item) =>
+              normalizeQuestionText(
+                item.question
+              )
+          )
+        );
+
+      const readyToInsert = [];
+
+      const rejected = [];
+
+      // ======================================
+      // VALIDATE EACH QUESTION
+      // ======================================
+
+      for (
+        const item of questions
+      ) {
+        try {
+          const payload =
+            buildAIImportPayload(
+              item
+            );
+
+          // ----------------------------------
+          // REQUIRED FIELDS
+          // ----------------------------------
+
+          if (
+            !payload.subject ||
+            !payload.exam ||
+            !payload.classLevel ||
+            !payload.chapter ||
+            !payload.difficulty ||
+            !payload.question
+          ) {
+            rejected.push({
+              question:
+                item.question ||
+                "",
+
+              reason:
+                "Required NAVTA fields are missing.",
+            });
+
+            continue;
+          }
+
+          // ----------------------------------
+          // SUBJECT
+          // ----------------------------------
+
+          if (
+            !allowedExams[
+              payload.subject
+            ]
+          ) {
+            rejected.push({
+              question:
+                payload.question,
+
+              reason:
+                "Invalid subject.",
+            });
+
+            continue;
+          }
+
+          // ----------------------------------
+          // EXAM
+          // ----------------------------------
+
+          if (
+            !allowedExams[
+              payload.subject
+            ].includes(
+              payload.exam
+            )
+          ) {
+            rejected.push({
+              question:
+                payload.question,
+
+              reason:
+                `${payload.exam} is not supported for ${payload.subject}.`,
+            });
+
+            continue;
+          }
+
+          // ----------------------------------
+          // CLASS
+          // ----------------------------------
+
+          if (
+            payload.classLevel !==
+              "Class 11" &&
+            payload.classLevel !==
+              "Class 12"
+          ) {
+            rejected.push({
+              question:
+                payload.question,
+
+              reason:
+                "Invalid class.",
+            });
+
+            continue;
+          }
+
+          // ----------------------------------
+          // DIFFICULTY
+          // ----------------------------------
+
+          if (
+            !validDifficulties.includes(
+              payload.difficulty
+            )
+          ) {
+            rejected.push({
+              question:
+                payload.question,
+
+              reason:
+                "Invalid difficulty.",
+            });
+
+            continue;
+          }
+
+          // ----------------------------------
+          // QUESTION TYPE
+          // ----------------------------------
+
+          if (
+            !validQuestionTypes.includes(
+              payload.questionType
+            )
+          ) {
+            rejected.push({
+              question:
+                payload.question,
+
+              reason:
+                "Invalid question type.",
+            });
+
+            continue;
+          }
+
+          // NEET / JEE = MCQ only
+
+          if (
+            payload.exam !==
+              "Boards" &&
+            payload.questionType !==
+              "mcq"
+          ) {
+            rejected.push({
+              question:
+                payload.question,
+
+              reason:
+                "NEET and JEE support MCQ questions only.",
+            });
+
+            continue;
+          }
+
+          // ----------------------------------
+          // MCQ VALIDATION
+          // ----------------------------------
+
+          if (
+            payload.questionType ===
+            "mcq"
+          ) {
+            if (
+              !Array.isArray(
+                payload.options
+              ) ||
+              payload.options.length !==
+                4
+            ) {
+              rejected.push({
+                question:
+                  payload.question,
+
+                reason:
+                  "MCQ must contain exactly four options.",
+              });
+
+              continue;
+            }
+
+            if (
+              payload.options.some(
+                (option) =>
+                  !String(
+                    option ||
+                      ""
+                  ).trim()
+              )
+            ) {
+              rejected.push({
+                question:
+                  payload.question,
+
+                reason:
+                  "All MCQ options must contain text.",
+              });
+
+              continue;
+            }
+
+            if (
+              !Number.isInteger(
+                payload.correctAnswer
+              ) ||
+              payload.correctAnswer <
+                0 ||
+              payload.correctAnswer >
+                3
+            ) {
+              rejected.push({
+                question:
+                  payload.question,
+
+                reason:
+                  "Invalid MCQ correct answer.",
+              });
+
+              continue;
+            }
+
+            if (
+              !payload.explanation
+            ) {
+              rejected.push({
+                question:
+                  payload.question,
+
+                reason:
+                  "AI explanation is missing.",
+              });
+
+              continue;
+            }
+          }
+
+          // ----------------------------------
+          // BOARDS WRITTEN VALIDATION
+          // ----------------------------------
+
+          if (
+            [
+              "short",
+              "long",
+            ].includes(
+              payload.questionType
+            )
+          ) {
+            if (
+              payload.exam !==
+              "Boards"
+            ) {
+              rejected.push({
+                question:
+                  payload.question,
+
+                reason:
+                  "Written questions are only supported for Boards.",
+              });
+
+              continue;
+            }
+
+            if (
+              !payload.modelAnswer
+            ) {
+              rejected.push({
+                question:
+                  payload.question,
+
+                reason:
+                  "Model answer is missing.",
+              });
+
+              continue;
+            }
+
+            if (
+              !Array.isArray(
+                payload.keyPoints
+              ) ||
+              payload.keyPoints.length ===
+                0
+            ) {
+              rejected.push({
+                question:
+                  payload.question,
+
+                reason:
+                  "Key points are missing.",
+              });
+
+              continue;
+            }
+          }
+
+          // ----------------------------------
+          // DUPLICATE
+          // ----------------------------------
+
+          const normalized =
+            normalizeQuestionText(
+              payload.question
+            );
+
+          if (
+            existingSet.has(
+              normalized
+            )
+          ) {
+            rejected.push({
+              question:
+                payload.question,
+
+              reason:
+                "Duplicate question already exists in NAVTA.",
+            });
+
+            continue;
+          }
+
+          existingSet.add(
+            normalized
+          );
+
+          readyToInsert.push(
+            payload
+          );
+        } catch (error) {
+          rejected.push({
+            question:
+              item?.question ||
+              "",
+
+            reason:
+              error.message ||
+              "Invalid question.",
+          });
+        }
+      }
+
+      // ======================================
+      // NOTHING VALID
+      // ======================================
+
+      if (
+        readyToInsert.length ===
+        0
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "No valid questions were available to import.",
+
+            importedCount: 0,
+
+            rejectedCount:
+              rejected.length,
+
+            rejectedQuestions:
+              rejected,
+          });
+      }
+
+      // ======================================
+      // INSERT INTO NAVTA QUESTION BANK
+      // ======================================
+
+      const insertedQuestions =
+        await NavtaQuestion.insertMany(
+          readyToInsert
+        );
+
+      // ======================================
+      // RESPONSE
+      // ======================================
+
+      return res
+        .status(201)
+        .json({
+          success: true,
+
+          message:
+            `${insertedQuestions.length} questions imported successfully.`,
+
+          importedCount:
+            insertedQuestions.length,
+
+          rejectedCount:
+            rejected.length,
+
+          questions:
+            insertedQuestions,
+
+          rejectedQuestions:
+            rejected,
+        });
+    } catch (error) {
+      console.error(
+        "CONFIRM NAVTA AI IMPORT ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+
+          message:
+            "Failed to import approved questions.",
+
+          error:
+            error.message,
+        });
+    }
+  };
+
+// ============================================
 // GENERATE STUDENT TEST
 // ============================================
 
@@ -751,7 +1694,8 @@ exports.generateTest = async (
 
     if (
       exam !== "Boards" &&
-      resolvedQuestionType !== "mcq"
+      resolvedQuestionType !==
+        "mcq"
     ) {
       return res.status(400).json({
         success: false,
@@ -803,7 +1747,9 @@ exports.generateTest = async (
         numericDuration
       );
 
-    if (questionCount <= 0) {
+    if (
+      questionCount <= 0
+    ) {
       return res.status(400).json({
         success: false,
 
@@ -1231,7 +2177,7 @@ The status must be exactly one of:
         rawText.trim();
 
       // Remove markdown fences
-      // if the AI accidentally adds them.
+      // if AI accidentally adds them.
 
       rawText =
         rawText
@@ -1256,8 +2202,12 @@ The status must be exactly one of:
 
       try {
         evaluation =
-          JSON.parse(rawText);
-      } catch (parseError) {
+          JSON.parse(
+            rawText
+          );
+      } catch (
+        parseError
+      ) {
         console.error(
           "AI JSON PARSE ERROR:",
           rawText
@@ -1294,10 +2244,6 @@ The status must be exactly one of:
       ) {
         marksAwarded = 0;
       }
-
-      // Never allow AI to give
-      // negative marks or more
-      // than the maximum marks.
 
       marksAwarded =
         Math.max(
