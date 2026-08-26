@@ -1,8 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, {
+  useEffect,
+  useMemo,
+  useState
+} from 'react';
 
-import { useAuth } from '../context/AuthContext';
-import { studentAPI } from '../utils/api';
+import {
+  Link
+} from 'react-router-dom';
+
+import {
+  useAuth
+} from '../context/AuthContext';
+
+import {
+  studentAPI
+} from '../utils/api';
 
 import Button from '../components/Button';
 
@@ -10,7 +22,6 @@ import {
   ArrowRight,
   Award,
   BarChart3,
-  Bell,
   BookOpen,
   BrainCircuit,
   CalendarDays,
@@ -39,23 +50,39 @@ import {
 } from 'recharts';
 
 // =====================================================
-// FALLBACK CHART DATA
+// FALLBACK DATA
 // =====================================================
 
 const FALLBACK_CHART = [
-  { date: 'Mon', score: 48 },
-  { date: 'Tue', score: 65 },
-  { date: 'Wed', score: 53 },
-  { date: 'Thu', score: 74 },
-  { date: 'Fri', score: 82 },
-  { date: 'Sat', score: 78 },
-  { date: 'Sun', score: 86 }
+  {
+    date: 'Mon',
+    score: 48
+  },
+  {
+    date: 'Tue',
+    score: 64
+  },
+  {
+    date: 'Wed',
+    score: 52
+  },
+  {
+    date: 'Thu',
+    score: 73
+  },
+  {
+    date: 'Fri',
+    score: 82
+  },
+  {
+    date: 'Sat',
+    score: 78
+  },
+  {
+    date: 'Sun',
+    score: 86
+  }
 ];
-
-// =====================================================
-// UPCOMING ACTIVITIES
-// You can later replace these with backend/calendar data.
-// =====================================================
 
 const UPCOMING = [
   {
@@ -74,10 +101,6 @@ const UPCOMING = [
     time: 'Next session'
   }
 ];
-
-// =====================================================
-// SUBJECT FALLBACK
-// =====================================================
 
 const SUBJECT_PROGRESS = [
   {
@@ -98,6 +121,10 @@ const SUBJECT_PROGRESS = [
   }
 ];
 
+// =====================================================
+// MAIN COMPONENT
+// =====================================================
+
 export default function StudentDashboard() {
   const {
     user,
@@ -105,113 +132,139 @@ export default function StudentDashboard() {
     streak
   } = useAuth();
 
-  const [results, setResults] = useState([]);
-  const [analytics, setAnalytics] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [results, setResults] =
+    useState([]);
 
-  // =====================================================
-  // LOAD STUDENT DATA
-  // =====================================================
+  const [analytics, setAnalytics] =
+    useState(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  // ===================================================
+  // LOAD DATA
+  // ===================================================
 
   useEffect(() => {
-    const loadDashboard = async () => {
-      try {
-        const resultResponse =
-          await studentAPI.getResults();
+    const loadDashboard =
+      async () => {
+        try {
+          const resultResponse =
+            await studentAPI.getResults();
 
-        setResults(
-          resultResponse?.data || []
-        );
+          setResults(
+            resultResponse?.data ||
+              []
+          );
 
-        const analyticsResponse =
-          await studentAPI.getAnalytics();
+          const analyticsResponse =
+            await studentAPI.getAnalytics();
 
-        setAnalytics(
-          analyticsResponse?.data ||
-          analyticsResponse ||
-          null
-        );
-      } catch (error) {
-        console.error(
-          'Failed to load student dashboard:',
-          error
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
+          setAnalytics(
+            analyticsResponse?.data ||
+              analyticsResponse ||
+              null
+          );
+        } catch (error) {
+          console.error(
+            'Failed to load student dashboard:',
+            error
+          );
+        } finally {
+          setLoading(false);
+        }
+      };
 
     loadDashboard();
   }, []);
 
-  // =====================================================
-  // XP / LEVEL
-  // =====================================================
+  // ===================================================
+  // LEVEL
+  // ===================================================
 
   const totalXP =
-    Number(profile?.xp || 0);
+    Number(
+      profile?.xp || 0
+    );
 
   const level =
-    Number(profile?.level || 1);
+    Number(
+      profile?.level || 1
+    );
 
   const xpPerLevel = 500;
 
   const currentXP =
-    totalXP % xpPerLevel;
+    totalXP %
+    xpPerLevel;
 
   const levelProgress =
     Math.min(
       100,
       Math.round(
-        (currentXP / xpPerLevel) * 100
+        (
+          currentXP /
+          xpPerLevel
+        ) * 100
       )
     );
 
-  // =====================================================
-  // SCORE
-  // =====================================================
+  // ===================================================
+  // AVERAGE SCORE
+  // ===================================================
 
-  const averageScore = useMemo(() => {
-    if (!results.length) {
-      return 0;
-    }
+  const averageScore =
+    useMemo(() => {
+      if (
+        !results.length
+      ) {
+        return 0;
+      }
 
-    const total =
-      results.reduce(
-        (sum, result) =>
-          sum +
-          Number(
-            result?.percentage || 0
-          ),
-        0
+      const total =
+        results.reduce(
+          (
+            sum,
+            result
+          ) =>
+            sum +
+            Number(
+              result?.percentage ||
+                0
+            ),
+          0
+        );
+
+      return Math.round(
+        total /
+          results.length
       );
+    }, [results]);
 
-    return Math.round(
-      total / results.length
-    );
-  }, [results]);
+  // ===================================================
+  // CHART
+  // ===================================================
 
-  // =====================================================
-  // CHART DATA
-  // =====================================================
+  const chartData =
+    useMemo(() => {
+      const progression =
+        analytics?.progression;
 
-  const chartData = useMemo(() => {
-    const progression =
-      analytics?.progression;
+      if (
+        Array.isArray(
+          progression
+        ) &&
+        progression.length
+      ) {
+        return progression;
+      }
 
-    if (
-      Array.isArray(progression) &&
-      progression.length
-    ) {
-      return progression;
-    }
+      return FALLBACK_CHART;
+    }, [analytics]);
 
-    return FALLBACK_CHART;
-  }, [analytics]);
-
-  // =====================================================
+  // ===================================================
   // DAILY GOALS
-  // =====================================================
+  // ===================================================
 
   const dailyGoals = [
     {
@@ -232,14 +285,15 @@ export default function StudentDashboard() {
       reward: '+30 XP',
       done:
         Number(
-          streak?.currentStreak || 0
+          streak?.currentStreak ||
+            0
         ) > 0
     }
   ];
 
-  // =====================================================
+  // ===================================================
   // LOADING
-  // =====================================================
+  // ===================================================
 
   if (loading) {
     return (
@@ -251,7 +305,14 @@ export default function StudentDashboard() {
           justify-center
         "
       >
-        <div className="flex flex-col items-center gap-4">
+        <div
+          className="
+            flex
+            flex-col
+            items-center
+            gap-4
+          "
+        >
           <div
             className="
               h-10
@@ -288,15 +349,11 @@ export default function StudentDashboard() {
         text-white
       "
     >
-      {/* =====================================================
-          MAIN DASHBOARD GRID
-      ===================================================== */}
-
       <div
         className="
           mx-auto
           w-full
-          max-w-[1500px]
+          max-w-[1380px]
           space-y-5
         "
       >
@@ -310,7 +367,7 @@ export default function StudentDashboard() {
             grid
             grid-cols-1
             gap-5
-            xl:grid-cols-[minmax(0,1fr)_300px]
+            2xl:grid-cols-[minmax(0,1fr)_290px]
           "
         >
 
@@ -323,25 +380,23 @@ export default function StudentDashboard() {
               rounded-[26px]
               border
               border-sky-500/25
-              bg-[#071224]/90
-              shadow-[0_20px_80px_rgba(2,132,199,0.12)]
+              bg-[#071224]/92
+              shadow-[0_24px_90px_rgba(2,132,199,0.14)]
               backdrop-blur-xl
             "
           >
-
-            {/* Hero glow */}
 
             <div
               className="
                 pointer-events-none
                 absolute
-                -right-20
+                -right-24
                 -top-24
-                h-72
-                w-72
+                h-80
+                w-80
                 rounded-full
-                bg-blue-500/20
-                blur-[100px]
+                bg-blue-500/18
+                blur-[110px]
               "
             />
 
@@ -350,12 +405,12 @@ export default function StudentDashboard() {
                 pointer-events-none
                 absolute
                 bottom-0
-                right-[25%]
-                h-52
-                w-52
+                right-[15%]
+                h-60
+                w-60
                 rounded-full
-                bg-violet-500/15
-                blur-[90px]
+                bg-violet-500/14
+                blur-[100px]
               "
             />
 
@@ -363,15 +418,16 @@ export default function StudentDashboard() {
               className="
                 relative
                 grid
-                gap-8
+                gap-7
                 p-6
-                sm:p-8
-                lg:grid-cols-[1fr_360px]
-                lg:items-center
+                sm:p-7
+                xl:grid-cols-[minmax(0,1.35fr)_minmax(330px,0.85fr)]
+                xl:items-center
+                xl:p-8
               "
             >
 
-              {/* Hero text */}
+              {/* LEFT */}
 
               <div className="min-w-0">
 
@@ -392,19 +448,27 @@ export default function StudentDashboard() {
                     text-sky-300
                   "
                 >
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles
+                    className="
+                      h-4
+                      w-4
+                    "
+                  />
 
                   Welcome back
                 </div>
 
                 <h1
                   className="
+                    max-w-2xl
                     text-3xl
                     font-black
                     tracking-tight
                     text-white
                     sm:text-4xl
-                    lg:text-5xl
+                    xl:text-5xl
+                    2xl:text-[52px]
+                    leading-[1.05]
                   "
                 >
                   Let&apos;s continue your
@@ -420,7 +484,7 @@ export default function StudentDashboard() {
                       text-transparent
                     "
                   >
-                    learning journey.
+                    learning journey!
                   </span>
                 </h1>
 
@@ -434,8 +498,9 @@ export default function StudentDashboard() {
                     sm:text-base
                   "
                 >
-                  Learn. Practise. Test.
-                  Analyse. Improve. Earn.
+                  Learn. Practise.
+                  Test. Analyse.
+                  Improve. Earn.
                 </p>
 
                 <p
@@ -446,11 +511,19 @@ export default function StudentDashboard() {
                   "
                 >
                   Welcome,{' '}
-                  <span className="font-bold text-slate-300">
+
+                  <span
+                    className="
+                      font-bold
+                      text-slate-300
+                    "
+                  >
                     {user?.name ||
                       'Student'}
                   </span>
+
                   {' • '}
+
                   {profile?.stream ||
                     'Science'}
                 </p>
@@ -466,11 +539,20 @@ export default function StudentDashboard() {
                 >
                   <Link
                     to="/assessments"
-                    className="w-full sm:w-auto"
+                    className="
+                      w-full
+                      sm:w-auto
+                    "
                   >
                     <Button
-                      icon={ArrowRight}
-                      className="w-full justify-center sm:w-auto"
+                      icon={
+                        ArrowRight
+                      }
+                      className="
+                        w-full
+                        justify-center
+                        sm:w-auto
+                      "
                     >
                       Resume Study
                     </Button>
@@ -478,7 +560,10 @@ export default function StudentDashboard() {
 
                   <Link
                     to="/navta-test"
-                    className="w-full sm:w-auto"
+                    className="
+                      w-full
+                      sm:w-auto
+                    "
                   >
                     <button
                       type="button"
@@ -506,16 +591,16 @@ export default function StudentDashboard() {
 
               </div>
 
-              {/* AI learning preview */}
+              {/* RIGHT SNAPSHOT */}
 
               <div
                 className="
                   rounded-[22px]
                   border
                   border-slate-800
-                  bg-slate-950/70
+                  bg-slate-950/74
                   p-4
-                  shadow-xl
+                  shadow-2xl
                 "
               >
 
@@ -548,7 +633,8 @@ export default function StudentDashboard() {
                         text-white
                       "
                     >
-                      Your learning snapshot
+                      Your learning
+                      snapshot
                     </p>
                   </div>
 
@@ -590,7 +676,7 @@ export default function StudentDashboard() {
                   <MiniHeroCard
                     label="Average Score"
                     value={`${averageScore}%`}
-                    icon={TrendingIcon}
+                    icon={Zap}
                   />
                 </div>
 
@@ -600,7 +686,7 @@ export default function StudentDashboard() {
                     rounded-2xl
                     border
                     border-slate-800
-                    bg-slate-900/70
+                    bg-slate-900/75
                     p-4
                   "
                 >
@@ -691,9 +777,17 @@ export default function StudentDashboard() {
             subtitle="Your next activities"
             className="h-full"
           >
-            <div className="space-y-2">
+            <div
+              className="
+                mt-3
+                space-y-2
+              "
+            >
               {UPCOMING.map(
-                (item, index) => (
+                (
+                  item,
+                  index
+                ) => (
                   <div
                     key={index}
                     className="
@@ -731,10 +825,15 @@ export default function StudentDashboard() {
                       />
                     </div>
 
-                    <div className="min-w-0 flex-1">
+                    <div
+                      className="
+                        min-w-0
+                        flex-1
+                      "
+                    >
                       <p
                         className="
-                          text-[10px]
+                          text-[9px]
                           text-slate-500
                         "
                       >
@@ -781,7 +880,7 @@ export default function StudentDashboard() {
         </section>
 
         {/* =================================================
-            STAT CARDS
+            METRICS
         ================================================= */}
 
         <section
@@ -789,14 +888,14 @@ export default function StudentDashboard() {
             grid
             grid-cols-2
             gap-3
-            lg:grid-cols-4
+            xl:grid-cols-4
           "
         >
-
           <MetricCard
             icon={Flame}
             value={
-              streak?.currentStreak || 1
+              streak?.currentStreak ||
+              1
             }
             label="Day Streak"
             subtext="Keep it going!"
@@ -807,7 +906,8 @@ export default function StudentDashboard() {
           <MetricCard
             icon={Coins}
             value={
-              profile?.coins ?? 0
+              profile?.coins ??
+              0
             }
             label="Coins Balance"
             subtext="Earn more by learning"
@@ -820,14 +920,19 @@ export default function StudentDashboard() {
               rounded-[22px]
               border
               border-slate-800
-              bg-[#081326]/90
+              bg-[#081326]/92
               p-5
               shadow-xl
               backdrop-blur-xl
             "
           >
-            <div className="flex items-center gap-4">
-
+            <div
+              className="
+                flex
+                items-center
+                gap-4
+              "
+            >
               <div
                 className="
                   flex
@@ -849,8 +954,12 @@ export default function StudentDashboard() {
                 />
               </div>
 
-              <div className="min-w-0 flex-1">
-
+              <div
+                className="
+                  min-w-0
+                  flex-1
+                "
+              >
                 <p
                   className="
                     text-xl
@@ -863,7 +972,8 @@ export default function StudentDashboard() {
 
                 <p
                   className="
-                    text-[10px]
+                    text-[9px]
+                    font-bold
                     uppercase
                     tracking-wider
                     text-slate-500
@@ -906,7 +1016,6 @@ export default function StudentDashboard() {
                   {currentXP} /{' '}
                   {xpPerLevel} XP
                 </p>
-
               </div>
             </div>
           </div>
@@ -927,7 +1036,7 @@ export default function StudentDashboard() {
         </section>
 
         {/* =================================================
-            PERFORMANCE + GOALS + SUBJECTS
+            PERFORMANCE / GOALS / SUBJECTS
         ================================================= */}
 
         <section
@@ -935,11 +1044,9 @@ export default function StudentDashboard() {
             grid
             grid-cols-1
             gap-5
-            xl:grid-cols-[minmax(0,1.6fr)_minmax(260px,0.75fr)_minmax(250px,0.7fr)]
+            2xl:grid-cols-[minmax(0,1.55fr)_minmax(250px,0.75fr)_minmax(240px,0.7fr)]
           "
         >
-
-          {/* PERFORMANCE */}
 
           <DashboardPanel
             title="Your Performance Overview"
@@ -948,7 +1055,7 @@ export default function StudentDashboard() {
             <div
               className="
                 mt-5
-                h-[290px]
+                h-[280px]
                 w-full
               "
             >
@@ -958,7 +1065,9 @@ export default function StudentDashboard() {
                 minWidth={0}
               >
                 <AreaChart
-                  data={chartData}
+                  data={
+                    chartData
+                  }
                   margin={{
                     top: 10,
                     right: 10,
@@ -1007,7 +1116,10 @@ export default function StudentDashboard() {
                     fontSize={10}
                     tickLine={false}
                     axisLine={false}
-                    domain={[0, 100]}
+                    domain={[
+                      0,
+                      100
+                    ]}
                   />
 
                   <Tooltip
@@ -1035,16 +1147,21 @@ export default function StudentDashboard() {
             </div>
           </DashboardPanel>
 
-          {/* GOALS */}
-
           <DashboardPanel
             title="Daily Goals"
             subtitle="Complete goals to earn more"
           >
-            <div className="mt-3 space-y-3">
-
+            <div
+              className="
+                mt-3
+                space-y-3
+              "
+            >
               {dailyGoals.map(
-                (goal, index) => (
+                (
+                  goal,
+                  index
+                ) => (
                   <div
                     key={index}
                     className="
@@ -1093,8 +1210,11 @@ export default function StudentDashboard() {
                       )}
                     </div>
 
-                    <div className="min-w-0">
-
+                    <div
+                      className="
+                        min-w-0
+                      "
+                    >
                       <p
                         className={`
                           text-xs
@@ -1117,27 +1237,30 @@ export default function StudentDashboard() {
                           text-sky-400
                         "
                       >
-                        Earn {goal.reward}
+                        Earn{' '}
+                        {goal.reward}
                       </p>
-
                     </div>
                   </div>
                 )
               )}
-
             </div>
           </DashboardPanel>
-
-          {/* TOP SUBJECTS */}
 
           <DashboardPanel
             title="Top Subjects"
             subtitle="Your current progress"
           >
-            <div className="mt-4 space-y-5">
-
+            <div
+              className="
+                mt-4
+                space-y-5
+              "
+            >
               {SUBJECT_PROGRESS.map(
-                (item) => (
+                (
+                  item
+                ) => (
                   <SubjectProgress
                     key={
                       item.subject
@@ -1151,7 +1274,6 @@ export default function StudentDashboard() {
                   />
                 )
               )}
-
             </div>
           </DashboardPanel>
 
@@ -1166,10 +1288,9 @@ export default function StudentDashboard() {
             grid
             grid-cols-1
             gap-5
-            xl:grid-cols-[minmax(0,1fr)_280px]
+            2xl:grid-cols-[minmax(0,1fr)_280px]
           "
         >
-
           <DashboardPanel
             title="What would you like to do today?"
             subtitle="Jump directly into your learning tools"
@@ -1181,10 +1302,9 @@ export default function StudentDashboard() {
                 grid-cols-2
                 gap-3
                 md:grid-cols-3
-                xl:grid-cols-5
+                2xl:grid-cols-5
               "
             >
-
               <QuickAction
                 to="/notes"
                 icon={BookOpen}
@@ -1229,7 +1349,6 @@ export default function StudentDashboard() {
                 color="text-cyan-400"
                 background="bg-cyan-500/10"
               />
-
             </div>
           </DashboardPanel>
 
@@ -1248,7 +1367,6 @@ export default function StudentDashboard() {
               shadow-xl
             "
           >
-
             <div
               className="
                 pointer-events-none
@@ -1263,8 +1381,11 @@ export default function StudentDashboard() {
               "
             />
 
-            <div className="relative">
-
+            <div
+              className="
+                relative
+              "
+            >
               <p
                 className="
                   text-5xl
@@ -1285,8 +1406,9 @@ export default function StudentDashboard() {
                   text-white
                 "
               >
-                Discipline today leads to
-                success tomorrow.
+                Discipline today
+                leads to success
+                tomorrow.
               </p>
 
               <p
@@ -1301,7 +1423,6 @@ export default function StudentDashboard() {
               >
                 — NAVTA
               </p>
-
             </div>
           </div>
 
@@ -1315,140 +1436,156 @@ export default function StudentDashboard() {
           title="Recent Quiz Attempts"
           subtitle="Review your latest performance"
         >
-          <div className="mt-4 space-y-3">
-
+          <div
+            className="
+              mt-4
+              space-y-3
+            "
+          >
             {results
-              .slice(0, 3)
-              .map((result) => (
-                <div
-                  key={result._id}
-                  className="
-                    flex
-                    flex-col
-                    gap-3
-                    rounded-2xl
-                    border
-                    border-slate-800
-                    bg-slate-950/35
-                    p-4
-                    sm:flex-row
-                    sm:items-center
-                    sm:justify-between
-                  "
-                >
-
+              .slice(
+                0,
+                3
+              )
+              .map(
+                (
+                  result
+                ) => (
                   <div
+                    key={
+                      result._id
+                    }
                     className="
                       flex
-                      min-w-0
-                      items-center
+                      flex-col
                       gap-3
+                      rounded-2xl
+                      border
+                      border-slate-800
+                      bg-slate-950/35
+                      p-4
+                      sm:flex-row
+                      sm:items-center
+                      sm:justify-between
                     "
                   >
                     <div
                       className="
                         flex
-                        h-10
-                        w-10
-                        shrink-0
+                        min-w-0
                         items-center
-                        justify-center
-                        rounded-xl
-                        bg-sky-500/10
+                        gap-3
                       "
                     >
-                      <GraduationCap
+                      <div
                         className="
-                          h-5
-                          w-5
-                          text-sky-400
+                          flex
+                          h-10
+                          w-10
+                          shrink-0
+                          items-center
+                          justify-center
+                          rounded-xl
+                          bg-sky-500/10
                         "
-                      />
+                      >
+                        <GraduationCap
+                          className="
+                            h-5
+                            w-5
+                            text-sky-400
+                          "
+                        />
+                      </div>
+
+                      <div
+                        className="
+                          min-w-0
+                        "
+                      >
+                        <p
+                          className="
+                            truncate
+                            text-sm
+                            font-bold
+                            text-white
+                          "
+                        >
+                          {result.test?.title ||
+                            'Chapter Quiz'}
+                        </p>
+
+                        <p
+                          className="
+                            mt-0.5
+                            text-[10px]
+                            text-slate-500
+                          "
+                        >
+                          {result.correctAnswers ||
+                            0}{' '}
+                          /{' '}
+                          {result.totalQuestions ||
+                            0}{' '}
+                          correct
+                        </p>
+                      </div>
                     </div>
 
-                    <div className="min-w-0">
-
+                    <div
+                      className="
+                        flex
+                        items-center
+                        justify-between
+                        gap-4
+                        sm:justify-end
+                      "
+                    >
                       <p
-                        className="
-                          truncate
-                          text-sm
-                          font-bold
-                          text-white
-                        "
+                        className={`
+                          text-lg
+                          font-black
+                          ${
+                            result.isPassed
+                              ? 'text-emerald-400'
+                              : 'text-rose-400'
+                          }
+                        `}
                       >
-                        {result.test?.title ||
-                          'Chapter Quiz'}
+                        {result.percentage ||
+                          0}
+                        %
                       </p>
 
-                      <p
-                        className="
-                          mt-0.5
-                          text-[10px]
-                          text-slate-500
-                        "
+                      <Link
+                        to={`/results/${result._id}`}
                       >
-                        {result.correctAnswers ||
-                          0}{' '}
-                        /{' '}
-                        {result.totalQuestions ||
-                          0}{' '}
-                        correct
-                      </p>
-
+                        <button
+                          type="button"
+                          className="
+                            rounded-lg
+                            border
+                            border-slate-700
+                            px-3
+                            py-2
+                            text-xs
+                            font-bold
+                            text-slate-300
+                            transition
+                            hover:border-sky-500
+                            hover:text-white
+                          "
+                        >
+                          Review
+                        </button>
+                      </Link>
                     </div>
                   </div>
+                )
+              )}
 
-                  <div
-                    className="
-                      flex
-                      items-center
-                      justify-between
-                      gap-4
-                      sm:justify-end
-                    "
-                  >
-                    <p
-                      className={`
-                        text-lg
-                        font-black
-                        ${
-                          result.isPassed
-                            ? 'text-emerald-400'
-                            : 'text-rose-400'
-                        }
-                      `}
-                    >
-                      {result.percentage || 0}%
-                    </p>
-
-                    <Link
-                      to={`/results/${result._id}`}
-                    >
-                      <button
-                        type="button"
-                        className="
-                          rounded-lg
-                          border
-                          border-slate-700
-                          px-3
-                          py-2
-                          text-xs
-                          font-bold
-                          text-slate-300
-                          transition
-                          hover:border-sky-500
-                          hover:text-white
-                        "
-                      >
-                        Review
-                      </button>
-                    </Link>
-                  </div>
-
-                </div>
-              ))}
-
-            {results.length === 0 && (
+            {results.length ===
+              0 && (
               <div
                 className="
                   py-10
@@ -1471,7 +1608,8 @@ export default function StudentDashboard() {
                     text-slate-500
                   "
                 >
-                  No assessments taken yet.
+                  No assessments
+                  taken yet.
                 </p>
 
                 <Link
@@ -1498,7 +1636,6 @@ export default function StudentDashboard() {
                 </Link>
               </div>
             )}
-
           </div>
         </DashboardPanel>
 
@@ -1523,7 +1660,7 @@ function DashboardPanel({
         rounded-[24px]
         border
         border-slate-800
-        bg-[#081326]/90
+        bg-[#081326]/92
         p-5
         shadow-[0_20px_60px_rgba(0,0,0,0.20)]
         backdrop-blur-xl
@@ -1578,7 +1715,7 @@ function MetricCard({
         rounded-[22px]
         border
         border-slate-800
-        bg-[#081326]/90
+        bg-[#081326]/92
         p-4
         shadow-xl
         backdrop-blur-xl
@@ -1816,7 +1953,7 @@ function SubjectProgress({
 }
 
 // =====================================================
-// HERO SMALL CARD
+// HERO MINI CARD
 // =====================================================
 
 function MiniHeroCard({
@@ -1830,7 +1967,7 @@ function MiniHeroCard({
         rounded-2xl
         border
         border-slate-800
-        bg-slate-900/70
+        bg-slate-900/75
         p-3
       "
     >
@@ -1865,15 +2002,5 @@ function MiniHeroCard({
         {label}
       </p>
     </div>
-  );
-}
-
-// =====================================================
-// SMALL TREND ICON
-// =====================================================
-
-function TrendingIcon(props) {
-  return (
-    <Zap {...props} />
   );
 }
