@@ -1,4 +1,5 @@
 import React from 'react';
+
 import {
   BrowserRouter as Router,
   Routes,
@@ -12,12 +13,18 @@ import {
   useAuth
 } from './context/AuthContext';
 
-// Layout & Navigation
+// =====================================================
+// LAYOUT & NAVIGATION
+// =====================================================
+
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import Footer from './components/Footer';
 
-// Public Pages
+// =====================================================
+// PUBLIC PAGES
+// =====================================================
+
 import Home from './pages/Home';
 import About from './pages/About';
 import Login from './pages/Login';
@@ -25,13 +32,19 @@ import Signup from './pages/Signup';
 import Unauthorized from './pages/Unauthorized';
 import Onboarding from './pages/Onboarding';
 
-// Private Pages
+// =====================================================
+// PRIVATE PAGES
+// =====================================================
+
 import StudentDashboard from './pages/StudentDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
 import ExternalTeacherDashboard from './pages/ExternalTeacherDashboard';
+
 import AdminDashboard from './pages/AdminDashboard';
 import AdminNavtaTest from './pages/AdminNavtaTest';
+
 import NavtaTestPage from './pages/NavtaTestPage';
+
 import NotesPage from './pages/NotesPage';
 import PYQPage from './pages/PYQPage';
 import AssessmentPage from './pages/AssessmentPage';
@@ -47,14 +60,16 @@ import ResultDetail from './pages/ResultDetail';
 
 function PublicLayout() {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0B0F19]">
+    <div className="min-h-screen flex flex-col bg-transparent dark:bg-[#0B0F19]">
+
       <Navbar />
 
-      <main className="flex-1">
+      <main className="flex-1 bg-transparent">
         <Outlet />
       </main>
 
       <Footer />
+
     </div>
   );
 }
@@ -64,15 +79,39 @@ function PublicLayout() {
 // =====================================================
 
 function DashboardLayout() {
-  const { user, loading } = useAuth();
+
+  const {
+    user,
+    loading
+  } = useAuth();
+
+  // ===================================================
+  // LOADING STATE
+  // ===================================================
 
   if (loading) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-slate-50 dark:bg-darkbg">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+      <div className="h-screen w-screen flex items-center justify-center bg-transparent dark:bg-darkbg">
+
+        <div
+          className="
+            h-8
+            w-8
+            animate-spin
+            rounded-full
+            border-4
+            border-primary-500
+            border-t-transparent
+          "
+        />
+
       </div>
     );
   }
+
+  // ===================================================
+  // USER NOT LOGGED IN
+  // ===================================================
 
   if (!user) {
     return (
@@ -82,6 +121,10 @@ function DashboardLayout() {
       />
     );
   }
+
+  // ===================================================
+  // PROFILE COMPLETION CHECK
+  // ===================================================
 
   if (
     !user.isProfileComplete &&
@@ -96,19 +139,53 @@ function DashboardLayout() {
     );
   }
 
+  // ===================================================
+  // DASHBOARD LAYOUT
+  // ===================================================
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8FAFC] dark:bg-[#0B0F19]">
+    <div
+      className="
+        min-h-screen
+        flex
+        flex-col
+        bg-transparent
+        dark:bg-[#0B0F19]
+      "
+    >
+
       <Navbar />
 
-      <div className="flex-1 flex flex-col md:flex-row w-full max-w-7xl mx-auto">
+      <div
+        className="
+          flex-1
+          flex
+          flex-col
+          md:flex-row
+          w-full
+          max-w-7xl
+          mx-auto
+          bg-transparent
+        "
+      >
+
         <Sidebar />
 
-        <main className="flex-1 p-6 overflow-x-hidden">
+        <main
+          className="
+            flex-1
+            p-6
+            overflow-x-hidden
+            bg-transparent
+          "
+        >
           <Outlet />
         </main>
+
       </div>
 
       <Footer />
+
     </div>
   );
 }
@@ -117,8 +194,14 @@ function DashboardLayout() {
 // ROLE GUARD
 // =====================================================
 
-function RoleGuard({ allowedRoles }) {
-  const { user, loading } = useAuth();
+function RoleGuard({
+  allowedRoles
+}) {
+
+  const {
+    user,
+    loading
+  } = useAuth();
 
   if (loading) {
     return null;
@@ -133,7 +216,11 @@ function RoleGuard({ allowedRoles }) {
     );
   }
 
-  if (!allowedRoles.includes(user.role)) {
+  if (
+    !allowedRoles.includes(
+      user.role
+    )
+  ) {
     return (
       <Navigate
         to="/unauthorized"
@@ -150,16 +237,24 @@ function RoleGuard({ allowedRoles }) {
 // =====================================================
 
 export default function App() {
+
   return (
     <AuthProvider>
+
       <Router>
+
         <Routes>
 
           {/* =====================================================
               PUBLIC ROUTES
           ===================================================== */}
 
-          <Route element={<PublicLayout />}>
+          <Route
+            element={
+              <PublicLayout />
+            }
+          >
+
             <Route
               path="/"
               element={<Home />}
@@ -189,13 +284,18 @@ export default function App() {
               path="/onboarding"
               element={<Onboarding />}
             />
+
           </Route>
 
           {/* =====================================================
               SECURE DASHBOARD LAYOUT
           ===================================================== */}
 
-          <Route element={<DashboardLayout />}>
+          <Route
+            element={
+              <DashboardLayout />
+            }
+          >
 
             {/* =================================================
                 STUDENT ONLY
@@ -204,29 +304,41 @@ export default function App() {
             <Route
               element={
                 <RoleGuard
-                  allowedRoles={['student']}
+                  allowedRoles={[
+                    'student'
+                  ]}
                 />
               }
             >
+
               <Route
                 path="/dashboard"
-                element={<StudentDashboard />}
+                element={
+                  <StudentDashboard />
+                }
               />
 
               <Route
                 path="/analytics"
-                element={<AnalyticsPage />}
+                element={
+                  <AnalyticsPage />
+                }
               />
 
               <Route
                 path="/rewards"
-                element={<RewardsPage />}
+                element={
+                  <RewardsPage />
+                }
               />
 
               <Route
                 path="/results/:resultId"
-                element={<ResultDetail />}
+                element={
+                  <ResultDetail />
+                }
               />
+
             </Route>
 
             {/* =================================================
@@ -236,14 +348,20 @@ export default function App() {
             <Route
               element={
                 <RoleGuard
-                  allowedRoles={['teacher']}
+                  allowedRoles={[
+                    'teacher'
+                  ]}
                 />
               }
             >
+
               <Route
                 path="/teacher"
-                element={<TeacherDashboard />}
+                element={
+                  <TeacherDashboard />
+                }
               />
+
             </Route>
 
             {/* =================================================
@@ -259,12 +377,14 @@ export default function App() {
                 />
               }
             >
+
               <Route
                 path="/external-teacher"
                 element={
                   <ExternalTeacherDashboard />
                 }
               />
+
             </Route>
 
             {/* =================================================
@@ -274,20 +394,25 @@ export default function App() {
             <Route
               element={
                 <RoleGuard
-                  allowedRoles={['admin']}
+                  allowedRoles={[
+                    'admin'
+                  ]}
                 />
               }
             >
 
               <Route
                 path="/admin"
-                element={<AdminDashboard />}
+                element={
+                  <AdminDashboard />
+                }
               />
 
-              {/* NAVTA TEST ADMIN PAGE */}
               <Route
                 path="/admin/navta-test"
-                element={<AdminNavtaTest />}
+                element={
+                  <AdminNavtaTest />
+                }
               />
 
             </Route>
@@ -311,33 +436,44 @@ export default function App() {
 
               <Route
                 path="/notes"
-                element={<NotesPage />}
+                element={
+                  <NotesPage />
+                }
               />
 
               <Route
                 path="/pyqs"
-                element={<PYQPage />}
+                element={
+                  <PYQPage />
+                }
               />
 
-              {/* Student Navta TEST */}
               <Route
                 path="/navta-test"
-                element={<NavtaTestPage />}
+                element={
+                  <NavtaTestPage />
+                }
               />
 
               <Route
                 path="/assessments"
-                element={<AssessmentPage />}
+                element={
+                  <AssessmentPage />
+                }
               />
 
               <Route
                 path="/profile"
-                element={<ProfilePage />}
+                element={
+                  <ProfilePage />
+                }
               />
 
               <Route
                 path="/settings"
-                element={<SettingsPage />}
+                element={
+                  <SettingsPage />
+                }
               />
 
             </Route>
@@ -345,7 +481,7 @@ export default function App() {
           </Route>
 
           {/* =====================================================
-              CATCH ALL
+              CATCH-ALL
           ===================================================== */}
 
           <Route
@@ -359,7 +495,9 @@ export default function App() {
           />
 
         </Routes>
+
       </Router>
+
     </AuthProvider>
   );
 }
