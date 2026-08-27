@@ -1,13 +1,21 @@
-// =====================================================
-// TEMPORARY FIX FOR navtaTestController.js
-// =====================================================
-// REPLACE THE TOP OF YOUR FILE WITH THIS:
-//
 // IMPORTANT:
-// Do NOT require navtaFileExtractor or navtaQuestionAI
-// until Hostinger dependencies are fixed.
+// At the TOP of navtaTestController.js keep:
 
 const NavtaQuestion = require("../models/NavtaQuestion");
+
+// TEMPORARY RECOVERY MODE:
+// DO NOT load these right now:
+//
+// const {
+//   extractTextFromNavtaFile,
+// } = require("../services/navtaFileExtractor");
+//
+// const {
+//   analyzeNavtaQuestions,
+// } = require("../services/navtaQuestionAI");
+//
+// This prevents Hostinger from loading mammoth/openai
+// while the dependencies are not deployed.
 
 // ============================================
 // TEST RULES
@@ -44,4 +52,37 @@ const TEST_RULES = {
       durations: [30, 60, 90, 120, 180],
     },
   },
+};
+
+// ============================================
+// KEEP ALL OF YOUR EXISTING FUNCTIONS HERE
+// ============================================
+//
+// Keep your existing:
+// createQuestion
+// getQuestions
+// deleteQuestion
+// generateTest
+// evaluateWrittenAnswer
+//
+// unchanged.
+
+// ============================================
+// TEMPORARY AI IMPORT FUNCTIONS
+// ============================================
+
+exports.importQuestionsWithAI = async (req, res) => {
+  return res.status(503).json({
+    success: false,
+    message:
+      "AI question file import is temporarily disabled while deployment dependencies are being fixed.",
+  });
+};
+
+exports.confirmAIImport = async (req, res) => {
+  return res.status(503).json({
+    success: false,
+    message:
+      "AI question file import is temporarily disabled while deployment dependencies are being fixed.",
+  });
 };
