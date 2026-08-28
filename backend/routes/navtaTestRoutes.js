@@ -7,6 +7,7 @@ const {
   getQuestions,
   deleteQuestion,
   generateTest,
+  generateBossBattle,
   evaluateWrittenAnswer,
 } = require("../controllers/navtaTestController");
 
@@ -20,12 +21,32 @@ router.post(
 );
 
 // ============================================
-// STUDENT - GENERATE TEST
+// STUDENT - GENERATE STANDARD NAVTA TEST
 // ============================================
 
 router.post(
   "/generate",
   generateTest
+);
+
+// ============================================
+// STUDENT - GENERATE BOSS BATTLE
+// ============================================
+//
+// Boss Battle supports:
+// - Multiple chapters
+// - Minimum 2 chapters
+// - Automatic Easy / Medium / Hard mix
+// - 15, 30 or 50 questions
+//
+// Endpoint:
+// POST /api/navta-test/boss-battle
+//
+// ============================================
+
+router.post(
+  "/boss-battle",
+  generateBossBattle
 );
 
 // ============================================
