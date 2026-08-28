@@ -73,14 +73,18 @@ UserSchema.pre('save', async function (next) {
     next();
     return;
   }
+
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
+  next();
 });
 
 // Match user entered password to hashed password in database
 UserSchema.methods.matchPassword = async function (enteredPassword) {
   if (!this.password) return false;
-  return await bcrypt.compare(enteredPassword, this.password);
+  return bcrypt.compare(enteredPassword, this.password);
 };
 
-module.exports = mongoose.model('User', UserSchema);
+module.exports =
+  mongoose.models.User ||
+  mongoose.model('User', UserSchema);
