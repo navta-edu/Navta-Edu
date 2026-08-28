@@ -53,37 +53,6 @@ import {
 // FALLBACK DATA
 // =====================================================
 
-const FALLBACK_CHART = [
-  {
-    date: 'Mon',
-    score: 48
-  },
-  {
-    date: 'Tue',
-    score: 64
-  },
-  {
-    date: 'Wed',
-    score: 52
-  },
-  {
-    date: 'Thu',
-    score: 73
-  },
-  {
-    date: 'Fri',
-    score: 82
-  },
-  {
-    date: 'Sat',
-    score: 78
-  },
-  {
-    date: 'Sun',
-    score: 86
-  }
-];
-
 const UPCOMING = [
   {
     title: 'Chemistry Quiz',
@@ -331,8 +300,19 @@ export default function StudentDashboard() {
         return progression;
       }
 
-      return FALLBACK_CHART;
+      return [];
     }, [analytics]);
+
+  // ===================================================
+  // LIVE COIN BALANCE
+  // ===================================================
+
+  const coinBalance =
+    Number(
+      analytics?.coinBalance ??
+      profile?.coins ??
+      0
+    );
 
   // ===================================================
   // DAILY GOALS
@@ -1061,12 +1041,9 @@ export default function StudentDashboard() {
 
           <MetricCard
             icon={Coins}
-            value={
-              profile?.coins ??
-              0
-            }
+            value={coinBalance}
             label="Coins Balance"
-            subtext="Earn more by learning"
+            subtext=">80%: +1 under 30 min • +2 from 30 min"
             iconClass="text-yellow-500"
             iconBg="bg-yellow-100 dark:bg-yellow-500/10"
           />
@@ -1224,15 +1201,16 @@ export default function StudentDashboard() {
 
           <DashboardPanel
             title="Your Performance Overview"
-            subtitle="Score trend over recent activity"
+            subtitle="Daily average of your NAVTA TEST scores"
           >
             <div
               className="
                 mt-5
-                h-[280px]
+                h-[320px]
                 w-full
               "
             >
+              {chartData.length > 0 ? (
               <ResponsiveContainer
                 width="100%"
                 height="100%"
@@ -1246,7 +1224,7 @@ export default function StudentDashboard() {
                     top: 10,
                     right: 10,
                     left: -20,
-                    bottom: 0
+                    bottom: 55
                   }}
                 >
                   <defs>
@@ -1283,6 +1261,11 @@ export default function StudentDashboard() {
                     fontSize={10}
                     tickLine={false}
                     axisLine={false}
+                    interval={0}
+                    height={70}
+                    angle={-90}
+                    textAnchor="end"
+                    tickMargin={8}
                   />
 
                   <YAxis
@@ -1297,6 +1280,20 @@ export default function StudentDashboard() {
                   />
 
                   <Tooltip
+                    formatter={(value) => [
+                      `${value}%`,
+                      'Daily Average'
+                    ]}
+                    labelFormatter={(_, payload) => {
+                      const item =
+                        payload?.[0]?.payload;
+
+                      if (!item) {
+                        return '';
+                      }
+
+                      return `${item.fullDate || item.date} • ${item.testCount || 0} test${Number(item.testCount) === 1 ? '' : 's'}`;
+                    }}
                     contentStyle={{
                       background:
                         '#ffffff',
@@ -1317,9 +1314,93 @@ export default function StudentDashboard() {
                     stroke="#0ea5e9"
                     strokeWidth={3}
                     fill="url(#navtaScoreGradient)"
+                    dot={{
+                      r: 4,
+                      fill: '#0ea5e9',
+                      strokeWidth: 2
+                    }}
+                    activeDot={{
+                      r: 6
+                    }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
+              ) : (
+                <div
+                  className="
+                    flex
+                    h-full
+                    flex-col
+                    items-center
+                    justify-center
+                    rounded-2xl
+                    border
+                    border-dashed
+                    border-slate-200
+                    bg-slate-50/60
+                    px-6
+                    text-center
+
+                    dark:border-slate-800
+                    dark:bg-slate-950/30
+                  "
+                >
+                  <BarChart3
+                    className="
+                      h-9
+                      w-9
+                      text-slate-300
+
+                      dark:text-slate-700
+                    "
+                  />
+
+                  <p
+                    className="
+                      mt-3
+                      text-sm
+                      font-black
+                      text-slate-700
+
+                      dark:text-slate-300
+                    "
+                  >
+                    No NAVTA TEST performance yet
+                  </p>
+
+                  <p
+                    className="
+                      mt-1
+                      max-w-sm
+                      text-[10px]
+                      leading-5
+                      text-slate-500
+                    "
+                  >
+                    Complete a NAVTA TEST and your daily average
+                    will automatically appear here.
+                  </p>
+
+                  <Link
+                    to="/navta-test"
+                    className="
+                      mt-4
+                      inline-flex
+                      items-center
+                      gap-1
+                      text-xs
+                      font-black
+                      text-sky-600
+                      hover:underline
+
+                      dark:text-sky-400
+                    "
+                  >
+                    Take NAVTA TEST
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </div>
+              )}
             </div>
           </DashboardPanel>
 
