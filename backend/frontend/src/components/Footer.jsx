@@ -1,5 +1,4 @@
 import React from "react";
-import { Linkedin, ExternalLink } from "lucide-react";
 
 const Footer = () => {
   return (
@@ -9,7 +8,7 @@ const Footer = () => {
         w-full
         border-t
         border-slate-200/80
-        bg-white/85
+        bg-white/80
         px-5
         py-6
         backdrop-blur-xl
@@ -17,7 +16,7 @@ const Footer = () => {
         duration-300
 
         dark:border-slate-800/80
-        dark:bg-slate-950/85
+        dark:bg-slate-950/80
 
         sm:px-8
         lg:px-10
@@ -37,23 +36,37 @@ const Footer = () => {
           sm:justify-between
         "
       >
-        {/* =====================================================
-            COPYRIGHT
-        ===================================================== */}
+        {/* =========================================
+            LEFT - COPYRIGHT
+        ========================================= */}
 
         <div>
-          <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+          <p
+            className="
+              text-sm
+              font-medium
+              text-slate-600
+              dark:text-slate-400
+            "
+          >
             © 2026 Navta. All rights reserved.
           </p>
 
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+          <p
+            className="
+              mt-1
+              text-xs
+              text-slate-400
+              dark:text-slate-500
+            "
+          >
             Learn. Practise. Test. Improve.
           </p>
         </div>
 
-        {/* =====================================================
-            DEVELOPER CREDIT
-        ===================================================== */}
+        {/* =========================================
+            RIGHT - DEVELOPER CREDIT
+        ========================================= */}
 
         <div
           className="
@@ -65,9 +78,21 @@ const Footer = () => {
             sm:items-end
           "
         >
-          <p className="text-sm text-slate-600 dark:text-slate-400">
+          <p
+            className="
+              text-sm
+              text-slate-600
+              dark:text-slate-400
+            "
+          >
             Developed by{" "}
-            <span className="font-extrabold text-slate-900 dark:text-white">
+            <span
+              className="
+                font-extrabold
+                text-slate-900
+                dark:text-white
+              "
+            >
               Hardik Sahu
             </span>
           </p>
@@ -103,11 +128,25 @@ const Footer = () => {
               dark:hover:bg-sky-950/50
             "
           >
-            <Linkedin className="h-4 w-4" />
+            {/* LinkedIn logo without lucide-react */}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.047c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286h-.002ZM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124ZM7.119 20.452H3.555V9h3.564v11.452ZM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003Z" />
+            </svg>
 
-            LinkedIn
+            <span>LinkedIn</span>
 
-            <ExternalLink className="h-3.5 w-3.5" />
+            <span
+              aria-hidden="true"
+              className="text-sm"
+            >
+              ↗
+            </span>
           </a>
         </div>
       </div>
