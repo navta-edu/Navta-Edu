@@ -127,16 +127,18 @@ export default function StudentDashboard() {
     const loadDashboard =
       async () => {
         try {
-          const resultResponse =
-            await studentAPI.getResults();
+          const [
+            resultResponse,
+            analyticsResponse
+          ] = await Promise.all([
+            studentAPI.getResults(),
+            studentAPI.getAnalytics()
+          ]);
 
           setResults(
             resultResponse?.data ||
               []
           );
-
-          const analyticsResponse =
-            await studentAPI.getAnalytics();
 
           setAnalytics(
             analyticsResponse?.data ||
@@ -477,6 +479,7 @@ export default function StudentDashboard() {
 
         <section
           className="
+            navta-lazy-section
             grid
             grid-cols-1
             gap-5
@@ -496,12 +499,12 @@ export default function StudentDashboard() {
               border
               border-slate-200/70
               bg-white/85
-              shadow-[0_20px_70px_rgba(15,23,42,0.10)]
-              backdrop-blur-2xl
+              shadow-lg
+              supports-[backdrop-filter]:backdrop-blur-sm
 
               dark:border-sky-500/20
               dark:bg-[#071224]/92
-              dark:shadow-[0_24px_90px_rgba(2,132,199,0.14)]
+              dark:shadow-xl
             "
           >
 
@@ -517,7 +520,7 @@ export default function StudentDashboard() {
                 w-80
                 rounded-full
                 bg-sky-300/20
-                blur-[110px]
+                blur-3xl
 
                 dark:bg-blue-500/18
               "
@@ -533,7 +536,7 @@ export default function StudentDashboard() {
                 w-60
                 rounded-full
                 bg-violet-300/15
-                blur-[100px]
+                blur-3xl
 
                 dark:bg-violet-500/14
               "
@@ -750,8 +753,8 @@ export default function StudentDashboard() {
                   border-slate-200
                   bg-white/82
                   p-4
-                  shadow-[0_16px_50px_rgba(15,23,42,0.09)]
-                  backdrop-blur-xl
+                  shadow-md
+                  supports-[backdrop-filter]:backdrop-blur-sm
 
                   dark:border-slate-800
                   dark:bg-slate-950/74
@@ -967,7 +970,7 @@ export default function StudentDashboard() {
                   index
                 ) => (
                   <div
-                    key={index}
+                    key={`${item.title}-${item.time}`}
                     className="
                       group
                       flex
@@ -1079,6 +1082,7 @@ export default function StudentDashboard() {
 
         <section
           className="
+            navta-lazy-section
             grid
             grid-cols-2
             gap-3
@@ -1129,8 +1133,8 @@ export default function StudentDashboard() {
               border-slate-200/80
               bg-white/88
               p-5
-              shadow-[0_14px_40px_rgba(15,23,42,0.08)]
-              backdrop-blur-xl
+              shadow-sm
+              supports-[backdrop-filter]:backdrop-blur-sm
 
               dark:border-slate-800
               dark:bg-[#081326]/92
@@ -2329,18 +2333,19 @@ function DashboardPanel({
   return (
     <div
       className={`
+        navta-lazy-section
         rounded-[24px]
         border
         border-slate-200/80
         bg-white/88
         p-5
-        shadow-[0_18px_55px_rgba(15,23,42,0.08)]
-        backdrop-blur-xl
+        shadow-md
+        supports-[backdrop-filter]:backdrop-blur-sm
         sm:p-6
 
         dark:border-slate-800
         dark:bg-[#081326]/92
-        dark:shadow-[0_20px_60px_rgba(0,0,0,0.20)]
+        dark:shadow-lg
 
         ${className}
       `}
@@ -2393,13 +2398,14 @@ function MetricCard({
   return (
     <div
       className="
+        navta-lazy-section
         rounded-[22px]
         border
         border-slate-200/80
         bg-white/88
         p-4
-        shadow-[0_14px_40px_rgba(15,23,42,0.08)]
-        backdrop-blur-xl
+        shadow-sm
+        supports-[backdrop-filter]:backdrop-blur-sm
         sm:p-5
 
         dark:border-slate-800
