@@ -259,6 +259,8 @@ const BOSS_SIZES = {
   },
 };
 
+const BOSS_WIN_PERCENTAGE = 70;
+
 function getQuestionCount(preparation, questionType, duration) {
   const config = TEST_CONFIG[preparation]?.[questionType];
   if (!config || !duration) return 0;
@@ -270,11 +272,10 @@ function getQuestionTypeLabel(questionType) {
 }
 
 function getBossRank(percentage) {
-  if (percentage >= 90) return { rank: "S", label: "Legendary", icon: "👑" };
-  if (percentage >= 80) return { rank: "A", label: "Elite", icon: "⚔" };
-  if (percentage >= 70) return { rank: "B", label: "Strong", icon: "🔥" };
-  if (percentage >= 60) return { rank: "C", label: "Cleared", icon: "✅" };
-  return { rank: "Retry", label: "Train and return", icon: "🔁" };
+  if (percentage >= 90) return { rank: "S", label: "Legendary Victory", icon: "👑" };
+  if (percentage >= 80) return { rank: "A", label: "Dominant Victory", icon: "🏆" };
+  if (percentage >= 70) return { rank: "B", label: "Boss Defeated", icon: "⚔" };
+  return { rank: "LOST", label: "Revenge Unlocked", icon: "💀" };
 }
 
 function formatSolveTime(totalSeconds) {
@@ -302,6 +303,11 @@ export default function NavtaTestPage() {
   const [selectedChapters, setSelectedChapters] = useState([]);
   const [bossSize, setBossSize] = useState(15);
   const [bossMeta, setBossMeta] = useState(null);
+  const [battleVariant, setBattleVariant] = useState("boss");
+  const [revengeAttempt, setRevengeAttempt] = useState(0);
+  const [originalBossPercentage, setOriginalBossPercentage] = useState(null);
+  const [previousBattlePercentage, setPreviousBattlePercentage] = useState(null);
+  const [revengeMeta, setRevengeMeta] = useState(null);
 
   const [questions, setQuestions] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
@@ -324,6 +330,7 @@ export default function NavtaTestPage() {
   const questionStartedAtRef = useRef(null);
 
   const isBoss = testMode === "boss";
+  const isRevenge = isBoss && battleVariant === "revenge";
 
   const resolvedQuestionType = isBoss
     ? "mcq"
@@ -425,6 +432,11 @@ export default function NavtaTestPage() {
     setTimeLeft(0);
     setSubmitted(false);
     setBossMeta(null);
+    setBattleVariant("boss");
+    setRevengeAttempt(0);
+    setOriginalBossPercentage(null);
+    setPreviousBattlePercentage(null);
+    setRevengeMeta(null);
     setGeneratingTest(false);
     setGenerationError("");
     setEvaluatingAnswer(false);
@@ -679,6 +691,11 @@ export default function NavtaTestPage() {
         60;
 
       setBossMeta(battle);
+      setBattleVariant("boss");
+      setRevengeAttempt(0);
+      setOriginalBossPercentage(null);
+      setPreviousBattlePercentage(null);
+      setRevengeMeta(null);
       setQuestions(generatedQuestions);
       setCurrentQuestion(0);
       setAnswers({});
@@ -696,6 +713,109 @@ export default function NavtaTestPage() {
       console.error("Boss Battle generation error:", error);
       setGenerationError(
         error.message || "Unable to generate Boss Battle."
+      );
+    } finally {
+      setGeneratingTest(false);
+    }
+  };
+
+  const startRevengeBattle = async () => {
+    if (!isBoss || questions.length === 0) return;
+
+    if (bossPercentage >= BOSS_WIN_PERCENTAGE) {
+      setGenerationError("You already defeated the Boss. Start a new Boss Battle instead.");
+      return;
+    }
+
+    const nextAttempt = isRevenge ? revengeAttempt + 1 : 1;
+    const baseOriginalPercentage =
+      originalBossPercentage === null
+        ? bossPercentage
+        : originalBossPercentage;
+
+    setGeneratingTest(true);
+    setGenerationError("");
+
+    try {
+      const response = await fetch("/api/navta-test/revenge-battle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject,
+          exam: preparation,
+          classLevel,
+          chapters: selectedChapters,
+          totalQuestions: bossSize,
+          previousQuestionIds: questions
+            .map((question) => question?._id)
+            .filter(Boolean),
+          answers: questions.map((question, index) => ({
+            questionId: question?._id,
+            selectedAnswer:
+              answers[index] !== undefined ? answers[index] : null,
+          })),
+          revengeAttempt: nextAttempt,
+          previousPercentage: bossPercentage,
+          originalPercentage: baseOriginalPercentage,
+        }),
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        const availability =
+          data.required !== undefined && data.available !== undefined
+            ? ` Required: ${data.required}, available: ${data.available}.`
+            : "";
+
+        throw new Error(
+          `${data.message || "Unable to generate Revenge Battle."}${availability}`
+        );
+      }
+
+      const battle = data?.revengeBattle || {};
+      const generatedQuestions = battle?.questions || [];
+
+      if (generatedQuestions.length === 0) {
+        throw new Error(
+          "No Revenge Battle questions were returned from the question bank."
+        );
+      }
+
+      const returnedSeconds =
+        Number(battle?.durationSeconds) ||
+        Number(battle?.durationMinutes) * 60 ||
+        generatedQuestions.length * (preparation === "JEE" ? 2 : 1) * 60;
+
+      setOriginalBossPercentage(baseOriginalPercentage);
+      setPreviousBattlePercentage(bossPercentage);
+      setRevengeAttempt(nextAttempt);
+      setBattleVariant("revenge");
+      setRevengeMeta(battle);
+      setBossMeta(battle);
+
+      setQuestions(generatedQuestions);
+      setCurrentQuestion(0);
+      setAnswers({});
+      setAnswerFeedback({});
+      setWrittenAnswers({});
+      setWrittenFeedback({});
+      setQuestionTimes({});
+      questionStartedAtRef.current = Date.now();
+      setTimeLeft(returnedSeconds);
+      setSubmitted(false);
+      setEvaluationError("");
+      setQuestionType("mcq");
+      setStep("test");
+    } catch (error) {
+      console.error("Revenge Battle generation error:", error);
+      setGenerationError(
+        error.message || "Unable to generate Revenge Battle."
       );
     } finally {
       setGeneratingTest(false);
@@ -895,6 +1015,8 @@ export default function NavtaTestPage() {
     () => getBossRank(bossPercentage),
     [bossPercentage]
   );
+
+  const bossWon = isBoss && bossPercentage >= BOSS_WIN_PERCENTAGE;
 
   const difficultyPerformance = useMemo(() => {
     if (!isBoss) return {};
@@ -1693,6 +1815,82 @@ export default function NavtaTestPage() {
           font-weight: 800;
         }
 
+        .navta-revenge-panel {
+          margin-top: 24px;
+          padding: 22px;
+          border-radius: 18px;
+          border: 1px solid rgba(239, 68, 68, 0.35);
+          background:
+            radial-gradient(circle at top right, rgba(239, 68, 68, 0.08), transparent 45%),
+            var(--nt-surface);
+          text-align: left;
+        }
+
+        .navta-revenge-panel h3 {
+          margin: 0 0 8px;
+          color: var(--nt-danger-text);
+        }
+
+        .navta-revenge-panel p {
+          margin: 0 0 18px;
+          color: var(--nt-soft-text);
+          line-height: 1.6;
+        }
+
+        .navta-revenge-panel small {
+          display: block;
+          margin-top: 14px;
+          color: var(--nt-muted);
+          line-height: 1.5;
+        }
+
+        .navta-revenge-focus-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .navta-revenge-focus-grid > div {
+          display: grid;
+          gap: 8px;
+          padding: 14px;
+          border-radius: 12px;
+          border: 1px solid var(--nt-border);
+          background: var(--nt-card-bg);
+        }
+
+        .navta-revenge-focus-grid span {
+          color: var(--nt-soft-text);
+          font-size: 13px;
+          line-height: 1.4;
+        }
+
+        .navta-revenge-comparison {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+          margin: 20px 0;
+        }
+
+        .navta-revenge-comparison > div {
+          padding: 14px;
+          border-radius: 12px;
+          border: 1px solid var(--nt-border);
+          background: var(--nt-surface);
+        }
+
+        .navta-revenge-comparison span {
+          display: block;
+          color: var(--nt-muted);
+          font-size: 11px;
+          margin-bottom: 6px;
+        }
+
+        .navta-revenge-comparison strong {
+          color: var(--nt-text);
+          font-size: 18px;
+        }
+
         @media (max-width: 768px) {
           .navta-test-page {
             padding: 20px 14px;
@@ -1725,6 +1923,11 @@ export default function NavtaTestPage() {
 
           .navta-summary-grid,
           .navta-mix-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .navta-revenge-focus-grid,
+          .navta-revenge-comparison {
             grid-template-columns: 1fr;
           }
 
@@ -1839,15 +2042,17 @@ export default function NavtaTestPage() {
               <div className="navta-mode-icon">⚔</div>
               <h2>Boss Battle</h2>
               <p>
-                Fight a mixed-difficulty test across multiple
-                chapters and earn a Boss Rank.
+                Fight a mixed-difficulty test across multiple chapters.
+                Score 70% or higher to defeat the Boss. Score below 70%
+                and you unlock a targeted Revenge Battle.
               </p>
 
               <div className="navta-mode-features">
                 <span>⚔ Multiple chapters</span>
-                <span>⚡ Automatic difficulty mix</span>
+                <span>⚡ Automatic Easy / Medium / Hard mix</span>
                 <span>👑 15 / 30 / 50 question battles</span>
-                <span>🏆 S, A, B, C and Retry ranks</span>
+                <span>🏆 Score 70%+ to defeat the Boss</span>
+                <span>🔥 Below 70% unlocks Revenge Battle</span>
               </div>
 
               <span className="navta-continue navta-boss-continue">
@@ -1863,7 +2068,7 @@ export default function NavtaTestPage() {
           <div className="navta-header">
             <div>
               <h1 className="navta-title">
-                {isBoss ? "⚔ Boss Battle" : "Navta TEST"}
+                {isBoss ? (isRevenge ? `🔥 Revenge Battle #${revengeAttempt}` : "⚔ Boss Battle") : "Navta TEST"}
               </h1>
               <p className="navta-subtitle">
                 Choose a subject to begin your{" "}
@@ -2160,8 +2365,9 @@ export default function NavtaTestPage() {
           </div>
 
           <div className="navta-rule-banner navta-boss-banner">
-            ⚔ Boss Battle is MCQ-only. Questions are mixed
-            automatically across Easy, Medium and Hard.
+            ⚔ Boss Battle is MCQ-only. Questions are mixed automatically
+            across Easy, Medium and Hard. Score 70% or higher to defeat
+            the Boss. Below 70% unlocks a targeted 🔥 Revenge Battle.
           </div>
 
           <div className="navta-boss-grid">
@@ -2246,6 +2452,14 @@ export default function NavtaTestPage() {
                 value={`${
                   bossSize * (preparation === "JEE" ? 2 : 1)
                 } Minutes`}
+              />
+              <SummaryItem
+                label="Victory Requirement"
+                value="70% or higher"
+              />
+              <SummaryItem
+                label="If You Score Below 70%"
+                value="🔥 Revenge Battle unlocks"
               />
             </div>
           </div>
@@ -2662,7 +2876,7 @@ export default function NavtaTestPage() {
             <div className="navta-test-header">
               <div>
                 <h1 className="navta-title">
-                  {isBoss ? "⚔ Boss Battle" : "Navta TEST"}
+                  {isBoss ? (isRevenge ? `🔥 Revenge Battle #${revengeAttempt}` : "⚔ Boss Battle") : "Navta TEST"}
                 </h1>
 
                 <p className="navta-subtitle">
@@ -2686,7 +2900,9 @@ export default function NavtaTestPage() {
             {isBoss && (
               <div className="navta-boss-question-meta">
                 <span className="navta-tag boss">
-                  {BOSS_SIZES[bossSize]?.name || "Boss Battle"}
+                  {isRevenge
+                    ? `🔥 Revenge #${revengeAttempt}`
+                    : BOSS_SIZES[bossSize]?.name || "Boss Battle"}
                 </span>
                 <span className="navta-tag">
                   {currentTestQuestion.chapter || "Mixed Chapter"}
@@ -2929,27 +3145,41 @@ export default function NavtaTestPage() {
           {isBoss ? (
             <div className="navta-result-card boss">
               <div style={{ fontSize: "48px" }}>
-                {bossRank.icon}
+                {bossWon ? (isRevenge ? "👑" : bossRank.icon) : "💀"}
               </div>
 
-              <h1>Boss Battle Complete!</h1>
+              <h1>
+                {bossWon
+                  ? isRevenge
+                    ? "Revenge Complete!"
+                    : "Boss Defeated!"
+                  : isRevenge
+                    ? "The Boss Survived!"
+                    : "The Boss Defeated You"}
+              </h1>
 
-              <p style={{ color: "#94a3b8" }}>
+              <p style={{ color: "var(--nt-muted)" }}>
                 {subject} → {preparation} → {classLevel}
               </p>
 
               <div className="navta-rank">
-                {bossRank.rank}
+                {bossWon ? bossRank.rank : "LOST"}
               </div>
 
               <div
                 style={{
-                  color: "var(--nt-boss-text)",
+                  color: bossWon
+                    ? "var(--nt-success-text)"
+                    : "var(--nt-danger-text)",
                   fontWeight: 800,
                   marginTop: "-12px",
                 }}
               >
-                {bossRank.label}
+                {bossWon
+                  ? isRevenge
+                    ? "Vengeance Complete — Boss Defeated"
+                    : bossRank.label
+                  : "You need 70% to defeat the Boss"}
               </div>
 
               <div className="navta-result-score">
@@ -2959,6 +3189,91 @@ export default function NavtaTestPage() {
               <p style={{ color: "var(--nt-muted)" }}>
                 {bossPercentage}% accuracy
               </p>
+
+              {isRevenge && (
+                <div className="navta-revenge-comparison">
+                  <div>
+                    <span>Original Boss</span>
+                    <strong>{originalBossPercentage ?? 0}%</strong>
+                  </div>
+                  <div>
+                    <span>Previous Battle</span>
+                    <strong>{previousBattlePercentage ?? 0}%</strong>
+                  </div>
+                  <div>
+                    <span>Current Revenge</span>
+                    <strong>{bossPercentage}%</strong>
+                  </div>
+                  <div>
+                    <span>Improvement</span>
+                    <strong>
+                      {bossPercentage - Number(originalBossPercentage || 0) >= 0
+                        ? "+"
+                        : ""}
+                      {bossPercentage - Number(originalBossPercentage || 0)}%
+                    </strong>
+                  </div>
+                </div>
+              )}
+
+              {!bossWon && (
+                <div className="navta-revenge-panel">
+                  <h3>🔥 Revenge Available</h3>
+                  <p>
+                    NAVTA will build your next battle around the chapters
+                    and difficulty levels where you struggled most. It will
+                    avoid repeating questions whenever enough unused questions
+                    are available.
+                  </p>
+
+                  <div className="navta-revenge-focus-grid">
+                    <div>
+                      <strong>Weak Chapters</strong>
+                      {Object.entries(chapterPerformance)
+                        .map(([name, result]) => ({
+                          name,
+                          percentage:
+                            result.total > 0
+                              ? Math.round((result.correct / result.total) * 100)
+                              : 0,
+                        }))
+                        .sort((a, b) => a.percentage - b.percentage)
+                        .slice(0, 3)
+                        .map((item) => (
+                          <span key={item.name}>
+                            {item.name} • {item.percentage}%
+                          </span>
+                        ))}
+                    </div>
+
+                    <div>
+                      <strong>Weak Difficulty</strong>
+                      {Object.entries(difficultyPerformance)
+                        .map(([name, result]) => ({
+                          name,
+                          percentage:
+                            result.total > 0
+                              ? Math.round((result.correct / result.total) * 100)
+                              : 0,
+                        }))
+                        .sort((a, b) => a.percentage - b.percentage)
+                        .map((item) => (
+                          <span key={item.name}>
+                            {item.name} • {item.percentage}%
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+
+                  {revengeMeta?.repeatedQuestionCount > 0 && (
+                    <small>
+                      Question bank note: {revengeMeta.repeatedQuestionCount} previous
+                      question(s) had to be reused because there were not enough unused
+                      questions available.
+                    </small>
+                  )}
+                </div>
+              )}
 
               <SpeedAccuracyAnalytics
                 questions={questions}
@@ -3026,17 +3341,41 @@ export default function NavtaTestPage() {
                 )}
               </div>
 
+              {generationError && (
+                <div className="navta-error" style={{ marginTop: "22px" }}>
+                  {generationError}
+                </div>
+              )}
+
               <div className="navta-actions">
-                <button
-                  type="button"
-                  style={styles.bossButton}
-                  onClick={() => {
-                    clearTestRun();
-                    setStep("bossSummary");
-                  }}
-                >
-                  ⚔ Retry Battle
-                </button>
+                {!bossWon ? (
+                  <button
+                    type="button"
+                    disabled={generatingTest}
+                    style={{
+                      ...styles.revengeButton,
+                      opacity: generatingTest ? 0.65 : 1,
+                    }}
+                    onClick={startRevengeBattle}
+                  >
+                    {generatingTest
+                      ? "Preparing Revenge..."
+                      : isRevenge
+                        ? `🔥 Revenge Again (#${revengeAttempt + 1})`
+                        : "🔥 Take Revenge"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    style={styles.bossButtonNoMargin}
+                    onClick={() => {
+                      clearTestRun();
+                      setStep("bossSummary");
+                    }}
+                  >
+                    ⚔ Fight Another Boss
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -3443,6 +3782,29 @@ const styles = {
     fontSize: "16px",
     fontWeight: "900",
     cursor: "pointer",
+  },
+
+  bossButtonNoMargin: {
+    padding: "15px 28px",
+    border: "1px solid rgba(245, 158, 11, 0.55)",
+    borderRadius: "10px",
+    background: "linear-gradient(135deg, #d97706, #f59e0b)",
+    color: "#111827",
+    fontSize: "16px",
+    fontWeight: "900",
+    cursor: "pointer",
+  },
+
+  revengeButton: {
+    padding: "15px 28px",
+    border: "1px solid rgba(239, 68, 68, 0.55)",
+    borderRadius: "10px",
+    background: "linear-gradient(135deg, #dc2626, #f97316)",
+    color: "#ffffff",
+    fontSize: "16px",
+    fontWeight: "900",
+    cursor: "pointer",
+    boxShadow: "0 10px 28px rgba(220, 38, 38, 0.18)",
   },
 
   timer: {
