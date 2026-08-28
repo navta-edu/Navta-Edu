@@ -333,6 +333,19 @@ export default function NavtaTestPage() {
   const [mistakeSaveState, setMistakeSaveState] = useState({});
   const [mistakeSaveMessage, setMistakeSaveMessage] = useState({});
 
+  // =====================================================
+  // NAVTA PERFORMANCE + COIN RESULT SAVING
+  // =====================================================
+
+  const [testDurationSeconds, setTestDurationSeconds] = useState(0);
+  const [resultSaveStatus, setResultSaveStatus] = useState("idle");
+  const [resultSaveMessage, setResultSaveMessage] = useState("");
+  const [coinsAwarded, setCoinsAwarded] = useState(0);
+  const [updatedCoinBalance, setUpdatedCoinBalance] = useState(null);
+
+  const attemptIdRef = useRef("");
+  const completionSubmitKeyRef = useRef("");
+
   const isBoss = testMode === "boss";
   const isRevenge = isBoss && battleVariant === "revenge";
 
@@ -449,6 +462,13 @@ export default function NavtaTestPage() {
     setMistakeNotes({});
     setMistakeSaveState({});
     setMistakeSaveMessage({});
+    setTestDurationSeconds(0);
+    setResultSaveStatus("idle");
+    setResultSaveMessage("");
+    setCoinsAwarded(0);
+    setUpdatedCoinBalance(null);
+    attemptIdRef.current = "";
+    completionSubmitKeyRef.current = "";
     questionStartedAtRef.current = null;
   };
 
@@ -539,6 +559,35 @@ export default function NavtaTestPage() {
       window.localStorage.getItem("accessToken") ||
       ""
     );
+  };
+
+  const createAttemptId = () => {
+    if (
+      typeof crypto !== "undefined" &&
+      typeof crypto.randomUUID === "function"
+    ) {
+      return crypto.randomUUID();
+    }
+
+    return `navta-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 12)}`;
+  };
+
+  const beginTrackedAttempt = (durationSeconds) => {
+    const safeDurationSeconds = Math.max(
+      0,
+      Math.round(Number(durationSeconds) || 0)
+    );
+
+    attemptIdRef.current = createAttemptId();
+    completionSubmitKeyRef.current = "";
+
+    setTestDurationSeconds(safeDurationSeconds);
+    setResultSaveStatus("idle");
+    setResultSaveMessage("");
+    setCoinsAwarded(0);
+    setUpdatedCoinBalance(null);
   };
 
   const saveMistakeToNotebook = async (questionIndex) => {
@@ -722,12 +771,15 @@ export default function NavtaTestPage() {
       setMistakeSaveState({});
       setMistakeSaveMessage({});
       questionStartedAtRef.current = Date.now();
-      setTimeLeft(
+
+      const standardDurationSeconds =
         Number(
           data?.test?.durationSeconds ||
             Number(selectedDuration) * 60
-        )
-      );
+        );
+
+      beginTrackedAttempt(standardDurationSeconds);
+      setTimeLeft(standardDurationSeconds);
       setSubmitted(false);
       setEvaluationError("");
       setStep("test");
@@ -845,7 +897,12 @@ export default function NavtaTestPage() {
       setMistakeSaveState({});
       setMistakeSaveMessage({});
       questionStartedAtRef.current = Date.now();
-      setTimeLeft(returnedSeconds || fallbackSeconds);
+
+      const bossDurationSeconds =
+        returnedSeconds || fallbackSeconds;
+
+      beginTrackedAttempt(bossDurationSeconds);
+      setTimeLeft(bossDurationSeconds);
       setSubmitted(false);
       setEvaluationError("");
       setQuestionType("mcq");
@@ -951,6 +1008,8 @@ export default function NavtaTestPage() {
       setMistakeSaveState({});
       setMistakeSaveMessage({});
       questionStartedAtRef.current = Date.now();
+
+      beginTrackedAttempt(returnedSeconds);
       setTimeLeft(returnedSeconds);
       setSubmitted(false);
       setEvaluationError("");
@@ -1161,6 +1220,187 @@ export default function NavtaTestPage() {
   );
 
   const bossWon = isBoss && bossPercentage >= BOSS_WIN_PERCENTAGE;
+
+  // =====================================================
+  // SAVE COMPLETED NAVTA TEST
+  // =====================================================
+
+  const saveCompletedNavtaResult = async () => {
+    if (
+      !submitted ||
+      step !== "test" ||
+      questions.length === 0 ||
+      !attemptIdRef.current
+    ) {
+      return;
+    }
+
+    const attemptId = attemptIdRef.current;
+
+    if (completionSubmitKeyRef.current === attemptId) {
+      return;
+    }
+
+    completionSubmitKeyRef.current = attemptId;
+    setResultSaveStatus("saving");
+    setResultSaveMessage("");
+
+    const selectedDurationForReward = Math.max(
+      1,
+      Math.ceil(
+        Number(
+          isBoss
+            ? testDurationSeconds / 60
+            : selectedDuration
+        ) || 0
+      )
+    );
+
+    const timeTaken = Math.max(
+      0,
+      Number(testDurationSeconds || 0) -
+        Number(timeLeft || 0)
+    );
+
+    const submissionAnswers = questions.map(
+      (question, index) => ({
+        questionId: question?._id,
+        selectedOption:
+          answers[index] !== undefined
+            ? answers[index]
+            : null,
+        textAnswer:
+          writtenAnswers[index] !== undefined
+            ? String(writtenAnswers[index])
+            : "",
+        evaluation:
+          writtenFeedback[index] || null,
+      })
+    );
+
+    try {
+      const token = getStoredAuthToken();
+
+      const headers = {
+        "Content-Type": "application/json",
+      };
+
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(
+        "/api/navta-test/complete",
+        {
+          method: "POST",
+          headers,
+          credentials: "include",
+          body: JSON.stringify({
+            attemptId,
+            testType: isRevenge
+              ? "revenge"
+              : isBoss
+                ? "boss"
+                : "standard",
+            subject,
+            exam: preparation,
+            classLevel,
+            chapter: isBoss ? "" : chapter,
+            chapters: isBoss
+              ? selectedChapters
+              : chapter
+                ? [chapter]
+                : [],
+            difficulty: isBoss ? "" : difficulty,
+            questionType: resolvedQuestionType,
+            selectedDuration: selectedDurationForReward,
+            timeTaken,
+            answers: submissionAnswers,
+          }),
+        }
+      );
+
+      let data = {};
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "Your score could not be saved."
+        );
+      }
+
+      const reward =
+        Number(
+          data?.data?.coinsEarned ??
+            data?.coinsEarned ??
+            0
+        ) || 0;
+
+      const balanceValue =
+        data?.data?.coinBalance ??
+        data?.data?.newCoins ??
+        data?.coinBalance ??
+        null;
+
+      setCoinsAwarded(reward);
+
+      if (
+        balanceValue !== null &&
+        balanceValue !== undefined
+      ) {
+        setUpdatedCoinBalance(
+          Number(balanceValue) || 0
+        );
+      }
+
+      setResultSaveStatus("saved");
+
+      if (reward === 2) {
+        setResultSaveMessage(
+          "Excellent work — you earned 2 coins for scoring above 80% on a 30-minute-or-longer test."
+        );
+      } else if (reward === 1) {
+        setResultSaveMessage(
+          "Excellent work — you earned 1 coin for scoring above 80% on a test under 30 minutes."
+        );
+      } else {
+        setResultSaveMessage(
+          "Result saved. Score above 80% to earn NAVTA Test coins."
+        );
+      }
+    } catch (error) {
+      console.error(
+        "NAVTA result save error:",
+        error
+      );
+
+      completionSubmitKeyRef.current = "";
+      setResultSaveStatus("error");
+      setResultSaveMessage(
+        error.message ||
+          "Your test is complete, but the result could not be saved."
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (
+      submitted &&
+      step === "test" &&
+      questions.length > 0 &&
+      attemptIdRef.current
+    ) {
+      saveCompletedNavtaResult();
+    }
+    // The attempt ID guard prevents duplicate rewards/submissions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitted]);
 
   const difficultyPerformance = useMemo(() => {
     if (!isBoss) return {};
@@ -1686,6 +1926,63 @@ export default function NavtaTestPage() {
           color: var(--nt-danger-text);
           line-height: 1.5;
           text-align: center;
+        }
+
+        .navta-reward-result {
+          margin: 20px auto;
+          padding: 16px 18px;
+          border-radius: 14px;
+          border: 1px solid var(--nt-border);
+          background: var(--nt-surface);
+          text-align: left;
+        }
+
+        .navta-reward-result.saved {
+          border-color: var(--nt-success-border);
+          background: var(--nt-success-bg);
+        }
+
+        .navta-reward-result.error {
+          border-color: var(--nt-danger-border);
+          background: var(--nt-danger-bg);
+        }
+
+        .navta-reward-result strong {
+          display: block;
+          margin-bottom: 5px;
+          color: var(--nt-text);
+        }
+
+        .navta-reward-result p {
+          margin: 0;
+          color: var(--nt-muted);
+          line-height: 1.5;
+          font-size: 13px;
+        }
+
+        .navta-reward-coins {
+          margin-top: 10px;
+          font-size: 24px;
+          font-weight: 900;
+          color: #ca8a04;
+        }
+
+        .navta-reward-balance {
+          margin-top: 4px;
+          color: var(--nt-soft-text);
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .navta-retry-save {
+          margin-top: 12px;
+          padding: 9px 13px;
+          border: 1px solid var(--nt-border-strong);
+          border-radius: 9px;
+          background: var(--nt-card-bg);
+          color: var(--nt-text);
+          font-weight: 800;
+          cursor: pointer;
         }
 
         .navta-test-header {
@@ -3487,6 +3784,58 @@ export default function NavtaTestPage() {
                 {bossPercentage}% accuracy
               </p>
 
+              <div
+                className={`navta-reward-result ${
+                  resultSaveStatus === "saved"
+                    ? "saved"
+                    : resultSaveStatus === "error"
+                      ? "error"
+                      : ""
+                }`}
+              >
+                <strong>
+                  {resultSaveStatus === "saving"
+                    ? "Saving performance..."
+                    : resultSaveStatus === "saved"
+                      ? "NAVTA Performance Saved"
+                      : resultSaveStatus === "error"
+                        ? "Performance Save Needs Retry"
+                        : "Finalising performance..."}
+                </strong>
+
+                <p>
+                  {resultSaveStatus === "saving"
+                    ? "Your daily performance and coin reward are being updated."
+                    : resultSaveMessage ||
+                      "Your result will be added to your daily Performance Overview."}
+                </p>
+
+                {resultSaveStatus === "saved" && (
+                  <>
+                    <div className="navta-reward-coins">
+                      🪙 +{coinsAwarded}{" "}
+                      {coinsAwarded === 1 ? "coin" : "coins"}
+                    </div>
+
+                    {updatedCoinBalance !== null && (
+                      <div className="navta-reward-balance">
+                        Coin Balance: {updatedCoinBalance}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {resultSaveStatus === "error" && (
+                  <button
+                    type="button"
+                    className="navta-retry-save"
+                    onClick={saveCompletedNavtaResult}
+                  >
+                    Retry Saving Result
+                  </button>
+                )}
+              </div>
+
               {isRevenge && (
                 <div className="navta-revenge-comparison">
                   <div>
@@ -3724,6 +4073,58 @@ export default function NavtaTestPage() {
                   </p>
                 </>
               )}
+
+              <div
+                className={`navta-reward-result ${
+                  resultSaveStatus === "saved"
+                    ? "saved"
+                    : resultSaveStatus === "error"
+                      ? "error"
+                      : ""
+                }`}
+              >
+                <strong>
+                  {resultSaveStatus === "saving"
+                    ? "Saving performance..."
+                    : resultSaveStatus === "saved"
+                      ? "NAVTA Performance Saved"
+                      : resultSaveStatus === "error"
+                        ? "Performance Save Needs Retry"
+                        : "Finalising performance..."}
+                </strong>
+
+                <p>
+                  {resultSaveStatus === "saving"
+                    ? "Your daily performance and coin reward are being updated."
+                    : resultSaveMessage ||
+                      "Your result will be added to your daily Performance Overview."}
+                </p>
+
+                {resultSaveStatus === "saved" && (
+                  <>
+                    <div className="navta-reward-coins">
+                      🪙 +{coinsAwarded}{" "}
+                      {coinsAwarded === 1 ? "coin" : "coins"}
+                    </div>
+
+                    {updatedCoinBalance !== null && (
+                      <div className="navta-reward-balance">
+                        Coin Balance: {updatedCoinBalance}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {resultSaveStatus === "error" && (
+                  <button
+                    type="button"
+                    className="navta-retry-save"
+                    onClick={saveCompletedNavtaResult}
+                  >
+                    Retry Saving Result
+                  </button>
+                )}
+              </div>
 
               <SpeedAccuracyAnalytics
                 questions={questions}
