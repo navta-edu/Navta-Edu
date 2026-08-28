@@ -329,6 +329,10 @@ export default function NavtaTestPage() {
   const [questionTimes, setQuestionTimes] = useState({});
   const questionStartedAtRef = useRef(null);
 
+  const [mistakeNotes, setMistakeNotes] = useState({});
+  const [mistakeSaveState, setMistakeSaveState] = useState({});
+  const [mistakeSaveMessage, setMistakeSaveMessage] = useState({});
+
   const isBoss = testMode === "boss";
   const isRevenge = isBoss && battleVariant === "revenge";
 
@@ -442,6 +446,9 @@ export default function NavtaTestPage() {
     setEvaluatingAnswer(false);
     setEvaluationError("");
     setQuestionTimes({});
+    setMistakeNotes({});
+    setMistakeSaveState({});
+    setMistakeSaveMessage({});
     questionStartedAtRef.current = null;
   };
 
@@ -517,6 +524,134 @@ export default function NavtaTestPage() {
     return Number(question?.correctAnswer);
   };
 
+  const getMistakeSource = () => {
+    if (isRevenge) return "revenge";
+    if (isBoss) return "boss";
+    return "standard";
+  };
+
+  const getStoredAuthToken = () => {
+    if (typeof window === "undefined") return "";
+
+    return (
+      window.localStorage.getItem("token") ||
+      window.localStorage.getItem("authToken") ||
+      window.localStorage.getItem("accessToken") ||
+      ""
+    );
+  };
+
+  const saveMistakeToNotebook = async (questionIndex) => {
+    const question = questions[questionIndex];
+    const selectedAnswer = answers[questionIndex];
+
+    if (!question?._id) {
+      setMistakeSaveState((previous) => ({
+        ...previous,
+        [questionIndex]: "error",
+      }));
+      setMistakeSaveMessage((previous) => ({
+        ...previous,
+        [questionIndex]:
+          "This question cannot be saved because its question ID is missing.",
+      }));
+      return;
+    }
+
+    const correctAnswer = getCorrectAnswerIndex(question);
+
+    if (
+      selectedAnswer === undefined ||
+      selectedAnswer === null ||
+      selectedAnswer === correctAnswer
+    ) {
+      setMistakeSaveState((previous) => ({
+        ...previous,
+        [questionIndex]: "error",
+      }));
+      setMistakeSaveMessage((previous) => ({
+        ...previous,
+        [questionIndex]:
+          "Only an incorrectly answered question can be added to the Mistake Notebook.",
+      }));
+      return;
+    }
+
+    setMistakeSaveState((previous) => ({
+      ...previous,
+      [questionIndex]: "saving",
+    }));
+
+    setMistakeSaveMessage((previous) => ({
+      ...previous,
+      [questionIndex]: "",
+    }));
+
+    try {
+      const token = getStoredAuthToken();
+
+      const headers = {
+        "Content-Type": "application/json",
+      };
+
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch("/api/mistake-notebook", {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({
+          questionId: question._id,
+          selectedAnswer,
+          note: String(mistakeNotes[questionIndex] || "").trim(),
+          source: getMistakeSource(),
+        }),
+      });
+
+      let data = {};
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "Unable to save this question to your Mistake Notebook."
+        );
+      }
+
+      setMistakeSaveState((previous) => ({
+        ...previous,
+        [questionIndex]: "saved",
+      }));
+
+      setMistakeSaveMessage((previous) => ({
+        ...previous,
+        [questionIndex]:
+          data.message || "Added to your Mistake Notebook.",
+      }));
+    } catch (error) {
+      console.error("Mistake Notebook save error:", error);
+
+      setMistakeSaveState((previous) => ({
+        ...previous,
+        [questionIndex]: "error",
+      }));
+
+      setMistakeSaveMessage((previous) => ({
+        ...previous,
+        [questionIndex]:
+          error.message ||
+          "Unable to save this question to your Mistake Notebook.",
+      }));
+    }
+  };
+
   const startStandardTest = async () => {
     if (
       !subject ||
@@ -583,6 +718,9 @@ export default function NavtaTestPage() {
       setWrittenAnswers({});
       setWrittenFeedback({});
       setQuestionTimes({});
+      setMistakeNotes({});
+      setMistakeSaveState({});
+      setMistakeSaveMessage({});
       questionStartedAtRef.current = Date.now();
       setTimeLeft(
         Number(
@@ -703,6 +841,9 @@ export default function NavtaTestPage() {
       setWrittenAnswers({});
       setWrittenFeedback({});
       setQuestionTimes({});
+      setMistakeNotes({});
+      setMistakeSaveState({});
+      setMistakeSaveMessage({});
       questionStartedAtRef.current = Date.now();
       setTimeLeft(returnedSeconds || fallbackSeconds);
       setSubmitted(false);
@@ -806,6 +947,9 @@ export default function NavtaTestPage() {
       setWrittenAnswers({});
       setWrittenFeedback({});
       setQuestionTimes({});
+      setMistakeNotes({});
+      setMistakeSaveState({});
+      setMistakeSaveMessage({});
       questionStartedAtRef.current = Date.now();
       setTimeLeft(returnedSeconds);
       setSubmitted(false);
@@ -1621,6 +1765,83 @@ export default function NavtaTestPage() {
         .navta-answer-feedback.wrong {
           border-color: rgba(239, 68, 68, 0.5);
           background: var(--nt-danger-bg);
+        }
+
+        .navta-mistake-box {
+          margin-top: 18px;
+          padding: 16px;
+          border-radius: 14px;
+          border: 1px solid var(--nt-border-strong);
+          background: var(--nt-card-bg);
+        }
+
+        .navta-mistake-box h4 {
+          margin: 0 0 6px;
+          color: var(--nt-text);
+          font-size: 16px;
+        }
+
+        .navta-mistake-box p {
+          margin: 0 0 12px;
+          color: var(--nt-muted);
+          line-height: 1.5;
+          font-size: 13px;
+        }
+
+        .navta-mistake-note {
+          width: 100%;
+          min-height: 92px;
+          padding: 12px 14px;
+          border-radius: 10px;
+          border: 1px solid var(--nt-border-strong);
+          background: var(--nt-surface);
+          color: var(--nt-text);
+          font: inherit;
+          line-height: 1.5;
+          resize: vertical;
+          outline: none;
+        }
+
+        .navta-mistake-note:focus {
+          border-color: var(--nt-accent);
+          box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+        }
+
+        .navta-mistake-actions {
+          margin-top: 12px;
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .navta-mistake-button {
+          border: 0;
+          border-radius: 10px;
+          padding: 11px 15px;
+          background: #b45309;
+          color: #ffffff;
+          font-weight: 800;
+          cursor: pointer;
+        }
+
+        .navta-mistake-button:disabled {
+          opacity: 0.65;
+          cursor: not-allowed;
+        }
+
+        .navta-mistake-message {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--nt-muted);
+        }
+
+        .navta-mistake-message.saved {
+          color: var(--nt-success-text);
+        }
+
+        .navta-mistake-message.error {
+          color: var(--nt-danger-text);
         }
 
         .navta-written-feedback.correct {
@@ -3025,9 +3246,85 @@ export default function NavtaTestPage() {
                           "Explanation is not available for this question yet."}
                       </p>
 
+                      <div className="navta-mistake-box">
+                        <h4>📕 Add to Mistake Notebook</h4>
+
+                        <p>
+                          Save this incorrect question for revision. You can
+                          also write a personal note about what confused you.
+                        </p>
+
+                        <textarea
+                          className="navta-mistake-note"
+                          maxLength={2000}
+                          value={mistakeNotes[currentQuestion] || ""}
+                          onChange={(event) => {
+                            const value = event.target.value;
+
+                            setMistakeNotes((previous) => ({
+                              ...previous,
+                              [currentQuestion]: value,
+                            }));
+
+                            if (
+                              mistakeSaveState[currentQuestion] === "saved"
+                            ) {
+                              setMistakeSaveState((previous) => ({
+                                ...previous,
+                                [currentQuestion]: "changed",
+                              }));
+
+                              setMistakeSaveMessage((previous) => ({
+                                ...previous,
+                                [currentQuestion]:
+                                  "Note changed — save again to update your notebook.",
+                              }));
+                            }
+                          }}
+                          placeholder="Optional note: Why did I get this wrong? What should I remember next time?"
+                        />
+
+                        <div className="navta-mistake-actions">
+                          <button
+                            type="button"
+                            className="navta-mistake-button"
+                            disabled={
+                              mistakeSaveState[currentQuestion] === "saving"
+                            }
+                            onClick={() =>
+                              saveMistakeToNotebook(currentQuestion)
+                            }
+                          >
+                            {mistakeSaveState[currentQuestion] === "saving"
+                              ? "Saving..."
+                              : mistakeSaveState[currentQuestion] === "saved"
+                                ? "✓ Saved to Notebook"
+                                : mistakeSaveState[currentQuestion] ===
+                                    "changed"
+                                  ? "Update Notebook"
+                                  : "📕 Save to Mistake Notebook"}
+                          </button>
+
+                          <span
+                            className={`navta-mistake-message ${
+                              mistakeSaveState[currentQuestion] === "saved"
+                                ? "saved"
+                                : mistakeSaveState[currentQuestion] === "error"
+                                  ? "error"
+                                  : ""
+                            }`}
+                          >
+                            {mistakeSaveMessage[currentQuestion] || ""}
+                          </span>
+                        </div>
+                      </div>
+
                       <button
                         type="button"
-                        style={styles.nextButton}
+                        style={{
+                          ...styles.nextButton,
+                          marginTop: 16,
+                        }}
                         onClick={goForwardAfterAnswer}
                       >
                         {currentQuestion <
