@@ -34,6 +34,7 @@ import {
   GraduationCap,
   LineChart,
   Sparkles,
+  ShieldCheck,
   Target,
   Trophy,
   Zap
@@ -315,6 +316,60 @@ export default function StudentDashboard() {
     );
 
   // ===================================================
+  // NAVTA TEST STREAK
+  // ===================================================
+
+  const navtaStreak =
+    analytics?.streak || {};
+
+  const currentStreak =
+    Number(
+      navtaStreak?.currentStreak ??
+      streak?.currentStreak ??
+      0
+    );
+
+  const longestStreak =
+    Number(
+      navtaStreak?.longestStreak ??
+      0
+    );
+
+  const recoveryActive =
+    Boolean(
+      navtaStreak?.recoveryActive
+    );
+
+  const recoveryRequired =
+    Number(
+      navtaStreak?.recoveryRequired ??
+      0
+    );
+
+  const recoveryCompleted =
+    Number(
+      navtaStreak?.recoveryCompleted ??
+      0
+    );
+
+  const recoveryRemaining =
+    Number(
+      navtaStreak?.recoveryRemaining ??
+      Math.max(
+        0,
+        recoveryRequired -
+          recoveryCompleted
+      )
+    );
+
+  const streakSubtext =
+    recoveryActive
+      ? `Recovery ${recoveryCompleted}/${recoveryRequired} • ${recoveryRemaining} day${recoveryRemaining === 1 ? '' : 's'} left`
+      : currentStreak > 0
+        ? `Best ${longestStreak || currentStreak} • Complete a NAVTA TEST today`
+        : 'Complete a NAVTA TEST to start your streak';
+
+  // ===================================================
   // DAILY GOALS
   // ===================================================
 
@@ -333,13 +388,17 @@ export default function StudentDashboard() {
     },
     {
       title:
-        'Maintain your login streak',
-      reward: '+30 XP',
-      done:
-        Number(
-          streak?.currentStreak ||
-            0
-        ) > 0
+        recoveryActive
+          ? `Complete NAVTA TEST recovery day ${Math.min(
+              recoveryCompleted + 1,
+              recoveryRequired || 1
+            )}/${recoveryRequired || 1}`
+          : 'Complete a NAVTA TEST for your streak',
+      reward:
+        recoveryActive
+          ? 'Streak Protection'
+          : 'Streak Progress',
+      done: false
     }
   ];
 
@@ -1028,15 +1087,28 @@ export default function StudentDashboard() {
         >
 
           <MetricCard
-            icon={Flame}
-            value={
-              streak?.currentStreak ||
-              1
+            icon={
+              recoveryActive
+                ? ShieldCheck
+                : Flame
             }
-            label="Day Streak"
-            subtext="Keep it going!"
-            iconClass="text-orange-500"
-            iconBg="bg-orange-100 dark:bg-orange-500/10"
+            value={currentStreak}
+            label={
+              recoveryActive
+                ? "Streak Recovery"
+                : "Day Streak"
+            }
+            subtext={streakSubtext}
+            iconClass={
+              recoveryActive
+                ? "text-sky-500"
+                : "text-orange-500"
+            }
+            iconBg={
+              recoveryActive
+                ? "bg-sky-100 dark:bg-sky-500/10"
+                : "bg-orange-100 dark:bg-orange-500/10"
+            }
           />
 
           <MetricCard
