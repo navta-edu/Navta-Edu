@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 
 import {
   BrowserRouter as Router,
@@ -25,51 +25,51 @@ import Footer from './components/Footer';
 // PUBLIC PAGES
 // =====================================================
 
-import Home from './pages/Home';
-import About from './pages/About';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
-import Unauthorized from './pages/Unauthorized';
-import Onboarding from './pages/Onboarding';
+const Home = lazy(() => import('./pages/Home'));
+const About = lazy(() => import('./pages/About'));
+const Login = lazy(() => import('./pages/Login'));
+const Signup = lazy(() => import('./pages/Signup'));
+const Unauthorized = lazy(() => import('./pages/Unauthorized'));
+const Onboarding = lazy(() => import('./pages/Onboarding'));
 
 // =====================================================
 // STUDENT PAGES
 // =====================================================
 
-import StudentDashboard from './pages/StudentDashboard';
-import AnalyticsPage from './pages/AnalyticsPage';
-import RewardsPage from './pages/RewardsPage';
-import ResultDetail from './pages/ResultDetail';
-import MistakeNotebookPage from './pages/MistakeNotebookPage';
-import StreakPage from './pages/StreakPage';
+const StudentDashboard = lazy(() => import('./pages/StudentDashboard'));
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
+const RewardsPage = lazy(() => import('./pages/RewardsPage'));
+const ResultDetail = lazy(() => import('./pages/ResultDetail'));
+const MistakeNotebookPage = lazy(() => import('./pages/MistakeNotebookPage'));
+const StreakPage = lazy(() => import('./pages/StreakPage'));
 
 // =====================================================
 // TEACHER / EDUCATOR PAGES
 // =====================================================
 
-import TeacherDashboard from './pages/TeacherDashboard';
-import ExternalTeacherDashboard from './pages/ExternalTeacherDashboard';
+const TeacherDashboard = lazy(() => import('./pages/TeacherDashboard'));
+const ExternalTeacherDashboard = lazy(() => import('./pages/ExternalTeacherDashboard'));
 
 // NEW QUESTION PAPER BUILDER
-import QuestionPaperBuilder from './pages/QuestionPaperBuilder';
+const QuestionPaperBuilder = lazy(() => import('./pages/QuestionPaperBuilder'));
 
 // =====================================================
 // ADMIN PAGES
 // =====================================================
 
-import AdminDashboard from './pages/AdminDashboard';
-import AdminNavtaTest from './pages/AdminNavtaTest';
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const AdminNavtaTest = lazy(() => import('./pages/AdminNavtaTest'));
 
 // =====================================================
 // SHARED PAGES
 // =====================================================
 
-import NavtaTestPage from './pages/NavtaTestPage';
-import NotesPage from './pages/NotesPage';
-import PYQPage from './pages/PYQPage';
-import AssessmentPage from './pages/AssessmentPage';
-import ProfilePage from './pages/ProfilePage';
-import SettingsPage from './pages/SettingsPage';
+const NavtaTestPage = lazy(() => import('./pages/NavtaTestPage'));
+const NotesPage = lazy(() => import('./pages/NotesPage'));
+const PYQPage = lazy(() => import('./pages/PYQPage'));
+const AssessmentPage = lazy(() => import('./pages/AssessmentPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 // =====================================================
 // PUBLIC LAYOUT
@@ -210,6 +210,7 @@ function DashboardLayout() {
             xl:p-6
             overflow-x-hidden
             bg-transparent
+            navta-main-content
           "
         >
           <Outlet />
@@ -263,6 +264,39 @@ function RoleGuard({
 }
 
 // =====================================================
+// ROUTE LOADING FALLBACK
+// =====================================================
+
+function RouteLoader() {
+  return (
+    <div
+      className="
+        min-h-[50vh]
+        w-full
+        flex
+        items-center
+        justify-center
+        bg-transparent
+      "
+      aria-live="polite"
+      aria-label="Loading page"
+    >
+      <div
+        className="
+          h-8
+          w-8
+          animate-spin
+          rounded-full
+          border-4
+          border-primary-500
+          border-t-transparent
+        "
+      />
+    </div>
+  );
+}
+
+// =====================================================
 // MAIN APP
 // =====================================================
 
@@ -270,7 +304,8 @@ export default function App() {
   return (
     <AuthProvider>
       <Router>
-        <Routes>
+        <Suspense fallback={<RouteLoader />}>
+          <Routes>
 
           {/* =================================================
               PUBLIC ROUTES
@@ -574,7 +609,8 @@ export default function App() {
             }
           />
 
-        </Routes>
+          </Routes>
+        </Suspense>
       </Router>
     </AuthProvider>
   );
