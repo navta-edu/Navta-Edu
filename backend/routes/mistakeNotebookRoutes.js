@@ -1,7 +1,5 @@
 const express = require("express");
 
-const router = express.Router();
-
 const {
   saveMistake,
   getMistakes,
@@ -13,42 +11,93 @@ const {
   getMistakeStats,
 } = require("../controllers/mistakeNotebookController");
 
-/*
-|--------------------------------------------------------------------------
-| IMPORTANT
-|--------------------------------------------------------------------------
-|
-| Add the SAME authentication middleware here that your other
-| student-protected backend routes use.
-|
-| These routes depend on req.user.
-|
-*/
+const {
+  protect,
+  authorizeRoles,
+} = require("../middleware/auth");
 
-/*
-|--------------------------------------------------------------------------
-| Mistake Notebook Routes
-|--------------------------------------------------------------------------
-*/
+const router = express.Router();
 
-router.post("/", saveMistake);
+// ============================================
+// PROTECT ALL ROUTES
+// ============================================
 
-router.get("/", getMistakes);
+router.use(protect);
+router.use(authorizeRoles("student"));
 
-/*
- * Keep /stats BEFORE /:id.
- * Otherwise Express could interpret "stats" as an ID.
- */
-router.get("/stats", getMistakeStats);
+// ============================================
+// SAVE MISTAKE
+// POST /api/mistake-notebook
+// ============================================
 
-router.get("/:id", getMistakeById);
+router.post(
+  "/",
+  saveMistake
+);
 
-router.put("/:id/note", updateNote);
+// ============================================
+// GET ALL MISTAKES
+// GET /api/mistake-notebook
+// ============================================
 
-router.put("/:id/mastered", updateMastered);
+router.get(
+  "/",
+  getMistakes
+);
 
-router.put("/:id/review", recordReview);
+// ============================================
+// GET DASHBOARD STATS
+// IMPORTANT: MUST BE BEFORE /:id
+// ============================================
 
-router.delete("/:id", deleteMistake);
+router.get(
+  "/stats",
+  getMistakeStats
+);
+
+// ============================================
+// GET ONE MISTAKE
+// ============================================
+
+router.get(
+  "/:id",
+  getMistakeById
+);
+
+// ============================================
+// UPDATE NOTE
+// ============================================
+
+router.put(
+  "/:id/note",
+  updateNote
+);
+
+// ============================================
+// MARK MASTERED
+// ============================================
+
+router.put(
+  "/:id/mastered",
+  updateMastered
+);
+
+// ============================================
+// RECORD REVIEW
+// ============================================
+
+router.put(
+  "/:id/review",
+  recordReview
+);
+
+// ============================================
+// DELETE MISTAKE
+// ============================================
+
+router.delete(
+  "/:id",
+  deleteMistake
+);
 
 module.exports = router;
