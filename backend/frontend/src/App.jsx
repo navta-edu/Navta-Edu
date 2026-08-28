@@ -40,6 +40,7 @@ import StudentDashboard from './pages/StudentDashboard';
 import AnalyticsPage from './pages/AnalyticsPage';
 import RewardsPage from './pages/RewardsPage';
 import ResultDetail from './pages/ResultDetail';
+import MistakeNotebookPage from './pages/MistakeNotebookPage';
 
 // =====================================================
 // TEACHER / EDUCATOR PAGES
@@ -349,6 +350,13 @@ export default function App() {
                 path="/dashboard"
                 element={
                   <StudentDashboard />
+                }
+              />
+
+              <Route
+                path="/mistake-notebook"
+                element={
+                  <MistakeNotebookPage />
                 }
               />
 
