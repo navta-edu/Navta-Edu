@@ -19,6 +19,14 @@ const adminRoutes = require("./routes/adminRoutes");
 const navtaTestRoutes = require("./routes/navtaTestRoutes");
 
 // ============================================
+// MISTAKE NOTEBOOK ROUTES
+// ============================================
+
+const mistakeNotebookRoutes = require(
+  "./routes/mistakeNotebookRoutes"
+);
+
+// ============================================
 // CONNECT DATABASE
 // ============================================
 
@@ -64,7 +72,9 @@ app.use(
       }
 
       return callback(
-        new Error(`CORS blocked request from: ${origin}`)
+        new Error(
+          `CORS blocked request from: ${origin}`
+        )
       );
     },
 
@@ -152,8 +162,35 @@ app.use("/api/teacher", teacherRoutes);
 
 app.use("/api/admin", adminRoutes);
 
+// ============================================
 // NAVTA TEST
-app.use("/api/navta-test", navtaTestRoutes);
+// ============================================
+
+app.use(
+  "/api/navta-test",
+  navtaTestRoutes
+);
+
+// ============================================
+// MISTAKE NOTEBOOK
+// ============================================
+//
+// Student Mistake Notebook API
+//
+// POST   /api/mistake-notebook
+// GET    /api/mistake-notebook
+// GET    /api/mistake-notebook/stats
+// GET    /api/mistake-notebook/:id
+// PUT    /api/mistake-notebook/:id/note
+// PUT    /api/mistake-notebook/:id/mastered
+// PUT    /api/mistake-notebook/:id/review
+// DELETE /api/mistake-notebook/:id
+//
+
+app.use(
+  "/api/mistake-notebook",
+  mistakeNotebookRoutes
+);
 
 // ============================================
 // API 404 HANDLER
@@ -237,6 +274,10 @@ const server = app.listen(PORT, () => {
 
   console.log(
     `Navta TEST API: http://localhost:${PORT}/api/navta-test`
+  );
+
+  console.log(
+    `Mistake Notebook API: http://localhost:${PORT}/api/mistake-notebook`
   );
 
   console.log("================================");
