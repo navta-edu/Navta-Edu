@@ -412,31 +412,54 @@ export default function NavtaTestPage() {
       return;
     }
 
-    if (timeLeft <= 0) {
-      setQuestionTimes((previous) => {
-        if (previous[currentQuestion] !== undefined) return previous;
+    const timer = window.setInterval(() => {
+      setTimeLeft((previous) => {
+        if (previous <= 1) {
+          return 0;
+        }
 
-        const startedAt = questionStartedAtRef.current;
-        if (!startedAt) return previous;
-
-        return {
-          ...previous,
-          [currentQuestion]: Math.max(
-            1,
-            Math.ceil((Date.now() - startedAt) / 1000)
-          ),
-        };
+        return previous - 1;
       });
+    }, 1000);
 
-      setSubmitted(true);
+    return () => window.clearInterval(timer);
+  }, [
+    step,
+    submitted,
+    questions.length,
+  ]);
+
+  useEffect(() => {
+    if (
+      step !== "test" ||
+      submitted ||
+      questions.length === 0 ||
+      timeLeft > 0
+    ) {
       return;
     }
 
-    const timer = setInterval(() => {
-      setTimeLeft((previous) => Math.max(0, previous - 1));
-    }, 1000);
+    setQuestionTimes((previous) => {
+      if (previous[currentQuestion] !== undefined) {
+        return previous;
+      }
 
-    return () => clearInterval(timer);
+      const startedAt = questionStartedAtRef.current;
+
+      if (!startedAt) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [currentQuestion]: Math.max(
+          1,
+          Math.ceil((Date.now() - startedAt) / 1000)
+        ),
+      };
+    });
+
+    setSubmitted(true);
   }, [
     step,
     submitted,
@@ -1596,7 +1619,7 @@ export default function NavtaTestPage() {
         .navta-question-card,
         .navta-result-card {
           box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
-          backdrop-filter: blur(14px);
+          backdrop-filter: blur(8px);
         }
 
         html.dark .navta-card,
@@ -2534,6 +2557,51 @@ export default function NavtaTestPage() {
             grid-template-columns: 1fr;
           }
         }
+      
+        /* =====================================================
+           NAVTA TEST PERFORMANCE
+        ===================================================== */
+
+        .navta-test-page {
+          min-width: 0;
+          overflow-x: hidden;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        .navta-question-card,
+        .navta-result-card,
+        .navta-performance-section,
+        .navta-revenge-panel,
+        .navta-revenge-comparison {
+          contain: layout paint;
+        }
+
+        .navta-performance-section,
+        .navta-revenge-panel,
+        .navta-revenge-comparison {
+          content-visibility: auto;
+          contain-intrinsic-size: 1px 420px;
+        }
+
+        .navta-options,
+        .navta-navigation {
+          touch-action: pan-y;
+        }
+
+        @media (max-width: 768px) {
+          .navta-test-page * {
+            -webkit-tap-highlight-color: transparent;
+          }
+
+          .navta-question-card,
+          .navta-result-card,
+          .navta-performance-section,
+          .navta-revenge-panel,
+          .navta-revenge-comparison {
+            box-shadow: none;
+          }
+        }
+
       `}</style>
 
       {step === "mode" && (
