@@ -62,9 +62,9 @@ export default function Navbar() {
                 {user.role === 'student' && (
                   <div className="flex items-center gap-3">
                     {/* Streak Info */}
-                    <Link to="/profile" className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/30 border border-amber-200/50 dark:border-amber-900/30 text-amber-600 dark:text-amber-400" title="Daily study streak">
+                    <Link to="/streak" className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/30 border border-amber-200/50 dark:border-amber-900/30 text-amber-600 dark:text-amber-400" title="NAVTA Test streak">
                       <Flame className="w-4 h-4 fill-amber-500 stroke-amber-500 animate-bounce" />
-                      <span className="text-xs font-semibold">{streak?.currentStreak || 1} Days</span>
+                      <span className="text-xs font-semibold">{streak?.currentStreak ?? 0} Days</span>
                     </Link>
 
                     {/* Coins Info */}
@@ -174,14 +174,25 @@ export default function Navbar() {
             <>
               {user.role === 'student' && (
                 <div className="flex gap-4 px-3 py-2">
-                  <div className="flex items-center gap-1 text-amber-600">
+                  <Link
+                    to="/streak"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-1 text-amber-600"
+                    title="NAVTA Test streak"
+                  >
                     <Flame className="w-4 h-4 fill-amber-500 stroke-amber-500" />
-                    <span className="text-xs font-semibold">{streak?.currentStreak || 1} Days</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-yellow-600">
+                    <span className="text-xs font-semibold">{streak?.currentStreak ?? 0} Days</span>
+                  </Link>
+
+                  <Link
+                    to="/rewards"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-1 text-yellow-600"
+                    title="Navta Coins balance"
+                  >
                     <Coins className="w-4 h-4 text-yellow-500" />
-                    <span className="text-xs font-semibold">{profile?.coins || 0} Coins</span>
-                  </div>
+                    <span className="text-xs font-semibold">{profile?.coins ?? 0} Coins</span>
+                  </Link>
                 </div>
               )}
               <Link
