@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 const PREPARATION_OPTIONS = {
@@ -277,6 +277,15 @@ function getBossRank(percentage) {
   return { rank: "Retry", label: "Train and return", icon: "🔁" };
 }
 
+function formatSolveTime(totalSeconds) {
+  const seconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+
+  if (minutes === 0) return `${remaining}s`;
+  return `${minutes}m ${String(remaining).padStart(2, "0")}s`;
+}
+
 export default function NavtaTestPage() {
   const [step, setStep] = useState("mode");
   const [testMode, setTestMode] = useState("");
@@ -310,6 +319,9 @@ export default function NavtaTestPage() {
 
   const [evaluatingAnswer, setEvaluatingAnswer] = useState(false);
   const [evaluationError, setEvaluationError] = useState("");
+
+  const [questionTimes, setQuestionTimes] = useState({});
+  const questionStartedAtRef = useRef(null);
 
   const isBoss = testMode === "boss";
 
@@ -353,6 +365,16 @@ export default function NavtaTestPage() {
 
   useEffect(() => {
     if (
+      step === "test" &&
+      !submitted &&
+      questions.length > 0
+    ) {
+      questionStartedAtRef.current = Date.now();
+    }
+  }, [step, currentQuestion, questions.length, submitted]);
+
+  useEffect(() => {
+    if (
       step !== "test" ||
       submitted ||
       questions.length === 0
@@ -361,6 +383,21 @@ export default function NavtaTestPage() {
     }
 
     if (timeLeft <= 0) {
+      setQuestionTimes((previous) => {
+        if (previous[currentQuestion] !== undefined) return previous;
+
+        const startedAt = questionStartedAtRef.current;
+        if (!startedAt) return previous;
+
+        return {
+          ...previous,
+          [currentQuestion]: Math.max(
+            1,
+            Math.ceil((Date.now() - startedAt) / 1000)
+          ),
+        };
+      });
+
       setSubmitted(true);
       return;
     }
@@ -370,7 +407,13 @@ export default function NavtaTestPage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [step, submitted, timeLeft, questions.length]);
+  }, [
+    step,
+    submitted,
+    timeLeft,
+    questions.length,
+    currentQuestion,
+  ]);
 
   const clearTestRun = () => {
     setQuestions([]);
@@ -386,6 +429,8 @@ export default function NavtaTestPage() {
     setGenerationError("");
     setEvaluatingAnswer(false);
     setEvaluationError("");
+    setQuestionTimes({});
+    questionStartedAtRef.current = null;
   };
 
   const resetAfterSubject = () => {
@@ -525,6 +570,8 @@ export default function NavtaTestPage() {
       setAnswerFeedback({});
       setWrittenAnswers({});
       setWrittenFeedback({});
+      setQuestionTimes({});
+      questionStartedAtRef.current = Date.now();
       setTimeLeft(
         Number(
           data?.test?.durationSeconds ||
@@ -638,6 +685,8 @@ export default function NavtaTestPage() {
       setAnswerFeedback({});
       setWrittenAnswers({});
       setWrittenFeedback({});
+      setQuestionTimes({});
+      questionStartedAtRef.current = Date.now();
       setTimeLeft(returnedSeconds || fallbackSeconds);
       setSubmitted(false);
       setEvaluationError("");
@@ -653,6 +702,24 @@ export default function NavtaTestPage() {
     }
   };
 
+  const recordCurrentQuestionTime = () => {
+    if (questionTimes[currentQuestion] !== undefined) return;
+
+    const startedAt = questionStartedAtRef.current;
+    if (!startedAt) return;
+
+    const elapsedSeconds = Math.max(
+      1,
+      Math.ceil((Date.now() - startedAt) / 1000)
+    );
+
+    setQuestionTimes((previous) => ({
+      ...previous,
+      [currentQuestion]:
+        previous[currentQuestion] ?? elapsedSeconds,
+    }));
+  };
+
   const goForwardAfterAnswer = () => {
     setEvaluationError("");
 
@@ -665,6 +732,8 @@ export default function NavtaTestPage() {
 
   const selectAnswer = (answerIndex) => {
     if (answerFeedback[currentQuestion]) return;
+
+    recordCurrentQuestionTime();
 
     const question = questions[currentQuestion];
     const correctAnswer = getCorrectAnswerIndex(question);
@@ -714,6 +783,8 @@ export default function NavtaTestPage() {
       );
       return;
     }
+
+    recordCurrentQuestionTime();
 
     setEvaluatingAnswer(true);
     setEvaluationError("");
@@ -791,6 +862,29 @@ export default function NavtaTestPage() {
       { awarded: 0, maximum: 0 }
     );
   }, [questions, writtenFeedback, resolvedQuestionType]);
+
+  const resultAccuracy = useMemo(() => {
+    if (questions.length === 0) return 0;
+
+    if (resolvedQuestionType === "mcq") {
+      return Math.round((mcqScore / questions.length) * 100);
+    }
+
+    if (writtenMarks.maximum <= 0) return 0;
+
+    return Math.round(
+      (writtenMarks.awarded / writtenMarks.maximum) * 100
+    );
+  }, [
+    questions.length,
+    resolvedQuestionType,
+    mcqScore,
+    writtenMarks,
+  ]);
+
+  const speedBenchmarkSeconds = useMemo(() => {
+    return Math.max(1, Number(minutesPerQuestion || 1) * 60);
+  }, [minutesPerQuestion]);
 
   const bossPercentage = useMemo(() => {
     if (!isBoss || questions.length === 0) return 0;
@@ -1519,6 +1613,86 @@ export default function NavtaTestPage() {
           margin-top: 26px;
         }
 
+        .navta-speed-card {
+          margin-top: 30px;
+          padding: 22px;
+          border-radius: 18px;
+          border: 1px solid var(--nt-border);
+          background: var(--nt-surface);
+          text-align: left;
+        }
+
+        .navta-speed-card h3 {
+          margin: 0 0 6px;
+        }
+
+        .navta-speed-subtitle {
+          margin: 0 0 18px;
+          color: var(--nt-muted);
+          line-height: 1.5;
+        }
+
+        .navta-speed-overview {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
+          margin-bottom: 20px;
+        }
+
+        .navta-speed-stat {
+          padding: 16px;
+          border-radius: 14px;
+          border: 1px solid var(--nt-border);
+          background: var(--nt-card-bg);
+        }
+
+        .navta-speed-stat span {
+          display: block;
+          color: var(--nt-muted);
+          font-size: 12px;
+          margin-bottom: 6px;
+        }
+
+        .navta-speed-stat strong {
+          font-size: 20px;
+          color: var(--nt-text);
+        }
+
+        .navta-speed-table {
+          display: grid;
+          gap: 8px;
+        }
+
+        .navta-speed-row {
+          display: grid;
+          grid-template-columns: 54px minmax(0, 1.6fr) 100px 90px 100px;
+          gap: 10px;
+          align-items: center;
+          padding: 11px 12px;
+          border-radius: 12px;
+          border: 1px solid var(--nt-border);
+          background: var(--nt-card-bg);
+          font-size: 13px;
+        }
+
+        .navta-speed-row.header {
+          background: var(--nt-surface-2);
+          color: var(--nt-muted);
+          font-size: 11px;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
+        .navta-speed-good {
+          color: var(--nt-success-text);
+          font-weight: 800;
+        }
+
+        .navta-speed-slow {
+          color: var(--nt-danger-text);
+          font-weight: 800;
+        }
+
         @media (max-width: 768px) {
           .navta-test-page {
             padding: 20px 14px;
@@ -1587,6 +1761,18 @@ export default function NavtaTestPage() {
 
           .navta-rank {
             font-size: 56px;
+          }
+
+          .navta-speed-overview {
+            grid-template-columns: 1fr;
+          }
+
+          .navta-speed-row {
+            grid-template-columns: 42px 1fr 74px;
+          }
+
+          .navta-speed-row .speed-hide-mobile {
+            display: none;
           }
         }
 
@@ -2770,9 +2956,20 @@ export default function NavtaTestPage() {
                 {mcqScore}/{questions.length}
               </div>
 
-              <p style={{ color: "#94a3b8" }}>
+              <p style={{ color: "var(--nt-muted)" }}>
                 {bossPercentage}% accuracy
               </p>
+
+              <SpeedAccuracyAnalytics
+                questions={questions}
+                questionTimes={questionTimes}
+                answers={answers}
+                writtenFeedback={writtenFeedback}
+                getCorrectAnswerIndex={getCorrectAnswerIndex}
+                accuracy={resultAccuracy}
+                benchmarkSeconds={speedBenchmarkSeconds}
+                questionType={resolvedQuestionType}
+              />
 
               <div className="navta-performance-section">
                 <h3>Difficulty Performance</h3>
@@ -2892,6 +3089,17 @@ export default function NavtaTestPage() {
                 </>
               )}
 
+              <SpeedAccuracyAnalytics
+                questions={questions}
+                questionTimes={questionTimes}
+                answers={answers}
+                writtenFeedback={writtenFeedback}
+                getCorrectAnswerIndex={getCorrectAnswerIndex}
+                accuracy={resultAccuracy}
+                benchmarkSeconds={speedBenchmarkSeconds}
+                questionType={resolvedQuestionType}
+              />
+
               <button
                 type="button"
                 style={styles.startButton}
@@ -2911,6 +3119,180 @@ export default function NavtaTestPage() {
         </div>
       )}
     </>
+  );
+}
+
+function SpeedAccuracyAnalytics({
+  questions,
+  questionTimes,
+  answers,
+  writtenFeedback,
+  getCorrectAnswerIndex,
+  accuracy,
+  benchmarkSeconds,
+  questionType,
+}) {
+  const rows = questions.map((question, index) => {
+    const seconds = Number(questionTimes[index] || 0);
+
+    let status = "Unanswered";
+    let isCorrect = false;
+
+    if (questionType === "mcq") {
+      const hasAnswer = answers[index] !== undefined;
+      isCorrect =
+        hasAnswer &&
+        answers[index] === getCorrectAnswerIndex(question);
+      status = hasAnswer
+        ? isCorrect
+          ? "Correct"
+          : "Wrong"
+        : "Unanswered";
+    } else {
+      const feedback = writtenFeedback[index];
+      if (feedback) {
+        status =
+          feedback.status === "correct"
+            ? "Correct"
+            : feedback.status === "partially_correct"
+              ? "Partial"
+              : "Wrong";
+        isCorrect = feedback.status === "correct";
+      }
+    }
+
+    return {
+      index,
+      seconds,
+      status,
+      isCorrect,
+      chapter: question?.chapter || "Current chapter",
+      difficulty: question?.difficulty || "-",
+    };
+  });
+
+  const timedRows = rows.filter((row) => row.seconds > 0);
+  const totalSeconds = timedRows.reduce(
+    (sum, row) => sum + row.seconds,
+    0
+  );
+  const averageSeconds = timedRows.length
+    ? Math.round(totalSeconds / timedRows.length)
+    : 0;
+  const fastestSeconds = timedRows.length
+    ? Math.min(...timedRows.map((row) => row.seconds))
+    : 0;
+  const slowestSeconds = timedRows.length
+    ? Math.max(...timedRows.map((row) => row.seconds))
+    : 0;
+
+  const paceLabel =
+    averageSeconds === 0
+      ? "No timing data"
+      : averageSeconds <= benchmarkSeconds * 0.75
+        ? "Excellent pace"
+        : averageSeconds <= benchmarkSeconds
+          ? "On exam pace"
+          : "Needs more speed";
+
+  return (
+    <div className="navta-speed-card">
+      <h3>⏱ Speed vs Accuracy</h3>
+      <p className="navta-speed-subtitle">
+        See how quickly you solved each question and whether your
+        pace matches the target time.
+      </p>
+
+      <div className="navta-speed-overview">
+        <div className="navta-speed-stat">
+          <span>Accuracy</span>
+          <strong>{accuracy}%</strong>
+        </div>
+
+        <div className="navta-speed-stat">
+          <span>Average / Question</span>
+          <strong>{formatSolveTime(averageSeconds)}</strong>
+        </div>
+
+        <div className="navta-speed-stat">
+          <span>Pace</span>
+          <strong>{paceLabel}</strong>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "12px",
+          marginBottom: "16px",
+          color: "var(--nt-muted)",
+          fontSize: "13px",
+        }}
+      >
+        <span>
+          Target: {formatSolveTime(benchmarkSeconds)} / question
+        </span>
+        <span>•</span>
+        <span>Fastest: {formatSolveTime(fastestSeconds)}</span>
+        <span>•</span>
+        <span>Slowest: {formatSolveTime(slowestSeconds)}</span>
+        <span>•</span>
+        <span>Total solving time: {formatSolveTime(totalSeconds)}</span>
+      </div>
+
+      <div className="navta-speed-table">
+        <div className="navta-speed-row header">
+          <span>Q</span>
+          <span>Chapter</span>
+          <span className="speed-hide-mobile">Difficulty</span>
+          <span>Result</span>
+          <span>Time</span>
+        </div>
+
+        {rows.map((row) => {
+          const onPace =
+            row.seconds > 0 && row.seconds <= benchmarkSeconds;
+
+          return (
+            <div
+              key={`speed-${row.index}`}
+              className="navta-speed-row"
+            >
+              <strong>{row.index + 1}</strong>
+              <span>{row.chapter}</span>
+              <span className="speed-hide-mobile">
+                {row.difficulty}
+              </span>
+              <span
+                className={
+                  row.status === "Correct"
+                    ? "navta-speed-good"
+                    : row.status === "Wrong"
+                      ? "navta-speed-slow"
+                      : ""
+                }
+              >
+                {row.status}
+              </span>
+              <span
+                className={
+                  onPace
+                    ? "navta-speed-good"
+                    : row.seconds > 0
+                      ? "navta-speed-slow"
+                      : ""
+                }
+              >
+                {row.seconds > 0
+                  ? formatSolveTime(row.seconds)
+                  : "-"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
