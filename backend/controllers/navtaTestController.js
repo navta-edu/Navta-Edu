@@ -1,6 +1,10 @@
 const NavtaQuestion = require("../models/NavtaQuestion");
 const Result = require("../models/Result");
 const Student = require("../models/Student");
+const {
+  applyNavtaStreakActivity,
+  getNavtaStreakSnapshot,
+} = require("./studentController");
 
 // ============================================
 // TEST RULES
@@ -175,6 +179,120 @@ function normaliseSubmittedAnswer(
   )
     ? numericValue
     : null;
+}
+
+
+// ============================================
+// NAVTA TEST STREAK SAFE UPDATE
+// ============================================
+//
+// The shared streak rules live in studentController.js.
+// This wrapper applies them with a conditional MongoDB
+// update so multiple NAVTA TESTS completed at nearly the
+// same time cannot increase the streak more than once.
+//
+// All streak dates use Asia/Kolkata through the shared
+// helper in studentController.js.
+//
+async function applyNavtaStreakSafely(
+  userId,
+  activityDate = new Date()
+) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const student =
+      await Student.findOne({
+        user: userId,
+      });
+
+    if (!student) {
+      throw new Error(
+        "Student profile not found."
+      );
+    }
+
+    const previousDate =
+      student.lastNavtaTestDate ??
+      null;
+
+    const streakUpdate =
+      applyNavtaStreakActivity(
+        student,
+        activityDate
+      );
+
+    // Same India-calendar day, stale activity,
+    // or otherwise no streak mutation required.
+    if (!streakUpdate.changed) {
+      return {
+        ...streakUpdate,
+        ...getNavtaStreakSnapshot(
+          student
+        ),
+      };
+    }
+
+    const updatedStudent =
+      await Student.findOneAndUpdate(
+        {
+          _id: student._id,
+          lastNavtaTestDate:
+            previousDate,
+        },
+        {
+          $set: {
+            currentStreak:
+              student.currentStreak,
+            longestStreak:
+              student.longestStreak,
+            lastNavtaTestDate:
+              student.lastNavtaTestDate,
+            streakRecoveryActive:
+              student.streakRecoveryActive,
+            streakRecoveryRequired:
+              student.streakRecoveryRequired,
+            streakRecoveryCompleted:
+              student.streakRecoveryCompleted,
+            streakLastUpdatedAt:
+              student.streakLastUpdatedAt,
+          },
+        },
+        {
+          new: true,
+        }
+      );
+
+    if (updatedStudent) {
+      return {
+        ...streakUpdate,
+        ...getNavtaStreakSnapshot(
+          updatedStudent
+        ),
+      };
+    }
+
+    // Another completion changed the streak between
+    // our read and write. Re-read and try again.
+  }
+
+  const latestStudent =
+    await Student.findOne({
+      user: userId,
+    });
+
+  if (!latestStudent) {
+    throw new Error(
+      "Student profile not found."
+    );
+  }
+
+  return {
+    changed: false,
+    status:
+      "streak-refresh-required",
+    ...getNavtaStreakSnapshot(
+      latestStudent
+    ),
+  };
 }
 
 // ============================================
@@ -2500,11 +2618,23 @@ exports.completeNavtaTest =
         });
 
       if (existingResult) {
+        // A retry must not create another streak day.
+        // Using the original result creation date also
+        // lets us safely repair a streak update if the
+        // server previously saved the result but stopped
+        // before updating the streak.
+        const streak =
+          await applyNavtaStreakSafely(
+            userId,
+            existingResult.createdAt ||
+              new Date()
+          );
+
         const existingStudent =
           await Student.findOne({
             user: userId,
           }).select(
-            "coins xp level"
+            "coins xp level currentStreak longestStreak lastNavtaTestDate streakRecoveryActive streakRecoveryRequired streakRecoveryCompleted streakLastUpdatedAt"
           );
 
         return res.status(200).json({
@@ -2534,6 +2664,7 @@ exports.completeNavtaTest =
                 existingStudent?.coins ||
                   0
               ),
+            streak,
           },
         });
       }
@@ -3160,10 +3291,19 @@ exports.completeNavtaTest =
                 cleanedAttemptId,
             });
 
+          const streak =
+            await applyNavtaStreakSafely(
+              userId,
+              duplicateResult?.createdAt ||
+                new Date()
+            );
+
           const duplicateStudent =
             await Student.findOne({
               user: userId,
-            }).select("coins");
+            }).select(
+              "coins currentStreak longestStreak lastNavtaTestDate streakRecoveryActive streakRecoveryRequired streakRecoveryCompleted streakLastUpdatedAt"
+            );
 
           return res.status(200).json({
             success: true,
@@ -3194,6 +3334,7 @@ exports.completeNavtaTest =
                   duplicateStudent?.coins ||
                     0
                 ),
+              streak,
             },
           });
         }
@@ -3225,22 +3366,63 @@ exports.completeNavtaTest =
           }
         );
 
-      if (claimedReward) {
-        if (
-          coinsEarned > 0
-        ) {
-          student.coins +=
-            coinsEarned;
-        }
-
-        await student.save();
+      if (
+        claimedReward &&
+        coinsEarned > 0
+      ) {
+        // Atomic increment avoids overwriting streak
+        // fields if another NAVTA TEST completion is
+        // updating the Student document at the same time.
+        await Student.updateOne(
+          {
+            user: userId,
+          },
+          {
+            $inc: {
+              coins:
+                coinsEarned,
+            },
+          }
+        );
       }
+
+      // ========================================
+      // NAVTA TEST DAILY STREAK
+      // ========================================
+      //
+      // Any successfully saved Standard, Boss, or
+      // Revenge completion qualifies, regardless of
+      // score.
+      //
+      // Only the first qualifying completion on the
+      // same India-calendar day changes streak state.
+      //
+      // Miss 1 day:
+      //   1 recovery work day.
+      //
+      // Miss 2 days:
+      //   2 recovery work days.
+      //
+      // Miss 3+ consecutive full days:
+      //   old streak ends and this completion starts
+      //   a new streak at 1.
+      //
+      // Recovery days protect the old streak but do
+      // not increase currentStreak.
+      // ========================================
+
+      const streak =
+        await applyNavtaStreakSafely(
+          userId,
+          result.createdAt ||
+            new Date()
+        );
 
       const finalStudent =
         await Student.findOne({
           user: userId,
         }).select(
-          "coins xp level"
+          "coins xp level currentStreak longestStreak lastNavtaTestDate streakRecoveryActive streakRecoveryRequired streakRecoveryCompleted streakLastUpdatedAt"
         );
 
       result =
@@ -3277,6 +3459,7 @@ exports.completeNavtaTest =
               finalStudent?.coins ||
                 0
             ),
+          streak,
         },
       });
     } catch (error) {
