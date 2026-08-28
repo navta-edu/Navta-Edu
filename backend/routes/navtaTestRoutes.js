@@ -8,6 +8,7 @@ const {
   deleteQuestion,
   generateTest,
   generateBossBattle,
+  generateRevengeBattle,
   evaluateWrittenAnswer,
 } = require("../controllers/navtaTestController");
 
@@ -22,6 +23,11 @@ router.post(
 
 // ============================================
 // STUDENT - GENERATE STANDARD NAVTA TEST
+// ============================================
+//
+// Endpoint:
+// POST /api/navta-test/generate
+//
 // ============================================
 
 router.post(
@@ -50,7 +56,39 @@ router.post(
 );
 
 // ============================================
+// STUDENT - GENERATE REVENGE BATTLE
+// ============================================
+//
+// Revenge Battle supports:
+// - Unlocks after a failed Boss Battle
+// - Boss must be defeated with 70% or higher
+// - Uses the same subject
+// - Uses the same preparation/exam
+// - Uses the same class
+// - Uses the same selected chapters
+// - Uses the same Boss Battle size
+// - Focuses on weak chapters
+// - Focuses on weak difficulty levels
+// - Tries to avoid recently answered questions
+// - Supports repeated Revenge attempts
+//
+// Endpoint:
+// POST /api/navta-test/revenge-battle
+//
+// ============================================
+
+router.post(
+  "/revenge-battle",
+  generateRevengeBattle
+);
+
+// ============================================
 // STUDENT - EVALUATE WRITTEN ANSWER
+// ============================================
+//
+// Endpoint:
+// POST /api/navta-test/evaluate-answer
+//
 // ============================================
 
 router.post(
