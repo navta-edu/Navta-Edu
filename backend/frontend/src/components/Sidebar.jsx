@@ -112,14 +112,11 @@ export default function Sidebar() {
       label: 'Manage Quizzes',
       icon: ClipboardCheck
     },
-
-    // NEW PAPER BUILDER
     {
       to: '/teacher/question-paper-builder',
       label: 'Paper Builder',
       icon: FilePlus2
     },
-
     {
       to: '/settings',
       label: 'Settings',
@@ -152,14 +149,11 @@ export default function Sidebar() {
       label: 'Assessments',
       icon: ClipboardCheck
     },
-
-    // NEW PAPER BUILDER
     {
       to: '/educator/question-paper-builder',
       label: 'Paper Builder',
       icon: FilePlus2
     },
-
     {
       to: '/settings',
       label: 'Settings',
@@ -207,22 +201,15 @@ export default function Sidebar() {
   // =====================================================
 
   const getLinks = () => {
-    if (
-      user.role === 'admin'
-    ) {
+    if (user.role === 'admin') {
       return adminLinks;
     }
 
-    if (
-      user.role === 'teacher'
-    ) {
+    if (user.role === 'teacher') {
       return teacherLinks;
     }
 
-    if (
-      user.role ===
-      'external_teacher'
-    ) {
+    if (user.role === 'external_teacher') {
       return externalTeacherLinks;
     }
 
@@ -239,8 +226,10 @@ export default function Sidebar() {
   return (
     <aside
       className="
+        navta-scroll-area
         w-full
         md:w-64
+        md:shrink-0
 
         border-b
         md:border-b-0
@@ -249,10 +238,8 @@ export default function Sidebar() {
         border-slate-200/80
         dark:border-slate-800/80
 
-        bg-white/72
-        dark:bg-[#071224]/72
-
-        backdrop-blur-xl
+        bg-white/95
+        dark:bg-[#071224]/95
 
         p-4
 
@@ -269,6 +256,7 @@ export default function Sidebar() {
         md:top-16
 
         overflow-y-auto
+        overflow-x-hidden
         no-scrollbar
       "
     >
@@ -283,9 +271,12 @@ export default function Sidebar() {
 
           overflow-x-auto
           md:overflow-x-visible
+          md:overflow-y-visible
 
           pb-2
           md:pb-0
+
+          no-scrollbar
         "
       >
         {links.map(
@@ -312,27 +303,25 @@ export default function Sidebar() {
                   link.to &&
                 location.hash ===
                   link.hash;
+            } else if (
+              link.to ===
+                '/admin' ||
+              link.to ===
+                '/dashboard' ||
+              link.to ===
+                '/teacher' ||
+              link.to ===
+                '/external-teacher'
+            ) {
+              isActive =
+                location.pathname ===
+                  link.to &&
+                !location.hash;
             } else {
-              if (
-                link.to ===
-                  '/admin' ||
-                link.to ===
-                  '/dashboard' ||
-                link.to ===
-                  '/teacher' ||
-                link.to ===
-                  '/external-teacher'
-              ) {
-                isActive =
-                  location.pathname ===
-                    link.to &&
-                  !location.hash;
-              } else {
-                isActive =
-                  location.pathname.startsWith(
-                    link.to
-                  );
-              }
+              isActive =
+                location.pathname.startsWith(
+                  link.to
+                );
             }
 
             return (
@@ -358,25 +347,25 @@ export default function Sidebar() {
 
                   whitespace-nowrap
 
-                  transition-all
-                  duration-200
+                  transition-colors
+                  duration-150
 
                   cursor-pointer
+                  select-none
 
                   ${
                     isActive
                       ? `
                         bg-primary-500
                         text-white
-                        shadow-md
-                        shadow-primary-500/10
+                        shadow-sm
                       `
                       : `
                         text-slate-600
                         dark:text-slate-400
 
-                        hover:bg-slate-100/80
-                        dark:hover:bg-slate-800/60
+                        hover:bg-slate-100
+                        dark:hover:bg-slate-800/80
 
                         hover:text-slate-900
                         dark:hover:text-white
