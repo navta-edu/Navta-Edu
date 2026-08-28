@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ThemeToggle from './ThemeToggle';
 import { GraduationCap, LogOut, User, Settings, LayoutDashboard, Menu, X, Flame, Coins } from 'lucide-react';
@@ -7,8 +7,14 @@ import { GraduationCap, LogOut, User, Settings, LayoutDashboard, Menu, X, Flame,
 export default function Navbar() {
   const { user, profile, streak, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setDropdownOpen(false);
+    setMobileMenuOpen(false);
+  }, [location.pathname, location.hash]);
 
   const handleLogout = () => {
     logout();
@@ -25,7 +31,7 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/85 backdrop-blur-md dark:border-slate-800/80 dark:bg-darkbg/85 transition-colors duration-200">
+    <nav className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/95 supports-[backdrop-filter]:bg-white/90 supports-[backdrop-filter]:backdrop-blur-sm dark:border-slate-800/80 dark:bg-darkbg/95 dark:supports-[backdrop-filter]:bg-darkbg/90 transition-colors duration-150">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo Section */}
@@ -63,7 +69,7 @@ export default function Navbar() {
                   <div className="flex items-center gap-3">
                     {/* Streak Info */}
                     <Link to="/streak" className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/30 border border-amber-200/50 dark:border-amber-900/30 text-amber-600 dark:text-amber-400" title="NAVTA Test streak">
-                      <Flame className="w-4 h-4 fill-amber-500 stroke-amber-500 animate-bounce" />
+                      <Flame className="w-4 h-4 fill-amber-500 stroke-amber-500" />
                       <span className="text-xs font-semibold">{streak?.currentStreak ?? 0} Days</span>
                     </Link>
 
@@ -132,7 +138,7 @@ export default function Navbar() {
                 <Link to="/login" className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
                   Log in
                 </Link>
-                <Link to="/signup" className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-primary-500 transition-all duration-200">
+                <Link to="/signup" className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 transition-colors duration-150">
                   Sign up
                 </Link>
               </div>
@@ -154,7 +160,7 @@ export default function Navbar() {
 
       {/* Mobile Menu Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 p-4 space-y-3">
+        <div className="navta-scroll-area md:hidden max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 p-4 space-y-3">
           <Link
             to="/"
             onClick={() => setMobileMenuOpen(false)}
