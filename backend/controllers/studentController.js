@@ -2,7 +2,6 @@ const Student = require('../models/Student');
 const Test = require('../models/Test');
 const Question = require('../models/Question');
 const Result = require('../models/Result');
-const Streak = require('../models/Streak');
 const Reward = require('../models/Reward');
 const Achievement = require('../models/Achievement');
 const User = require('../models/User');
@@ -156,6 +155,571 @@ const formatFullGraphDate = (date) => {
     }
   ).format(new Date(date));
 };
+
+
+/*
+|--------------------------------------------------------------------------
+| NAVTA TEST STREAK HELPERS
+|--------------------------------------------------------------------------
+|
+| A streak day is earned only from a completed NAVTA TEST.
+|
+| Rules:
+| - More than one NAVTA TEST on the same India calendar day counts once.
+| - Missing 1 day starts a 1-work-day recovery.
+| - Missing 2 days starts a 2-work-day recovery.
+| - Recovery work days keep the old streak alive but do not increase it.
+| - After recovery is completed, the next consecutive qualifying day
+|   increases the streak again.
+| - Missing 3 consecutive full days ends the old streak.
+|
+*/
+
+const indiaDateKeyToDayNumber = (dateKey) => {
+  if (
+    typeof dateKey !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)
+  ) {
+    return null;
+  }
+
+  const [year, month, day] =
+    dateKey
+      .split('-')
+      .map(Number);
+
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day)
+  ) {
+    return null;
+  }
+
+  return Math.floor(
+    Date.UTC(
+      year,
+      month - 1,
+      day
+    ) /
+      86400000
+  );
+};
+
+const getNavtaStreakSnapshot = (student) => {
+  if (!student) {
+    return {
+      currentStreak: 0,
+      longestStreak: 0,
+      lastNavtaTestDate: null,
+      recoveryActive: false,
+      recoveryRequired: 0,
+      recoveryCompleted: 0,
+      recoveryRemaining: 0
+    };
+  }
+
+  const required =
+    Number(
+      student.streakRecoveryRequired
+    ) || 0;
+
+  const completed =
+    Number(
+      student.streakRecoveryCompleted
+    ) || 0;
+
+  return {
+    currentStreak:
+      Number(
+        student.currentStreak
+      ) || 0,
+
+    longestStreak:
+      Number(
+        student.longestStreak
+      ) || 0,
+
+    lastNavtaTestDate:
+      student.lastNavtaTestDate ||
+      null,
+
+    recoveryActive:
+      Boolean(
+        student.streakRecoveryActive
+      ),
+
+    recoveryRequired:
+      required,
+
+    recoveryCompleted:
+      completed,
+
+    recoveryRemaining:
+      Math.max(
+        0,
+        required - completed
+      )
+  };
+};
+
+/*
+|--------------------------------------------------------------------------
+| Apply one qualifying NAVTA TEST completion to a student's streak
+|--------------------------------------------------------------------------
+|
+| This helper MUTATES the supplied Student document.
+| The caller must save the Student document after calling it.
+|
+| It is exported below so navtaTestController.js can use the exact same
+| streak logic when /api/navta-test/complete saves a Standard, Boss, or
+| Revenge result.
+|
+*/
+const applyNavtaStreakActivity = (
+  student,
+  activityDate = new Date()
+) => {
+  if (!student) {
+    throw new Error(
+      'Student profile is required to update NAVTA streak.'
+    );
+  }
+
+  const todayKey =
+    getDatePartsInTimeZone(
+      activityDate
+    ).key;
+
+  const previousKey =
+    student.lastNavtaTestDate ||
+    null;
+
+  const before =
+    getNavtaStreakSnapshot(
+      student
+    );
+
+  // Multiple NAVTA TESTS on the same India date count only once.
+  if (
+    previousKey === todayKey
+  ) {
+    return {
+      changed: false,
+      status: 'already-counted-today',
+      ...getNavtaStreakSnapshot(
+        student
+      )
+    };
+  }
+
+  const todayDayNumber =
+    indiaDateKeyToDayNumber(
+      todayKey
+    );
+
+  const previousDayNumber =
+    indiaDateKeyToDayNumber(
+      previousKey
+    );
+
+  const hasValidPreviousDay =
+    Number.isFinite(
+      previousDayNumber
+    );
+
+  const hasActiveStreak =
+    Number(
+      student.currentStreak
+    ) > 0;
+
+  // First ever qualifying NAVTA TEST, or a student with no active streak.
+  if (
+    !hasValidPreviousDay ||
+    !hasActiveStreak
+  ) {
+    student.currentStreak = 1;
+
+    student.longestStreak =
+      Math.max(
+        Number(
+          student.longestStreak
+        ) || 0,
+        1
+      );
+
+    student.lastNavtaTestDate =
+      todayKey;
+
+    student.streakRecoveryActive =
+      false;
+
+    student.streakRecoveryRequired =
+      0;
+
+    student.streakRecoveryCompleted =
+      0;
+
+    student.streakLastUpdatedAt =
+      new Date(activityDate);
+
+    return {
+      changed: true,
+      status: 'started',
+      previous:
+        before,
+      ...getNavtaStreakSnapshot(
+        student
+      )
+    };
+  }
+
+  const calendarDayDifference =
+    todayDayNumber -
+    previousDayNumber;
+
+  // A stale/out-of-order completion should never modify the current streak.
+  if (
+    !Number.isFinite(
+      calendarDayDifference
+    ) ||
+    calendarDayDifference <= 0
+  ) {
+    return {
+      changed: false,
+      status:
+        'ignored-old-activity',
+      ...getNavtaStreakSnapshot(
+        student
+      )
+    };
+  }
+
+  const missedDays =
+    calendarDayDifference - 1;
+
+  /*
+  |--------------------------------------------------------------------------
+  | Missed 3 or more consecutive full days
+  |--------------------------------------------------------------------------
+  |
+  | The old streak ends immediately.
+  | The returning NAVTA TEST starts a new streak at 1.
+  |
+  */
+  if (missedDays >= 3) {
+    student.currentStreak = 1;
+
+    student.longestStreak =
+      Math.max(
+        Number(
+          student.longestStreak
+        ) || 0,
+        1
+      );
+
+    student.lastNavtaTestDate =
+      todayKey;
+
+    student.streakRecoveryActive =
+      false;
+
+    student.streakRecoveryRequired =
+      0;
+
+    student.streakRecoveryCompleted =
+      0;
+
+    student.streakLastUpdatedAt =
+      new Date(activityDate);
+
+    return {
+      changed: true,
+      status: 'reset-after-3-missed-days',
+      missedDays,
+      previous:
+        before,
+      ...getNavtaStreakSnapshot(
+        student
+      )
+    };
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | Student was already in recovery
+  |--------------------------------------------------------------------------
+  */
+  if (
+    student.streakRecoveryActive
+  ) {
+    // Consecutive work day while recovering.
+    if (missedDays === 0) {
+      const required =
+        Math.max(
+          1,
+          Math.min(
+            2,
+            Number(
+              student.streakRecoveryRequired
+            ) || 1
+          )
+        );
+
+      const completed =
+        Math.min(
+          required,
+          (
+            Number(
+              student.streakRecoveryCompleted
+            ) || 0
+          ) + 1
+        );
+
+      student.streakRecoveryRequired =
+        required;
+
+      student.streakRecoveryCompleted =
+        completed;
+
+      student.lastNavtaTestDate =
+        todayKey;
+
+      student.streakLastUpdatedAt =
+        new Date(activityDate);
+
+      if (
+        completed >= required
+      ) {
+        // Recovery is finished, but this recovery day does not
+        // increase currentStreak. The next consecutive NAVTA TEST does.
+        student.streakRecoveryActive =
+          false;
+
+        return {
+          changed: true,
+          status:
+            'recovery-completed',
+          missedDays: 0,
+          previous:
+            before,
+          ...getNavtaStreakSnapshot(
+            student
+          )
+        };
+      }
+
+      return {
+        changed: true,
+        status:
+          'recovery-progress',
+        missedDays: 0,
+        previous:
+          before,
+        ...getNavtaStreakSnapshot(
+          student
+        )
+      };
+    }
+
+    /*
+    | The student missed another 1-2 days while recovery was active.
+    | Keep the old streak protected, but restart the recovery work
+    | requirement using the larger of:
+    |   - work days still owed
+    |   - newly missed days
+    |
+    | Today's qualifying test becomes recovery work day 1.
+    */
+    const previousRequired =
+      Number(
+        student.streakRecoveryRequired
+      ) || 0;
+
+    const previousCompleted =
+      Number(
+        student.streakRecoveryCompleted
+      ) || 0;
+
+    const previousRemaining =
+      Math.max(
+        0,
+        previousRequired -
+          previousCompleted
+      );
+
+    const newRequired =
+      Math.max(
+        1,
+        Math.min(
+          2,
+          Math.max(
+            previousRemaining,
+            missedDays
+          )
+        )
+      );
+
+    student.streakRecoveryRequired =
+      newRequired;
+
+    student.streakRecoveryCompleted =
+      1;
+
+    student.lastNavtaTestDate =
+      todayKey;
+
+    student.streakLastUpdatedAt =
+      new Date(activityDate);
+
+    if (newRequired === 1) {
+      student.streakRecoveryActive =
+        false;
+
+      return {
+        changed: true,
+        status:
+          'recovery-completed',
+        missedDays,
+        previous:
+          before,
+        ...getNavtaStreakSnapshot(
+          student
+        )
+      };
+    }
+
+    student.streakRecoveryActive =
+      true;
+
+    return {
+      changed: true,
+      status:
+        'recovery-restarted',
+      missedDays,
+      previous:
+        before,
+      ...getNavtaStreakSnapshot(
+        student
+      )
+    };
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | Return after missing 1 or 2 days
+  |--------------------------------------------------------------------------
+  |
+  | Today's NAVTA TEST counts as recovery work day 1.
+  | The current streak number does not increase yet.
+  |
+  */
+  if (
+    missedDays === 1 ||
+    missedDays === 2
+  ) {
+    student.streakRecoveryRequired =
+      missedDays;
+
+    student.streakRecoveryCompleted =
+      1;
+
+    student.lastNavtaTestDate =
+      todayKey;
+
+    student.streakLastUpdatedAt =
+      new Date(activityDate);
+
+    if (missedDays === 1) {
+      // 1 missed day = 1 recovery work day.
+      // Recovery is completed today, but the streak number
+      // stays unchanged until the next consecutive qualifying day.
+      student.streakRecoveryActive =
+        false;
+
+      return {
+        changed: true,
+        status:
+          'recovery-completed',
+        missedDays,
+        previous:
+          before,
+        ...getNavtaStreakSnapshot(
+          student
+        )
+      };
+    }
+
+    // 2 missed days = 2 recovery work days.
+    student.streakRecoveryActive =
+      true;
+
+    return {
+      changed: true,
+      status:
+        'recovery-started',
+      missedDays,
+      previous:
+        before,
+      ...getNavtaStreakSnapshot(
+        student
+      )
+    };
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | Normal consecutive qualifying day
+  |--------------------------------------------------------------------------
+  */
+  student.currentStreak =
+    (
+      Number(
+        student.currentStreak
+      ) || 0
+    ) + 1;
+
+  student.longestStreak =
+    Math.max(
+      Number(
+        student.longestStreak
+      ) || 0,
+      student.currentStreak
+    );
+
+  student.lastNavtaTestDate =
+    todayKey;
+
+  student.streakRecoveryActive =
+    false;
+
+  student.streakRecoveryRequired =
+    0;
+
+  student.streakRecoveryCompleted =
+    0;
+
+  student.streakLastUpdatedAt =
+    new Date(activityDate);
+
+  return {
+    changed: true,
+    status: 'continued',
+    missedDays: 0,
+    previous:
+      before,
+    ...getNavtaStreakSnapshot(
+      student
+    )
+  };
+};
+
+// Export helper for navtaTestController.js.
+exports.applyNavtaStreakActivity =
+  applyNavtaStreakActivity;
+
+exports.getNavtaStreakSnapshot =
+  getNavtaStreakSnapshot;
 
 
 // ============================================================================
@@ -534,15 +1098,10 @@ exports.submitTest = async (req, res) => {
           user: userId
         });
 
-      const activeStreak =
-        await Streak.findOne({
-          user: userId
-        });
-
       const currentStreakValue =
-        activeStreak
-          ? activeStreak.currentStreak
-          : 0;
+        Number(
+          student.currentStreak
+        ) || 0;
 
       const allAchievements =
         await Achievement.find();
@@ -1231,7 +1790,18 @@ exports.getAnalytics = async (
       await Student.findOne({
         user: userId
       }).select(
-        'coins xp level'
+        [
+          'coins',
+          'xp',
+          'level',
+          'currentStreak',
+          'longestStreak',
+          'lastNavtaTestDate',
+          'streakRecoveryActive',
+          'streakRecoveryRequired',
+          'streakRecoveryCompleted',
+          'streakLastUpdatedAt'
+        ].join(' ')
       );
 
     /*
@@ -1264,6 +1834,17 @@ exports.getAnalytics = async (
         student
           ? student.coins
           : 0,
+
+      /*
+      |--------------------------------------------------------------------------
+      | NAVTA TEST streak
+      |--------------------------------------------------------------------------
+      */
+
+      streak:
+        getNavtaStreakSnapshot(
+          student
+        ),
 
       summary: {
         strong:
