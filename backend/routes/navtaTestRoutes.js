@@ -10,7 +10,13 @@ const {
   generateBossBattle,
   generateRevengeBattle,
   evaluateWrittenAnswer,
+  completeNavtaTest,
 } = require("../controllers/navtaTestController");
+
+const {
+  protect,
+  authorizeRoles,
+} = require("../middleware/auth");
 
 // ============================================
 // ADMIN - CREATE QUESTION
@@ -80,6 +86,39 @@ router.post(
 router.post(
   "/revenge-battle",
   generateRevengeBattle
+);
+
+// ============================================
+// STUDENT - COMPLETE NAVTA TEST
+// ============================================
+//
+// Saves:
+// - Standard Test
+// - Boss Battle
+// - Revenge Battle
+//
+// Updates:
+// - Daily Performance Overview
+// - Student Coin Balance
+//
+// Coin rule:
+// Score <= 80% = 0 coins
+// Score > 80% + duration < 30 min = 1 coin
+// Score > 80% + duration >= 30 min = 2 coins
+//
+// This route is protected because performance
+// and coins belong to the logged-in student.
+//
+// Endpoint:
+// POST /api/navta-test/complete
+//
+// ============================================
+
+router.post(
+  "/complete",
+  protect,
+  authorizeRoles("student"),
+  completeNavtaTest
 );
 
 // ============================================
