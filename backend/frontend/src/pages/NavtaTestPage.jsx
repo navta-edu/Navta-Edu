@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const PREPARATION_OPTIONS = {
   Physics: {
@@ -288,6 +289,11 @@ function formatSolveTime(totalSeconds) {
 }
 
 export default function NavtaTestPage() {
+  const {
+    updateCoinBalance,
+    updateStreak,
+  } = useAuth();
+
   const [step, setStep] = useState("mode");
   const [testMode, setTestMode] = useState("");
 
@@ -1348,14 +1354,32 @@ export default function NavtaTestPage() {
         data?.coinBalance ??
         null;
 
+      const streakValue =
+        data?.data?.streak ??
+        data?.streak ??
+        null;
+
       setCoinsAwarded(reward);
 
       if (
         balanceValue !== null &&
         balanceValue !== undefined
       ) {
+        const nextCoinBalance =
+          Number(balanceValue) || 0;
+
         setUpdatedCoinBalance(
-          Number(balanceValue) || 0
+          nextCoinBalance
+        );
+
+        updateCoinBalance(
+          nextCoinBalance
+        );
+      }
+
+      if (streakValue) {
+        updateStreak(
+          streakValue
         );
       }
 
