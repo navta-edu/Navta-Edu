@@ -19,7 +19,6 @@ const PREPARATION_OPTIONS = {
       icon: "📚",
     },
   },
-
   Chemistry: {
     NEET: {
       title: "NEET",
@@ -37,7 +36,6 @@ const PREPARATION_OPTIONS = {
       icon: "📚",
     },
   },
-
   Maths: {
     JEE: {
       title: "JEE",
@@ -50,7 +48,6 @@ const PREPARATION_OPTIONS = {
       icon: "📚",
     },
   },
-
   Biology: {
     NEET: {
       title: "NEET",
@@ -65,405 +62,303 @@ const PREPARATION_OPTIONS = {
   },
 };
 
+const CLASSES = ["Class 11", "Class 12"];
 
-const TEST_CONFIG = {
-  NEET: {
-    minutesPerQuestion: 1,
-    durations: [10, 15, 20, 30, 45, 60],
+const CHAPTERS = {
+  Physics: {
+    "Class 11": [
+      "Units and Measurements",
+      "Motion in a Straight Line",
+      "Motion in a Plane",
+      "Laws of Motion",
+      "Work, Energy and Power",
+      "System of Particles and Rotational Motion",
+      "Gravitation",
+      "Mechanical Properties of Solids",
+      "Mechanical Properties of Fluids",
+      "Thermal Properties of Matter",
+      "Thermodynamics",
+      "Kinetic Theory",
+      "Oscillations",
+      "Waves",
+    ],
+    "Class 12": [
+      "Electric Charges and Fields",
+      "Electrostatic Potential and Capacitance",
+      "Current Electricity",
+      "Moving Charges and Magnetism",
+      "Magnetism and Matter",
+      "Electromagnetic Induction",
+      "Alternating Current",
+      "Electromagnetic Waves",
+      "Ray Optics and Optical Instruments",
+      "Wave Optics",
+      "Dual Nature of Radiation and Matter",
+      "Atoms",
+      "Nuclei",
+      "Semiconductor Electronics",
+    ],
   },
-  JEE: {
-    minutesPerQuestion: 2,
-    durations: [10, 20, 30, 40, 60, 90],
+  Chemistry: {
+    "Class 11": [
+      "Some Basic Concepts of Chemistry",
+      "Structure of Atom",
+      "Classification of Elements and Periodicity in Properties",
+      "Chemical Bonding and Molecular Structure",
+      "Thermodynamics",
+      "Equilibrium",
+      "Redox Reactions",
+      "Organic Chemistry: Some Basic Principles and Techniques",
+      "Hydrocarbons",
+    ],
+    "Class 12": [
+      "Solutions",
+      "Electrochemistry",
+      "Chemical Kinetics",
+      "The d- and f-Block Elements",
+      "Coordination Compounds",
+      "Haloalkanes and Haloarenes",
+      "Alcohols, Phenols and Ethers",
+      "Aldehydes, Ketones and Carboxylic Acids",
+      "Amines",
+      "Biomolecules",
+    ],
+  },
+  Maths: {
+    "Class 11": [
+      "Sets",
+      "Relations and Functions",
+      "Trigonometric Functions",
+      "Complex Numbers and Quadratic Equations",
+      "Linear Inequalities",
+      "Permutations and Combinations",
+      "Binomial Theorem",
+      "Sequences and Series",
+      "Straight Lines",
+      "Conic Sections",
+      "Introduction to Three Dimensional Geometry",
+      "Limits and Derivatives",
+      "Statistics",
+      "Probability",
+    ],
+    "Class 12": [
+      "Relations and Functions",
+      "Inverse Trigonometric Functions",
+      "Matrices",
+      "Determinants",
+      "Continuity and Differentiability",
+      "Applications of Derivatives",
+      "Integrals",
+      "Applications of Integrals",
+      "Differential Equations",
+      "Vector Algebra",
+      "Three Dimensional Geometry",
+      "Linear Programming",
+      "Probability",
+    ],
+  },
+  Biology: {
+    "Class 11": [
+      "The Living World",
+      "Biological Classification",
+      "Plant Kingdom",
+      "Animal Kingdom",
+      "Morphology of Flowering Plants",
+      "Anatomy of Flowering Plants",
+      "Structural Organisation in Animals",
+      "Cell: The Unit of Life",
+      "Biomolecules",
+      "Cell Cycle and Cell Division",
+      "Photosynthesis in Higher Plants",
+      "Respiration in Plants",
+      "Plant Growth and Development",
+      "Breathing and Exchange of Gases",
+      "Body Fluids and Circulation",
+      "Excretory Products and their Elimination",
+      "Locomotion and Movement",
+      "Neural Control and Coordination",
+      "Chemical Coordination and Integration",
+    ],
+    "Class 12": [
+      "Sexual Reproduction in Flowering Plants",
+      "Human Reproduction",
+      "Reproductive Health",
+      "Principles of Inheritance and Variation",
+      "Molecular Basis of Inheritance",
+      "Evolution",
+      "Human Health and Disease",
+      "Microbes in Human Welfare",
+      "Biotechnology: Principles and Processes",
+      "Biotechnology and its Applications",
+      "Organisms and Populations",
+      "Ecosystem",
+      "Biodiversity and Conservation",
+    ],
   },
 };
 
 const DIFFICULTY_INFO = {
-  Easy: {
-    icon: "🌱",
-    description: "Build your fundamentals",
+  Easy: { icon: "🌱", description: "Build your fundamentals" },
+  Medium: { icon: "⚡", description: "Exam-level practice" },
+  Hard: { icon: "🔥", description: "Advanced questions" },
+};
+
+const QUESTION_TYPE_INFO = {
+  mcq: {
+    title: "MCQ / Option",
+    icon: "✅",
+    description: "Choose one correct option",
+    minutesPerQuestion: 1,
   },
-  Medium: {
+  short: {
+    title: "Short Answer",
+    icon: "✍️",
+    description: "Write a concise board-style answer",
+    minutesPerQuestion: 3,
+  },
+  long: {
+    title: "Long Answer",
+    icon: "📝",
+    description: "Write a detailed board-style answer",
+    minutesPerQuestion: 6,
+  },
+};
+
+const TEST_CONFIG = {
+  NEET: {
+    mcq: { minutesPerQuestion: 1, durations: [10, 15, 20, 30, 45, 60] },
+  },
+  JEE: {
+    mcq: { minutesPerQuestion: 2, durations: [10, 20, 30, 40, 60, 90] },
+  },
+  Boards: {
+    mcq: { minutesPerQuestion: 1, durations: [10, 15, 20, 30, 45, 60] },
+    short: { minutesPerQuestion: 3, durations: [15, 30, 45, 60, 90] },
+    long: { minutesPerQuestion: 6, durations: [30, 60, 90, 120, 180] },
+  },
+};
+
+const BOSS_SIZES = {
+  15: {
+    name: "Quick Boss",
     icon: "⚡",
-    description: "Exam-level practice",
+    description: "Fast multi-chapter challenge",
+    targets: { Easy: 5, Medium: 6, Hard: 4 },
   },
-  Hard: {
-    icon: "🔥",
-    description: "Advanced questions",
+  30: {
+    name: "Major Boss",
+    icon: "⚔",
+    description: "Serious exam-style battle",
+    targets: { Easy: 9, Medium: 12, Hard: 9 },
   },
-};
-
-const BIOLOGY_CLASSES = {
-  "Class 11": [
-    "The Living World",
-    "Biological Classification",
-    "Plant Kingdom",
-    "Animal Kingdom",
-    "Morphology of Flowering Plants",
-    "Anatomy of Flowering Plants",
-    "Structural Organisation in Animals",
-    "Cell: The Unit of Life",
-    "Biomolecules",
-    "Cell Cycle and Cell Division",
-    "Photosynthesis in Higher Plants",
-    "Respiration in Plants",
-    "Plant Growth and Development",
-    "Breathing and Exchange of Gases",
-    "Body Fluids and Circulation",
-    "Excretory Products and their Elimination",
-    "Locomotion and Movement",
-    "Neural Control and Coordination",
-    "Chemical Coordination and Integration",
-  ],
-
-  "Class 12": [
-    "Sexual Reproduction in Flowering Plants",
-    "Human Reproduction",
-    "Reproductive Health",
-    "Principles of Inheritance and Variation",
-    "Molecular Basis of Inheritance",
-    "Evolution",
-    "Human Health and Disease",
-    "Microbes in Human Welfare",
-    "Biotechnology: Principles and Processes",
-    "Biotechnology and its Applications",
-    "Organisms and Populations",
-    "Ecosystem",
-    "Biodiversity and Conservation",
-  ],
-};
-
-const SUBJECTS = {
-  Physics: [
-    "Units and Measurements",
-    "Kinematics",
-    "Laws of Motion",
-    "Work, Energy and Power",
-    "Gravitation",
-    "Thermodynamics",
-    "Waves",
-    "Current Electricity",
-  ],
-
-  Chemistry: [
-    "Some Basic Concepts of Chemistry",
-    "Atomic Structure",
-    "Chemical Bonding",
-    "Thermodynamics",
-    "Equilibrium",
-    "Redox Reactions",
-    "Organic Chemistry",
-    "Hydrocarbons",
-  ],
-
-  Maths: [
-    "Sets and Relations",
-    "Quadratic Equations",
-    "Sequences and Series",
-    "Trigonometry",
-    "Straight Lines",
-    "Limits and Derivatives",
-    "Probability",
-    "Statistics",
-    "Inverse Trigonometry Functions",
-  ],
-
-  Biology: [],
-};
-
-const QUESTIONS = {
-  Physics: {
-    "Units and Measurements": {
-      Easy: [
-        {
-          question: "What is the SI unit of length?",
-          options: ["Centimetre", "Metre", "Kilometre", "Millimetre"],
-          answer: 1,
-        },
-        {
-          question:
-            "Which instrument is commonly used to measure very small lengths?",
-          options: [
-            "Ruler",
-            "Vernier calipers",
-            "Thermometer",
-            "Barometer",
-          ],
-          answer: 1,
-        },
-      ],
-
-      Medium: [
-        {
-          question: "The dimensional formula of velocity is:",
-          options: ["[LT⁻¹]", "[LT]", "[L²T⁻¹]", "[MLT⁻¹]"],
-          answer: 0,
-        },
-      ],
-
-      Hard: [
-        {
-          question: "Which quantity has dimensions [ML²T⁻²]?",
-          options: ["Force", "Power", "Energy", "Pressure"],
-          answer: 2,
-        },
-      ],
-    },
-
-    Kinematics: {
-      Easy: [
-        {
-          question: "What is the SI unit of acceleration?",
-          options: ["m/s", "m/s²", "km/h", "N"],
-          answer: 1,
-        },
-      ],
-
-      Medium: [
-        {
-          question: "The slope of a velocity-time graph represents:",
-          options: ["Distance", "Displacement", "Acceleration", "Speed"],
-          answer: 2,
-        },
-      ],
-
-      Hard: [
-        {
-          question: "For uniformly accelerated motion, which equation is correct?",
-          options: [
-            "v = u + at",
-            "v = u - at²",
-            "s = ut²",
-            "a = uv",
-          ],
-          answer: 0,
-        },
-      ],
-    },
-  },
-
-  Chemistry: {
-    "Atomic Structure": {
-      Easy: [
-        {
-          question: "Who proposed the nuclear model of the atom?",
-          options: ["Bohr", "Rutherford", "Dalton", "Thomson"],
-          answer: 1,
-        },
-      ],
-
-      Medium: [
-        {
-          question: "The maximum number of electrons in the second shell is:",
-          options: ["2", "4", "8", "18"],
-          answer: 2,
-        },
-      ],
-
-      Hard: [
-        {
-          question: "The number of orbitals in a p-subshell is:",
-          options: ["1", "2", "3", "5"],
-          answer: 2,
-        },
-      ],
-    },
-
-    "Chemical Bonding": {
-      Easy: [
-        {
-          question: "Which bond is formed by sharing electrons?",
-          options: ["Ionic", "Covalent", "Metallic", "Hydrogen"],
-          answer: 1,
-        },
-      ],
-
-      Medium: [
-        {
-          question: "What is the shape of a methane molecule?",
-          options: ["Linear", "Trigonal planar", "Tetrahedral", "Bent"],
-          answer: 2,
-        },
-      ],
-
-      Hard: [
-        {
-          question: "The hybridisation of carbon in methane is:",
-          options: ["sp", "sp²", "sp³", "dsp²"],
-          answer: 2,
-        },
-      ],
-    },
-  },
-
-  Maths: {
-    "Quadratic Equations": {
-      Easy: [
-        {
-          question: "What is the degree of a quadratic equation?",
-          options: ["1", "2", "3", "4"],
-          answer: 1,
-        },
-      ],
-
-      Medium: [
-        {
-          question: "The roots of x² - 5x + 6 = 0 are:",
-          options: ["1, 6", "2, 3", "-2, -3", "3, 4"],
-          answer: 1,
-        },
-      ],
-
-      Hard: [
-        {
-          question: "For ax² + bx + c = 0, the discriminant is:",
-          options: [
-            "b² + 4ac",
-            "b² - 4ac",
-            "a² - 4bc",
-            "c² - 4ab",
-          ],
-          answer: 1,
-        },
-      ],
-    },
-
-    Trigonometry: {
-      Easy: [
-        {
-          question: "What is sin 90°?",
-          options: ["0", "1", "-1", "1/2"],
-          answer: 1,
-        },
-      ],
-
-      Medium: [
-        {
-          question: "What is cos 0°?",
-          options: ["0", "1", "-1", "1/2"],
-          answer: 1,
-        },
-      ],
-
-      Hard: [
-        {
-          question: "Which identity is correct?",
-          options: [
-            "sin²θ + cos²θ = 1",
-            "sinθ + cosθ = 1",
-            "tan²θ = sinθ",
-            "cos²θ - sin²θ = 1",
-          ],
-          answer: 0,
-        },
-      ],
-    },
-  },
-
-  Biology: {
-    "The Living World": {
-      Easy: [
-        {
-          question: "The basic unit of classification is:",
-          options: ["Genus", "Species", "Family", "Order"],
-          answer: 1,
-        },
-      ],
-
-      Medium: [
-        {
-          question:
-            "Which taxonomic category comes immediately above species?",
-          options: ["Family", "Genus", "Order", "Class"],
-          answer: 1,
-        },
-      ],
-
-      Hard: [
-        {
-          question: "Binomial nomenclature was popularized by:",
-          options: [
-            "Charles Darwin",
-            "Carolus Linnaeus",
-            "Gregor Mendel",
-            "Robert Hooke",
-          ],
-          answer: 1,
-        },
-      ],
-    },
+  50: {
+    name: "Final Boss",
+    icon: "👑",
+    description: "The ultimate endurance test",
+    targets: { Easy: 15, Medium: 20, Hard: 15 },
   },
 };
 
-function getQuestions(subject, chapter, difficulty) {
-  const chapterQuestions = QUESTIONS[subject]?.[chapter]?.[difficulty];
-
-  if (chapterQuestions?.length) {
-    return chapterQuestions;
-  }
-
-  return [
-    {
-      question: `Sample ${difficulty} question for ${subject} - ${chapter}`,
-      options: ["Option A", "Option B", "Option C", "Option D"],
-      answer: 0,
-    },
-  ];
-}
-
-function shuffleQuestions(items) {
-  return [...items].sort(() => Math.random() - 0.5);
-}
-
-function getQuestionCount(preparation, duration) {
-  const config = TEST_CONFIG[preparation];
-
+function getQuestionCount(preparation, questionType, duration) {
+  const config = TEST_CONFIG[preparation]?.[questionType];
   if (!config || !duration) return 0;
+  return Math.floor(Number(duration) / config.minutesPerQuestion);
+}
 
-  return Math.floor(duration / config.minutesPerQuestion);
+function getQuestionTypeLabel(questionType) {
+  return QUESTION_TYPE_INFO[questionType]?.title || "MCQ / Option";
+}
+
+function getBossRank(percentage) {
+  if (percentage >= 90) return { rank: "S", label: "Legendary", icon: "👑" };
+  if (percentage >= 80) return { rank: "A", label: "Elite", icon: "⚔" };
+  if (percentage >= 70) return { rank: "B", label: "Strong", icon: "🔥" };
+  if (percentage >= 60) return { rank: "C", label: "Cleared", icon: "✅" };
+  return { rank: "Retry", label: "Train and return", icon: "🔁" };
 }
 
 export default function NavtaTestPage() {
-  const [step, setStep] = useState("subject");
+  const [step, setStep] = useState("mode");
+  const [testMode, setTestMode] = useState("");
+
   const [subject, setSubject] = useState("");
   const [preparation, setPreparation] = useState("");
-  const [biologyClass, setBiologyClass] = useState("");
+  const [classLevel, setClassLevel] = useState("");
   const [chapter, setChapter] = useState("");
   const [difficulty, setDifficulty] = useState("");
+
+  const [questionType, setQuestionType] = useState("mcq");
   const [selectedDuration, setSelectedDuration] = useState(null);
+
+  const [selectedChapters, setSelectedChapters] = useState([]);
+  const [bossSize, setBossSize] = useState(15);
+  const [bossMeta, setBossMeta] = useState(null);
+
   const [questions, setQuestions] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
+
   const [answers, setAnswers] = useState({});
-  const [timeLeft, setTimeLeft] = useState(30 * 60);
+  const [answerFeedback, setAnswerFeedback] = useState({});
+  const [writtenAnswers, setWrittenAnswers] = useState({});
+  const [writtenFeedback, setWrittenFeedback] = useState({});
+
+  const [timeLeft, setTimeLeft] = useState(0);
   const [submitted, setSubmitted] = useState(false);
 
+  const [generatingTest, setGeneratingTest] = useState(false);
+  const [generationError, setGenerationError] = useState("");
+
+  const [evaluatingAnswer, setEvaluatingAnswer] = useState(false);
+  const [evaluationError, setEvaluationError] = useState("");
+
+  const isBoss = testMode === "boss";
+
+  const resolvedQuestionType = isBoss
+    ? "mcq"
+    : preparation === "Boards"
+      ? questionType
+      : "mcq";
+
+  const currentConfig =
+    TEST_CONFIG[preparation]?.[resolvedQuestionType];
+
   const requestedQuestionCount = useMemo(() => {
-    return getQuestionCount(preparation, selectedDuration);
-  }, [preparation, selectedDuration]);
-
-  const isTimedCompetitiveTest =
-    preparation === "NEET" || preparation === "JEE";
-
-  const startTest = () => {
-    const questionPool = getQuestions(subject, chapter, difficulty);
-
-    const testQuestions = isTimedCompetitiveTest
-      ? shuffleQuestions(questionPool).slice(0, requestedQuestionCount)
-      : shuffleQuestions(questionPool);
-
-    setQuestions(testQuestions);
-    setCurrentQuestion(0);
-    setAnswers({});
-    setTimeLeft(
-      isTimedCompetitiveTest && selectedDuration
-        ? selectedDuration * 60
-        : 30 * 60
+    if (isBoss) return bossSize;
+    return getQuestionCount(
+      preparation,
+      resolvedQuestionType,
+      selectedDuration
     );
-    setSubmitted(false);
-    setStep("test");
-  };
+  }, [
+    isBoss,
+    bossSize,
+    preparation,
+    resolvedQuestionType,
+    selectedDuration,
+  ]);
+
+  const minutesPerQuestion = isBoss
+    ? preparation === "JEE"
+      ? 2
+      : 1
+    : currentConfig?.minutesPerQuestion || 0;
+
+  const formattedTime = useMemo(() => {
+    const minutes = Math.floor(timeLeft / 60);
+    const seconds = timeLeft % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }, [timeLeft]);
+
+  const currentTestQuestion = questions[currentQuestion];
 
   useEffect(() => {
-    if (step !== "test" || submitted) return;
+    if (
+      step !== "test" ||
+      submitted ||
+      questions.length === 0
+    ) {
+      return;
+    }
 
     if (timeLeft <= 0) {
       setSubmitted(true);
@@ -471,74 +366,538 @@ export default function NavtaTestPage() {
     }
 
     const timer = setInterval(() => {
-      setTimeLeft((previous) => previous - 1);
+      setTimeLeft((previous) => Math.max(0, previous - 1));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [step, submitted, timeLeft]);
+  }, [step, submitted, timeLeft, questions.length]);
 
-  const formattedTime = useMemo(() => {
-    const minutes = Math.floor(timeLeft / 60);
-    const seconds = timeLeft % 60;
+  const clearTestRun = () => {
+    setQuestions([]);
+    setCurrentQuestion(0);
+    setAnswers({});
+    setAnswerFeedback({});
+    setWrittenAnswers({});
+    setWrittenFeedback({});
+    setTimeLeft(0);
+    setSubmitted(false);
+    setBossMeta(null);
+    setGeneratingTest(false);
+    setGenerationError("");
+    setEvaluatingAnswer(false);
+    setEvaluationError("");
+  };
 
-    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
-      2,
-      "0"
-    )}`;
-  }, [timeLeft]);
+  const resetAfterSubject = () => {
+    setPreparation("");
+    setClassLevel("");
+    setChapter("");
+    setDifficulty("");
+    setQuestionType("mcq");
+    setSelectedDuration(null);
+    setSelectedChapters([]);
+    setGenerationError("");
+  };
+
+  const resetAfterPreparation = () => {
+    setClassLevel("");
+    setChapter("");
+    setDifficulty("");
+    setQuestionType("mcq");
+    setSelectedDuration(null);
+    setSelectedChapters([]);
+    setGenerationError("");
+  };
+
+  const resetAfterClass = () => {
+    setChapter("");
+    setDifficulty("");
+    setQuestionType("mcq");
+    setSelectedDuration(null);
+    setSelectedChapters([]);
+    setGenerationError("");
+  };
+
+  const resetTest = () => {
+    clearTestRun();
+    setStep("mode");
+    setTestMode("");
+    setSubject("");
+    setPreparation("");
+    setClassLevel("");
+    setChapter("");
+    setDifficulty("");
+    setQuestionType("mcq");
+    setSelectedDuration(null);
+    setSelectedChapters([]);
+    setBossSize(15);
+  };
+
+  const chooseMode = (mode) => {
+    clearTestRun();
+    setTestMode(mode);
+    setSubject("");
+    setPreparation("");
+    setClassLevel("");
+    setChapter("");
+    setDifficulty("");
+    setQuestionType("mcq");
+    setSelectedDuration(null);
+    setSelectedChapters([]);
+    setBossSize(15);
+    setStep("subject");
+  };
+
+  const getCorrectAnswerIndex = (question) => {
+    if (typeof question?.correctAnswer === "number") {
+      return question.correctAnswer;
+    }
+
+    if (typeof question?.answer === "number") {
+      return question.answer;
+    }
+
+    return Number(question?.correctAnswer);
+  };
+
+  const startStandardTest = async () => {
+    if (
+      !subject ||
+      !preparation ||
+      !classLevel ||
+      !chapter ||
+      !difficulty ||
+      !selectedDuration
+    ) {
+      setGenerationError("Please complete all test selections first.");
+      return;
+    }
+
+    setGeneratingTest(true);
+    setGenerationError("");
+
+    try {
+      const response = await fetch("/api/navta-test/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject,
+          exam: preparation,
+          classLevel,
+          chapter,
+          difficulty,
+          questionType: resolvedQuestionType,
+          duration: selectedDuration,
+        }),
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        if (
+          data.required !== undefined &&
+          data.available !== undefined
+        ) {
+          throw new Error(
+            `${data.message || "Not enough questions."} Required: ${data.required}, available: ${data.available}.`
+          );
+        }
+
+        throw new Error(data.message || "Unable to generate this test.");
+      }
+
+      const generatedQuestions = data?.test?.questions || [];
+
+      if (generatedQuestions.length === 0) {
+        throw new Error(
+          "No matching questions were returned from the question bank."
+        );
+      }
+
+      setQuestions(generatedQuestions);
+      setCurrentQuestion(0);
+      setAnswers({});
+      setAnswerFeedback({});
+      setWrittenAnswers({});
+      setWrittenFeedback({});
+      setTimeLeft(
+        Number(
+          data?.test?.durationSeconds ||
+            Number(selectedDuration) * 60
+        )
+      );
+      setSubmitted(false);
+      setEvaluationError("");
+      setStep("test");
+    } catch (error) {
+      console.error("Navta TEST generation error:", error);
+      setGenerationError(
+        error.message || "Unable to generate the test."
+      );
+    } finally {
+      setGeneratingTest(false);
+    }
+  };
+
+  const startBossBattle = async () => {
+    if (
+      !subject ||
+      !preparation ||
+      !classLevel
+    ) {
+      setGenerationError("Please complete the Boss Battle setup.");
+      return;
+    }
+
+    if (selectedChapters.length < 2) {
+      setGenerationError(
+        "Select at least 2 chapters for Boss Battle."
+      );
+      return;
+    }
+
+    if (selectedChapters.length > bossSize) {
+      setGenerationError(
+        `A ${bossSize}-question Boss Battle cannot include more than ${bossSize} chapters.`
+      );
+      return;
+    }
+
+    setGeneratingTest(true);
+    setGenerationError("");
+
+    try {
+      const response = await fetch("/api/navta-test/boss-battle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject,
+          exam: preparation,
+          classLevel,
+          chapters: selectedChapters,
+          totalQuestions: bossSize,
+        }),
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        const unavailable = Array.isArray(data?.unavailableChapters)
+          ? ` Missing question coverage: ${data.unavailableChapters.join(", ")}.`
+          : "";
+
+        const availability =
+          data.required !== undefined &&
+          data.available !== undefined
+            ? ` Required: ${data.required}, available: ${data.available}.`
+            : "";
+
+        throw new Error(
+          `${data.message || "Unable to generate Boss Battle."}${availability}${unavailable}`
+        );
+      }
+
+      const battle = data?.bossBattle || {};
+      const generatedQuestions = battle?.questions || [];
+
+      if (generatedQuestions.length === 0) {
+        throw new Error(
+          "No Boss Battle questions were returned from the question bank."
+        );
+      }
+
+      const returnedMinutes =
+        Number(battle?.durationMinutes) ||
+        Number(battle?.timer?.durationMinutes) ||
+        Number(battle?.timer?.minutes);
+
+      const returnedSeconds =
+        Number(battle?.durationSeconds) ||
+        Number(battle?.timer?.durationSeconds) ||
+        (returnedMinutes ? returnedMinutes * 60 : 0);
+
+      const fallbackSeconds =
+        generatedQuestions.length *
+        (preparation === "JEE" ? 2 : 1) *
+        60;
+
+      setBossMeta(battle);
+      setQuestions(generatedQuestions);
+      setCurrentQuestion(0);
+      setAnswers({});
+      setAnswerFeedback({});
+      setWrittenAnswers({});
+      setWrittenFeedback({});
+      setTimeLeft(returnedSeconds || fallbackSeconds);
+      setSubmitted(false);
+      setEvaluationError("");
+      setQuestionType("mcq");
+      setStep("test");
+    } catch (error) {
+      console.error("Boss Battle generation error:", error);
+      setGenerationError(
+        error.message || "Unable to generate Boss Battle."
+      );
+    } finally {
+      setGeneratingTest(false);
+    }
+  };
+
+  const goForwardAfterAnswer = () => {
+    setEvaluationError("");
+
+    if (currentQuestion < questions.length - 1) {
+      setCurrentQuestion((previous) => previous + 1);
+    } else {
+      setSubmitted(true);
+    }
+  };
 
   const selectAnswer = (answerIndex) => {
+    if (answerFeedback[currentQuestion]) return;
+
+    const question = questions[currentQuestion];
+    const correctAnswer = getCorrectAnswerIndex(question);
+    const isCorrect = answerIndex === correctAnswer;
+
     setAnswers((previous) => ({
       ...previous,
       [currentQuestion]: answerIndex,
     }));
+
+    setAnswerFeedback((previous) => ({
+      ...previous,
+      [currentQuestion]: {
+        isCorrect,
+        selectedAnswer: answerIndex,
+        correctAnswer,
+      },
+    }));
+
+    if (isCorrect) {
+      setTimeout(() => {
+        if (currentQuestion < questions.length - 1) {
+          setCurrentQuestion((previous) => previous + 1);
+        } else {
+          setSubmitted(true);
+        }
+      }, 300);
+    }
   };
 
-  const score = useMemo(() => {
+  const evaluateWrittenAnswer = async () => {
+    const question = questions[currentQuestion];
+    const studentAnswer = String(
+      writtenAnswers[currentQuestion] || ""
+    ).trim();
+
+    if (!studentAnswer) {
+      setEvaluationError(
+        "Please write your answer before submitting it."
+      );
+      return;
+    }
+
+    if (!question?._id) {
+      setEvaluationError(
+        "This question cannot be evaluated because its question ID is missing."
+      );
+      return;
+    }
+
+    setEvaluatingAnswer(true);
+    setEvaluationError("");
+
+    try {
+      const response = await fetch(
+        "/api/navta-test/evaluate-answer",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            questionId: question._id,
+            studentAnswer,
+          }),
+        }
+      );
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "AI could not evaluate this answer."
+        );
+      }
+
+      setWrittenFeedback((previous) => ({
+        ...previous,
+        [currentQuestion]: data.evaluation,
+      }));
+    } catch (error) {
+      console.error("Written answer evaluation error:", error);
+      setEvaluationError(
+        error.message || "Unable to evaluate the answer."
+      );
+    } finally {
+      setEvaluatingAnswer(false);
+    }
+  };
+
+  const mcqScore = useMemo(() => {
+    if (resolvedQuestionType !== "mcq") return 0;
+
     return questions.reduce((total, question, index) => {
-      return total + (answers[index] === question.answer ? 1 : 0);
+      return (
+        total +
+        (answers[index] === getCorrectAnswerIndex(question) ? 1 : 0)
+      );
     }, 0);
-  }, [answers, questions]);
+  }, [answers, questions, resolvedQuestionType]);
 
-  const resetTest = () => {
-    setStep("subject");
-    setSubject("");
-    setPreparation("");
-    setBiologyClass("");
-    setChapter("");
-    setDifficulty("");
-    setSelectedDuration(null);
-    setQuestions([]);
-    setCurrentQuestion(0);
-    setAnswers({});
-    setTimeLeft(30 * 60);
-    setSubmitted(false);
+  const writtenMarks = useMemo(() => {
+    if (resolvedQuestionType === "mcq") {
+      return { awarded: 0, maximum: 0 };
+    }
+
+    return questions.reduce(
+      (result, question, index) => {
+        const feedback = writtenFeedback[index];
+
+        result.maximum += Number(question.maxMarks || 0);
+
+        if (feedback) {
+          result.awarded += Number(feedback.marksAwarded || 0);
+        }
+
+        return result;
+      },
+      { awarded: 0, maximum: 0 }
+    );
+  }, [questions, writtenFeedback, resolvedQuestionType]);
+
+  const bossPercentage = useMemo(() => {
+    if (!isBoss || questions.length === 0) return 0;
+    return Math.round((mcqScore / questions.length) * 100);
+  }, [isBoss, mcqScore, questions.length]);
+
+  const bossRank = useMemo(
+    () => getBossRank(bossPercentage),
+    [bossPercentage]
+  );
+
+  const difficultyPerformance = useMemo(() => {
+    if (!isBoss) return {};
+
+    return questions.reduce((result, question, index) => {
+      const level = question?.difficulty || "Unknown";
+
+      if (!result[level]) {
+        result[level] = { correct: 0, total: 0 };
+      }
+
+      result[level].total += 1;
+
+      if (
+        answers[index] ===
+        getCorrectAnswerIndex(question)
+      ) {
+        result[level].correct += 1;
+      }
+
+      return result;
+    }, {});
+  }, [isBoss, questions, answers]);
+
+  const chapterPerformance = useMemo(() => {
+    if (!isBoss) return {};
+
+    return questions.reduce((result, question, index) => {
+      const name = question?.chapter || "Unknown Chapter";
+
+      if (!result[name]) {
+        result[name] = { correct: 0, total: 0 };
+      }
+
+      result[name].total += 1;
+
+      if (
+        answers[index] ===
+        getCorrectAnswerIndex(question)
+      ) {
+        result[name].correct += 1;
+      }
+
+      return result;
+    }, {});
+  }, [isBoss, questions, answers]);
+
+  const toggleBossChapter = (item) => {
+    setGenerationError("");
+
+    setSelectedChapters((previous) => {
+      if (previous.includes(item)) {
+        return previous.filter((chapterName) => chapterName !== item);
+      }
+
+      if (previous.length >= bossSize) {
+        return previous;
+      }
+
+      return [...previous, item];
+    });
   };
 
-  const goToPreparation = () => {
-    setPreparation("");
-    setBiologyClass("");
-    setChapter("");
-    setDifficulty("");
-    setSelectedDuration(null);
+  const goBackFromClass = () => {
+    resetAfterPreparation();
     setStep("preparation");
   };
 
-  const goToSubjects = () => {
-    setSubject("");
-    setPreparation("");
-    setBiologyClass("");
-    setChapter("");
-    setDifficulty("");
-    setSelectedDuration(null);
-    setStep("subject");
+  const goBackFromChapter = () => {
+    resetAfterClass();
+    setStep("class");
   };
 
-  const goToChapter = () => {
-    setChapter("");
+  const goBackFromDifficulty = () => {
     setDifficulty("");
+    setQuestionType("mcq");
     setSelectedDuration(null);
+    setGenerationError("");
     setStep("chapter");
+  };
+
+  const goBackFromQuestionType = () => {
+    setQuestionType("mcq");
+    setSelectedDuration(null);
+    setGenerationError("");
+    setStep("difficulty");
+  };
+
+  const goBackFromDuration = () => {
+    setSelectedDuration(null);
+    setGenerationError("");
+
+    if (preparation === "Boards") {
+      setStep("questionType");
+    } else {
+      setStep("difficulty");
+    }
   };
 
   return (
@@ -552,12 +911,13 @@ export default function NavtaTestPage() {
           min-height: 100vh;
           width: 100%;
           overflow-x: hidden;
-          background: #0b1220;
+          background: rgba(11, 18, 32, 0.94);
           color: #ffffff;
           padding: 40px;
         }
 
-        .navta-header {
+        .navta-header,
+        .navta-test-header {
           max-width: 1100px;
           margin: 0 auto 35px;
           display: flex;
@@ -567,63 +927,183 @@ export default function NavtaTestPage() {
         }
 
         .navta-title {
+          margin: 0;
           font-size: 32px;
           line-height: 1.2;
-          margin: 0;
         }
 
         .navta-subtitle {
-          color: #94a3b8;
           margin-top: 8px;
+          margin-bottom: 0;
+          color: #94a3b8;
           line-height: 1.5;
         }
 
-        .navta-grid {
-          max-width: 1100px;
-          margin: 0 auto;
+        .navta-mode-grid,
+        .navta-grid,
+        .navta-preparation-grid,
+        .navta-difficulty-grid,
+        .navta-question-type-grid,
+        .navta-duration-grid,
+        .navta-boss-grid {
+          max-width: 1000px;
+          margin: 30px auto;
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 24px;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 18px;
         }
 
-        .navta-preparation-grid {
+        .navta-mode-grid {
           max-width: 900px;
-          margin: 40px auto;
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 24px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .navta-class-grid {
           max-width: 900px;
-          margin: 40px auto;
+          margin: 30px auto;
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 24px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 18px;
         }
 
         .navta-chapter-grid {
           max-width: 1100px;
           margin: 0 auto;
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 15px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
         }
 
-        .navta-difficulty-grid {
-          max-width: 900px;
-          margin: 40px auto;
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 20px;
+        .navta-card,
+        .navta-mode-card {
+          min-width: 0;
+          padding: 28px;
+          border-radius: 18px;
+          border: 1px solid #243047;
+          background: #151d2d;
+          color: #ffffff;
+          cursor: pointer;
+          text-align: left;
+          transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
         }
 
-        .navta-duration-grid {
-          max-width: 900px;
-          margin: 30px auto;
+        .navta-mode-card {
+          min-height: 260px;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .navta-mode-card.standard {
+          border-color: #334155;
+        }
+
+        .navta-mode-card.boss {
+          border-color: rgba(245, 158, 11, 0.45);
+          background:
+            radial-gradient(circle at top right, rgba(245, 158, 11, 0.16), transparent 40%),
+            #151d2d;
+        }
+
+        .navta-card:hover,
+        .navta-mode-card:hover {
+          transform: translateY(-3px);
+          border-color: #0ea5e9;
+        }
+
+        .navta-mode-card.boss:hover {
+          border-color: #f59e0b;
+        }
+
+        .navta-card.active {
+          border: 2px solid #0ea5e9;
+          background: #102a43;
+        }
+
+        .navta-card-icon {
+          margin-bottom: 14px;
+          font-size: 36px;
+        }
+
+        .navta-mode-icon {
+          font-size: 48px;
+          margin-bottom: 18px;
+        }
+
+        .navta-card h2,
+        .navta-mode-card h2 {
+          margin: 0 0 8px;
+          font-size: 21px;
+        }
+
+        .navta-card p,
+        .navta-mode-card p {
+          margin: 0;
+          color: #94a3b8;
+          line-height: 1.5;
+        }
+
+        .navta-mode-features {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 18px;
+          gap: 8px;
+          margin: 20px 0 0;
+          color: #cbd5e1;
+          font-size: 14px;
+        }
+
+        .navta-continue {
+          display: block;
+          margin-top: 18px;
+          color: #38bdf8;
+          font-weight: 700;
+        }
+
+        .navta-boss-continue {
+          color: #fbbf24;
+        }
+
+        .navta-chapter-card {
+          width: 100%;
+          min-width: 0;
+          padding: 18px;
+          border-radius: 12px;
+          border: 1px solid #243047;
+          background: #151d2d;
+          color: #ffffff;
+          cursor: pointer;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          text-align: left;
+          font-size: 15px;
+          overflow-wrap: anywhere;
+        }
+
+        .navta-chapter-card:hover {
+          border-color: #0ea5e9;
+        }
+
+        .navta-chapter-card.selected {
+          border-color: #f59e0b;
+          background: rgba(120, 53, 15, 0.32);
+        }
+
+        .navta-check {
+          width: 24px;
+          height: 24px;
+          flex: 0 0 24px;
+          border-radius: 7px;
+          display: grid;
+          place-items: center;
+          border: 1px solid #475569;
+          color: transparent;
+        }
+
+        .navta-chapter-card.selected .navta-check {
+          background: #f59e0b;
+          border-color: #f59e0b;
+          color: #111827;
+          font-weight: 900;
         }
 
         .navta-duration-card {
@@ -653,6 +1133,12 @@ export default function NavtaTestPage() {
           box-shadow: 0 0 0 1px #0ea5e9;
         }
 
+        .navta-boss-card.active {
+          border-color: #f59e0b;
+          background: rgba(120, 53, 15, 0.28);
+          box-shadow: 0 0 0 1px #f59e0b;
+        }
+
         .navta-duration-time {
           font-size: 20px;
           font-weight: 800;
@@ -672,6 +1158,45 @@ export default function NavtaTestPage() {
           background: #111827;
           color: #cbd5e1;
           text-align: center;
+          line-height: 1.5;
+        }
+
+        .navta-boss-banner {
+          border-color: rgba(245, 158, 11, 0.35);
+          background: rgba(120, 53, 15, 0.2);
+        }
+
+        .navta-selection-count {
+          max-width: 1100px;
+          margin: 0 auto 18px;
+          padding: 14px 18px;
+          border-radius: 12px;
+          border: 1px solid rgba(245, 158, 11, 0.35);
+          background: rgba(120, 53, 15, 0.18);
+          color: #fde68a;
+          font-weight: 700;
+        }
+
+        .navta-mix-grid {
+          max-width: 760px;
+          margin: 22px auto;
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .navta-mix-item {
+          padding: 16px;
+          border-radius: 14px;
+          border: 1px solid #334155;
+          background: #0f172a;
+          text-align: center;
+        }
+
+        .navta-mix-item strong {
+          display: block;
+          margin-top: 6px;
+          font-size: 22px;
         }
 
         .navta-summary-card {
@@ -683,9 +1208,16 @@ export default function NavtaTestPage() {
           border: 1px solid #243047;
         }
 
+        .navta-summary-card.boss {
+          border-color: rgba(245, 158, 11, 0.42);
+          background:
+            radial-gradient(circle at top right, rgba(245, 158, 11, 0.11), transparent 38%),
+            #151d2d;
+        }
+
         .navta-summary-grid {
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 14px;
           margin-top: 20px;
         }
@@ -699,31 +1231,31 @@ export default function NavtaTestPage() {
 
         .navta-summary-label {
           display: block;
+          margin-bottom: 5px;
           color: #94a3b8;
           font-size: 12px;
-          margin-bottom: 5px;
         }
 
         .navta-summary-value {
           font-weight: 700;
           color: #ffffff;
+          overflow-wrap: anywhere;
         }
 
-        .navta-bank-note {
+        .navta-error {
           max-width: 760px;
-          margin: -20px auto 25px;
-          color: #fbbf24;
-          font-size: 13px;
+          margin: 18px auto;
+          padding: 14px 16px;
+          border: 1px solid rgba(239, 68, 68, 0.45);
+          border-radius: 12px;
+          background: rgba(127, 29, 29, 0.2);
+          color: #fca5a5;
+          line-height: 1.5;
           text-align: center;
         }
 
         .navta-test-header {
-          max-width: 1000px;
-          margin: 0 auto 20px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 20px;
+          margin-bottom: 20px;
         }
 
         .navta-question-card {
@@ -735,21 +1267,182 @@ export default function NavtaTestPage() {
           border: 1px solid #243047;
         }
 
+        .navta-boss-question-meta {
+          max-width: 1000px;
+          margin: 0 auto 12px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .navta-tag {
+          padding: 6px 10px;
+          border-radius: 999px;
+          background: #111827;
+          border: 1px solid #334155;
+          color: #cbd5e1;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .navta-tag.boss {
+          border-color: rgba(245, 158, 11, 0.38);
+          color: #fbbf24;
+        }
+
+        .navta-question {
+          margin: 0 0 30px;
+          font-size: 22px;
+          line-height: 1.5;
+        }
+
+        .navta-option {
+          width: 100%;
+          min-width: 0;
+          padding: 17px;
+          margin-bottom: 12px;
+          border-radius: 10px;
+          border: 1px solid #334155;
+          background: #0f172a;
+          color: #ffffff;
+          text-align: left;
+          cursor: pointer;
+          font-size: 16px;
+          display: flex;
+          align-items: center;
+          gap: 15px;
+          overflow-wrap: anywhere;
+        }
+
+        .navta-option:disabled {
+          opacity: 1;
+        }
+
+        .navta-answer-feedback,
+        .navta-written-feedback {
+          max-width: 1000px;
+          margin: 18px auto 0;
+          padding: 18px;
+          border-radius: 14px;
+          border: 1px solid #334155;
+          background: #111827;
+        }
+
+        .navta-answer-feedback.wrong {
+          border-color: rgba(239, 68, 68, 0.5);
+          background: rgba(127, 29, 29, 0.2);
+        }
+
+        .navta-written-feedback.correct {
+          border-color: rgba(34, 197, 94, 0.5);
+          background: rgba(20, 83, 45, 0.22);
+        }
+
+        .navta-written-feedback.partial {
+          border-color: rgba(245, 158, 11, 0.5);
+          background: rgba(120, 53, 15, 0.2);
+        }
+
+        .navta-written-feedback.incorrect {
+          border-color: rgba(239, 68, 68, 0.5);
+          background: rgba(127, 29, 29, 0.2);
+        }
+
+        .navta-written-answer {
+          width: 100%;
+          min-height: 220px;
+          padding: 16px;
+          border: 1px solid #334155;
+          border-radius: 12px;
+          background: #0f172a;
+          color: #ffffff;
+          font: inherit;
+          line-height: 1.65;
+          resize: vertical;
+          outline: none;
+        }
+
+        .navta-written-answer:focus {
+          border-color: #0ea5e9;
+          box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+        }
+
         .navta-navigation {
           max-width: 1000px;
           margin: 20px auto;
           display: flex;
           justify-content: space-between;
+          align-items: center;
           gap: 15px;
         }
 
         .navta-result-card {
-          max-width: 600px;
-          margin: 100px auto;
-          padding: 50px;
+          max-width: 760px;
+          margin: 60px auto;
+          padding: 40px;
           border-radius: 20px;
           background: #151d2d;
+          border: 1px solid #243047;
           text-align: center;
+        }
+
+        .navta-result-card.boss {
+          border-color: rgba(245, 158, 11, 0.5);
+          background:
+            radial-gradient(circle at top, rgba(245, 158, 11, 0.12), transparent 34%),
+            #151d2d;
+        }
+
+        .navta-result-score {
+          margin: 22px 0;
+          font-size: 56px;
+          font-weight: 900;
+        }
+
+        .navta-rank {
+          margin: 18px auto;
+          font-size: 70px;
+          font-weight: 900;
+          color: #fbbf24;
+          letter-spacing: -2px;
+        }
+
+        .navta-performance-section {
+          margin-top: 28px;
+          text-align: left;
+        }
+
+        .navta-performance-section h3 {
+          margin-bottom: 12px;
+        }
+
+        .navta-performance-row {
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 16px;
+          padding: 12px 0;
+          border-bottom: 1px solid #243047;
+          color: #cbd5e1;
+        }
+
+        .navta-status-pill {
+          display: inline-block;
+          margin-bottom: 12px;
+          padding: 7px 12px;
+          border-radius: 999px;
+          background: #0f172a;
+          color: #cbd5e1;
+          font-size: 12px;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
+        .navta-actions {
+          display: flex;
+          justify-content: center;
+          flex-wrap: wrap;
+          gap: 12px;
+          margin-top: 26px;
         }
 
         @media (max-width: 768px) {
@@ -757,96 +1450,52 @@ export default function NavtaTestPage() {
             padding: 20px 14px;
           }
 
-          .navta-header {
-            margin-bottom: 25px;
+          .navta-header,
+          .navta-test-header {
             flex-direction: column;
             align-items: stretch;
-            gap: 15px;
           }
 
           .navta-title {
             font-size: 27px;
           }
 
-          .navta-subtitle {
-            font-size: 14px;
-            margin-bottom: 0;
-          }
-
-          .navta-back-button {
-            width: 100%;
-            text-align: center;
-          }
-
-          .navta-grid {
-            grid-template-columns: 1fr;
-            gap: 14px;
-          }
-
-          .navta-preparation-grid {
-            grid-template-columns: 1fr;
-            gap: 14px;
-            margin: 25px auto;
-          }
-
-          .navta-class-grid {
-            grid-template-columns: 1fr;
-            gap: 14px;
-            margin: 25px auto;
-          }
-
+          .navta-mode-grid,
+          .navta-grid,
+          .navta-preparation-grid,
+          .navta-difficulty-grid,
+          .navta-question-type-grid,
+          .navta-boss-grid,
+          .navta-class-grid,
           .navta-chapter-grid {
             grid-template-columns: 1fr;
-            gap: 12px;
-          }
-
-          .navta-difficulty-grid {
-            grid-template-columns: 1fr;
-            gap: 14px;
-            margin: 25px auto;
           }
 
           .navta-duration-grid {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
 
-          .navta-summary-grid {
+          .navta-summary-grid,
+          .navta-mix-grid {
             grid-template-columns: 1fr;
-          }
-
-          .navta-test-header {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 15px;
-          }
-
-          .navta-timer {
-            width: 100%;
-            text-align: center;
           }
 
           .navta-question-card {
             padding: 20px 15px;
-            border-radius: 14px;
           }
 
           .navta-question {
-            font-size: 19px !important;
-            line-height: 1.5;
-            word-break: break-word;
+            font-size: 19px;
           }
 
           .navta-option {
-            font-size: 14px !important;
-            padding: 14px !important;
-            line-height: 1.45;
-            word-break: break-word;
+            padding: 14px;
+            font-size: 14px;
           }
 
           .navta-navigation {
             flex-direction: column;
-            gap: 10px;
+            align-items: stretch;
           }
 
           .navta-navigation button {
@@ -854,16 +1503,20 @@ export default function NavtaTestPage() {
           }
 
           .navta-result-card {
-            margin: 40px auto;
-            padding: 30px 18px;
+            margin: 30px auto;
+            padding: 28px 16px;
           }
 
-          .navta-score {
-            font-size: 48px !important;
+          .navta-result-score {
+            font-size: 46px;
+          }
+
+          .navta-rank {
+            font-size: 56px;
           }
         }
 
-        @media (max-width: 400px) {
+        @media (max-width: 420px) {
           .navta-test-page {
             padding: 16px 10px;
           }
@@ -872,68 +1525,116 @@ export default function NavtaTestPage() {
             font-size: 24px;
           }
 
-          .navta-subject-card,
-          .navta-preparation-card,
-          .navta-class-card {
-            padding: 22px !important;
-          }
-
-          .navta-question-card {
-            padding: 17px 12px;
-          }
-
-          .navta-option {
-            gap: 10px !important;
-            padding: 12px !important;
-          }
-
-          .navta-timer {
-            font-size: 20px !important;
-          }
-
           .navta-duration-grid {
             grid-template-columns: 1fr;
           }
         }
       `}</style>
 
-      {step === "subject" && (
+      {step === "mode" && (
         <div className="navta-test-page">
           <div className="navta-header">
             <div>
               <h1 className="navta-title">Navta TEST</h1>
-
               <p className="navta-subtitle">
-                Choose a subject to begin your test.
+                Choose how you want to practise.
               </p>
             </div>
 
-            <Link
-              to="/dashboard"
-              className="navta-back-button"
-              style={styles.backButton}
-            >
+            <Link to="/dashboard" style={styles.backButton}>
               ← Dashboard
             </Link>
           </div>
 
+          <div className="navta-mode-grid">
+            <button
+              type="button"
+              className="navta-mode-card standard"
+              onClick={() => chooseMode("standard")}
+            >
+              <div className="navta-mode-icon">📝</div>
+              <h2>Standard Test</h2>
+              <p>
+                Focus on one chapter with your own difficulty,
+                question type and duration.
+              </p>
+
+              <div className="navta-mode-features">
+                <span>✓ Single chapter practice</span>
+                <span>✓ Easy / Medium / Hard</span>
+                <span>✓ Custom duration</span>
+                <span>✓ Boards written-answer support</span>
+              </div>
+
+              <span className="navta-continue">
+                Start Standard Test →
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className="navta-mode-card boss"
+              onClick={() => chooseMode("boss")}
+            >
+              <div className="navta-mode-icon">⚔</div>
+              <h2>Boss Battle</h2>
+              <p>
+                Fight a mixed-difficulty test across multiple
+                chapters and earn a Boss Rank.
+              </p>
+
+              <div className="navta-mode-features">
+                <span>⚔ Multiple chapters</span>
+                <span>⚡ Automatic difficulty mix</span>
+                <span>👑 15 / 30 / 50 question battles</span>
+                <span>🏆 S, A, B, C and Retry ranks</span>
+              </div>
+
+              <span className="navta-continue navta-boss-continue">
+                Enter Boss Battle →
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === "subject" && (
+        <div className="navta-test-page">
+          <div className="navta-header">
+            <div>
+              <h1 className="navta-title">
+                {isBoss ? "⚔ Boss Battle" : "Navta TEST"}
+              </h1>
+              <p className="navta-subtitle">
+                Choose a subject to begin your{" "}
+                {isBoss ? "battle" : "test"}.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              style={styles.backButton}
+              onClick={() => {
+                resetTest();
+              }}
+            >
+              ← Test Mode
+            </button>
+          </div>
+
           <div className="navta-grid">
-            {Object.keys(SUBJECTS).map((item) => (
+            {Object.keys(PREPARATION_OPTIONS).map((item) => (
               <button
                 key={item}
+                type="button"
+                className="navta-card"
                 onClick={() => {
                   setSubject(item);
-                  setPreparation("");
-                  setBiologyClass("");
-                  setChapter("");
-                  setDifficulty("");
-                  setSelectedDuration(null);
+                  resetAfterSubject();
                   setStep("preparation");
                 }}
-                className="navta-subject-card"
-                style={styles.subjectCard}
               >
-                <div style={styles.subjectIcon}>
+                <div className="navta-card-icon">
                   {item === "Physics" && "⚡"}
                   {item === "Chemistry" && "🧪"}
                   {item === "Maths" && "∑"}
@@ -941,12 +1642,10 @@ export default function NavtaTestPage() {
                 </div>
 
                 <h2>{item}</h2>
-
-                <p>
-                  {item === "Biology"
-                    ? "32 chapters available"
-                    : `${SUBJECTS[item].length} chapters available`}
-                </p>
+                <p>Class 11 and Class 12 chapter-wise tests</p>
+                <span className="navta-continue">
+                  Continue →
+                </span>
               </button>
             ))}
           </div>
@@ -957,149 +1656,133 @@ export default function NavtaTestPage() {
         <div className="navta-test-page">
           <div className="navta-header">
             <div>
-              <h1 className="navta-title">{subject} Preparation</h1>
-
+              <h1 className="navta-title">
+                {subject} Preparation
+              </h1>
               <p className="navta-subtitle">
                 What are you preparing for?
               </p>
             </div>
 
             <button
-              onClick={goToSubjects}
-              className="navta-back-button"
+              type="button"
               style={styles.backButton}
+              onClick={() => {
+                setSubject("");
+                resetAfterSubject();
+                setStep("subject");
+              }}
             >
               ← Subjects
             </button>
           </div>
 
           <div className="navta-preparation-grid">
-            {Object.entries(PREPARATION_OPTIONS[subject]).map(
-              ([key, option]) => (
-                <button
-                  key={key}
-                  onClick={() => {
-                    setPreparation(key);
-                    setSelectedDuration(null);
-
-                    if (subject === "Biology") {
-                      setBiologyClass("");
-                      setStep("biologyClass");
-                    } else {
-                      setChapter("");
-                      setStep("chapter");
-                    }
-                  }}
-                  className="navta-preparation-card"
-                  style={styles.preparationCard}
-                >
-                  <div style={styles.preparationIcon}>
-                    {option.icon}
-                  </div>
-
-                  <h2>{option.title}</h2>
-
-                  <p>{option.description}</p>
-
-                  <span style={styles.continueText}>
-                    Continue →
-                  </span>
-                </button>
-              )
-            )}
+            {Object.entries(
+              PREPARATION_OPTIONS[subject] || {}
+            ).map(([key, option]) => (
+              <button
+                key={key}
+                type="button"
+                className="navta-card"
+                onClick={() => {
+                  setPreparation(key);
+                  resetAfterPreparation();
+                  setStep("class");
+                }}
+              >
+                <div className="navta-card-icon">
+                  {option.icon}
+                </div>
+                <h2>{option.title}</h2>
+                <p>{option.description}</p>
+                <span className="navta-continue">
+                  Continue →
+                </span>
+              </button>
+            ))}
           </div>
         </div>
       )}
 
-      {step === "biologyClass" && (
+      {step === "class" && (
         <div className="navta-test-page">
           <div className="navta-header">
             <div>
               <h1 className="navta-title">Choose Class</h1>
-
               <p className="navta-subtitle">
-                Biology → {preparation}
+                {subject} → {preparation}
               </p>
             </div>
 
             <button
-              onClick={goToPreparation}
-              className="navta-back-button"
+              type="button"
               style={styles.backButton}
+              onClick={goBackFromClass}
             >
               ← Preparation
             </button>
           </div>
 
           <div className="navta-class-grid">
-            {Object.entries(BIOLOGY_CLASSES).map(
-              ([className, chapters]) => (
-                <button
-                  key={className}
-                  onClick={() => {
-                    setBiologyClass(className);
-                    setChapter("");
-                    setStep("chapter");
-                  }}
-                  className="navta-class-card"
-                  style={styles.classCard}
-                >
-                  <div style={styles.classIcon}>🧬</div>
-
-                  <h2>{className}</h2>
-
-                  <p>{chapters.length} chapters</p>
-
-                  <span style={styles.continueText}>
-                    View Chapters →
-                  </span>
-                </button>
-              )
-            )}
+            {CLASSES.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className="navta-card"
+                onClick={() => {
+                  setClassLevel(item);
+                  resetAfterClass();
+                  setStep(isBoss ? "bossChapters" : "chapter");
+                }}
+              >
+                <div className="navta-card-icon">🎓</div>
+                <h2>{item}</h2>
+                <p>
+                  {(CHAPTERS[subject]?.[item] || []).length} chapters
+                </p>
+                <span className="navta-continue">
+                  {isBoss ? "Select Chapters →" : "View Chapters →"}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
       )}
 
-      {step === "chapter" && (
+      {step === "chapter" && !isBoss && (
         <div className="navta-test-page">
           <div className="navta-header">
             <div>
               <h1 className="navta-title">{subject}</h1>
-
               <p className="navta-subtitle">
-                {subject === "Biology"
-                  ? `${preparation} → ${biologyClass}`
-                  : `${preparation} Preparation`}
+                {preparation} → {classLevel}
               </p>
             </div>
 
             <button
-              onClick={
-                subject === "Biology"
-                  ? () => setStep("biologyClass")
-                  : goToPreparation
-              }
-              className="navta-back-button"
+              type="button"
               style={styles.backButton}
+              onClick={goBackFromChapter}
             >
-              ← Back
+              ← Class
             </button>
           </div>
 
           <div className="navta-chapter-grid">
-            {(subject === "Biology"
-              ? BIOLOGY_CLASSES[biologyClass] || []
-              : SUBJECTS[subject] || []
-            ).map((item) => (
+            {(CHAPTERS[subject]?.[classLevel] || []).map((item) => (
               <button
                 key={item}
+                type="button"
+                className="navta-chapter-card"
                 onClick={() => {
                   setChapter(item);
                   setDifficulty("");
+                  setQuestionType("mcq");
                   setSelectedDuration(null);
+                  setGenerationError("");
                   setStep("difficulty");
                 }}
-                style={styles.chapterCard}
               >
                 <span>{item}</span>
                 <span>→</span>
@@ -1109,358 +1792,1148 @@ export default function NavtaTestPage() {
         </div>
       )}
 
-      {step === "difficulty" && (
+      {step === "bossChapters" && isBoss && (
         <div className="navta-test-page">
           <div className="navta-header">
             <div>
-              <h1 className="navta-title">Select Difficulty</h1>
-
+              <h1 className="navta-title">
+                ⚔ Select Battle Chapters
+              </h1>
               <p className="navta-subtitle">
-                {subject}
-                {subject === "Biology" ? ` → ${biologyClass}` : ""}
-                {" → "}
-                {chapter}
+                {subject} → {preparation} → {classLevel}
               </p>
             </div>
 
             <button
-              onClick={goToChapter}
-              className="navta-back-button"
+              type="button"
               style={styles.backButton}
-            >
-              ← Chapters
-            </button>
-          </div>
-
-          <div className="navta-difficulty-grid">
-            {["Easy", "Medium", "Hard"].map((level) => (
-              <button
-                key={level}
-                onClick={() => {
-                  setDifficulty(level);
-                  setSelectedDuration(null);
-                }}
-                style={{
-                  ...styles.difficultyCard,
-                  ...(difficulty === level
-                    ? styles.selectedDifficulty
-                    : {}),
-                }}
-              >
-                <div style={{ fontSize: "30px", marginBottom: "10px" }}>
-                  {DIFFICULTY_INFO[level].icon}
-                </div>
-                <h2>{level}</h2>
-                <p style={{ color: "#94a3b8", marginBottom: 0 }}>
-                  {DIFFICULTY_INFO[level].description}
-                </p>
-              </button>
-            ))}
-          </div>
-
-          {difficulty && isTimedCompetitiveTest && (
-            <button
-              onClick={() => setStep("duration")}
-              style={styles.startButton}
-            >
-              Choose Test Duration →
-            </button>
-          )}
-
-          {difficulty && preparation === "Boards" && (
-            <button onClick={startTest} style={styles.startButton}>
-              Start Navta TEST →
-            </button>
-          )}
-        </div>
-      )}
-
-      {step === "duration" && isTimedCompetitiveTest && (
-        <div className="navta-test-page">
-          <div className="navta-header">
-            <div>
-              <h1 className="navta-title">Select Test Duration</h1>
-              <p className="navta-subtitle">
-                {subject} → {preparation} → {chapter} → {difficulty}
-              </p>
-            </div>
-
-            <button
               onClick={() => {
-                setSelectedDuration(null);
-                setStep("difficulty");
+                setSelectedChapters([]);
+                setGenerationError("");
+                setStep("class");
               }}
-              className="navta-back-button"
-              style={styles.backButton}
             >
-              ← Difficulty
+              ← Class
             </button>
           </div>
 
-          <div className="navta-rule-banner">
-            {preparation === "NEET"
-              ? "NEET Mode • 1 minute allocated per question"
-              : "JEE Mode • 2 minutes allocated per question"}
+          <div className="navta-selection-count">
+            {selectedChapters.length} chapter
+            {selectedChapters.length !== 1 ? "s" : ""} selected
+            {" • "}Choose at least 2.
           </div>
 
-          <div className="navta-duration-grid">
-            {TEST_CONFIG[preparation].durations.map((duration) => {
-              const count = getQuestionCount(preparation, duration);
+          <div className="navta-chapter-grid">
+            {(CHAPTERS[subject]?.[classLevel] || []).map((item) => {
+              const selected = selectedChapters.includes(item);
 
               return (
                 <button
-                  key={duration}
+                  key={item}
                   type="button"
-                  onClick={() => setSelectedDuration(duration)}
-                  className={`navta-duration-card${
-                    selectedDuration === duration ? " active" : ""
+                  className={`navta-chapter-card${
+                    selected ? " selected" : ""
                   }`}
+                  onClick={() => toggleBossChapter(item)}
                 >
-                  <span className="navta-duration-time">
-                    ⏱ {duration} Minutes
-                  </span>
-                  <span className="navta-duration-questions">
-                    {count} Questions
+                  <span>{item}</span>
+                  <span className="navta-check">
+                    {selected ? "✓" : "✓"}
                   </span>
                 </button>
               );
             })}
           </div>
 
+          {generationError && (
+            <div className="navta-error">
+              {generationError}
+            </div>
+          )}
+
           <button
-            disabled={!selectedDuration}
-            onClick={() => setStep("summary")}
+            type="button"
+            disabled={selectedChapters.length < 2}
             style={{
-              ...styles.startButton,
-              opacity: selectedDuration ? 1 : 0.5,
+              ...styles.bossButton,
+              opacity: selectedChapters.length >= 2 ? 1 : 0.5,
+            }}
+            onClick={() => {
+              if (selectedChapters.length < 2) {
+                setGenerationError(
+                  "Select at least 2 chapters for Boss Battle."
+                );
+                return;
+              }
+
+              setGenerationError("");
+              setStep("bossSize");
             }}
           >
-            Review Test →
+            Choose Boss Size →
           </button>
         </div>
       )}
 
-      {step === "summary" && isTimedCompetitiveTest && selectedDuration && (
+      {step === "bossSize" && isBoss && (
         <div className="navta-test-page">
           <div className="navta-header">
             <div>
-              <h1 className="navta-title">Test Summary</h1>
-              <p className="navta-subtitle">Check your test setup before starting.</p>
+              <h1 className="navta-title">
+                Choose Your Boss
+              </h1>
+              <p className="navta-subtitle">
+                {selectedChapters.length} chapters selected
+              </p>
             </div>
 
             <button
-              onClick={() => setStep("duration")}
-              className="navta-back-button"
+              type="button"
               style={styles.backButton}
+              onClick={() => {
+                setGenerationError("");
+                setStep("bossChapters");
+              }}
             >
-              ← Duration
+              ← Chapters
             </button>
           </div>
 
-          <div className="navta-summary-card">
-            <h2 style={{ marginTop: 0 }}>Navta TEST</h2>
+          <div className="navta-rule-banner navta-boss-banner">
+            ⚔ Boss Battle is MCQ-only. Questions are mixed
+            automatically across Easy, Medium and Hard.
+          </div>
+
+          <div className="navta-boss-grid">
+            {Object.entries(BOSS_SIZES).map(([size, info]) => {
+              const numericSize = Number(size);
+
+              return (
+                <button
+                  key={size}
+                  type="button"
+                  className={`navta-duration-card navta-boss-card${
+                    bossSize === numericSize ? " active" : ""
+                  }`}
+                  onClick={() => {
+                    setBossSize(numericSize);
+                    setGenerationError("");
+                  }}
+                >
+                  <span style={{ fontSize: "32px" }}>
+                    {info.icon}
+                  </span>
+                  <span className="navta-duration-time">
+                    {info.name}
+                  </span>
+                  <span className="navta-duration-questions">
+                    {numericSize} Questions
+                  </span>
+                  <span className="navta-duration-questions">
+                    {info.description}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="navta-summary-card boss">
+            <h2 style={{ marginTop: 0 }}>
+              Automatic Difficulty Mix
+            </h2>
+
+            <div className="navta-mix-grid">
+              {Object.entries(
+                BOSS_SIZES[bossSize].targets
+              ).map(([level, count]) => (
+                <div
+                  key={level}
+                  className="navta-mix-item"
+                >
+                  <span>
+                    {level === "Easy"
+                      ? "🌱"
+                      : level === "Medium"
+                        ? "⚡"
+                        : "🔥"}{" "}
+                    {level}
+                  </span>
+                  <strong>{count}</strong>
+                  <span style={{ color: "#94a3b8", fontSize: "12px" }}>
+                    target questions
+                  </span>
+                </div>
+              ))}
+            </div>
 
             <div className="navta-summary-grid">
-              <div className="navta-summary-item">
-                <span className="navta-summary-label">Subject</span>
-                <span className="navta-summary-value">{subject}</span>
-              </div>
-
-              <div className="navta-summary-item">
-                <span className="navta-summary-label">Preparation</span>
-                <span className="navta-summary-value">{preparation}</span>
-              </div>
-
-              {subject === "Biology" && (
-                <div className="navta-summary-item">
-                  <span className="navta-summary-label">Class</span>
-                  <span className="navta-summary-value">{biologyClass}</span>
-                </div>
-              )}
-
-              <div className="navta-summary-item">
-                <span className="navta-summary-label">Chapter</span>
-                <span className="navta-summary-value">{chapter}</span>
-              </div>
-
-              <div className="navta-summary-item">
-                <span className="navta-summary-label">Difficulty</span>
-                <span className="navta-summary-value">{difficulty}</span>
-              </div>
-
-              <div className="navta-summary-item">
-                <span className="navta-summary-label">Duration</span>
-                <span className="navta-summary-value">
-                  {selectedDuration} Minutes
-                </span>
-              </div>
-
-              <div className="navta-summary-item">
-                <span className="navta-summary-label">Questions</span>
-                <span className="navta-summary-value">
-                  {requestedQuestionCount} Questions
-                </span>
-              </div>
-
-              <div className="navta-summary-item">
-                <span className="navta-summary-label">Time Allocation</span>
-                <span className="navta-summary-value">
-                  {TEST_CONFIG[preparation].minutesPerQuestion} minute
-                  {TEST_CONFIG[preparation].minutesPerQuestion !== 1 ? "s" : ""}
-                  /question
-                </span>
-              </div>
+              <SummaryItem
+                label="Chapters"
+                value={`${selectedChapters.length} selected`}
+              />
+              <SummaryItem
+                label="Questions"
+                value={`${bossSize} Questions`}
+              />
+              <SummaryItem
+                label="Time per Question"
+                value={`${preparation === "JEE" ? 2 : 1} minute${
+                  preparation === "JEE" ? "s" : ""
+                }`}
+              />
+              <SummaryItem
+                label="Estimated Duration"
+                value={`${
+                  bossSize * (preparation === "JEE" ? 2 : 1)
+                } Minutes`}
+              />
             </div>
           </div>
 
-          {getQuestions(subject, chapter, difficulty).length <
-            requestedQuestionCount && (
-            <p className="navta-bank-note">
-              Development note: this local question bank currently contains only{" "}
-              {getQuestions(subject, chapter, difficulty).length} matching question(s).
-              After the Admin Portal is connected, NAVTA will fetch the full requested
-              question count automatically.
-            </p>
-          )}
-
-          <button onClick={startTest} style={styles.startButton}>
-            Start Navta TEST →
+          <button
+            type="button"
+            style={styles.bossButton}
+            onClick={() => setStep("bossSummary")}
+          >
+            Review Boss Battle →
           </button>
         </div>
       )}
 
-      {step === "test" && !submitted && questions.length > 0 && (
+      {step === "bossSummary" && isBoss && (
         <div className="navta-test-page">
-          <div className="navta-test-header">
+          <div className="navta-header">
             <div>
-              <h1 className="navta-title">Navta TEST</h1>
-
+              <h1 className="navta-title">
+                ⚔ Boss Battle Summary
+              </h1>
               <p className="navta-subtitle">
-                {subject} → {chapter} → {difficulty}
+                Check your battle setup before starting.
               </p>
             </div>
 
-            <div
-              className="navta-timer"
-              style={{
-                ...styles.timer,
-                ...(timeLeft <= 60 ? styles.dangerTimer : {}),
+            <button
+              type="button"
+              style={styles.backButton}
+              onClick={() => {
+                setGenerationError("");
+                setStep("bossSize");
               }}
             >
-              ⏱ {formattedTime}
+              ← Boss Size
+            </button>
+          </div>
+
+          <div className="navta-summary-card boss">
+            <h2 style={{ marginTop: 0 }}>
+              {BOSS_SIZES[bossSize].icon}{" "}
+              {BOSS_SIZES[bossSize].name}
+            </h2>
+
+            <div className="navta-summary-grid">
+              <SummaryItem label="Subject" value={subject} />
+              <SummaryItem
+                label="Preparation"
+                value={preparation}
+              />
+              <SummaryItem label="Class" value={classLevel} />
+              <SummaryItem
+                label="Question Type"
+                value="MCQ / Option"
+              />
+              <SummaryItem
+                label="Questions"
+                value={`${bossSize} Questions`}
+              />
+              <SummaryItem
+                label="Duration"
+                value={`${
+                  bossSize * (preparation === "JEE" ? 2 : 1)
+                } Minutes`}
+              />
+            </div>
+
+            <div style={{ marginTop: "20px" }}>
+              <span className="navta-summary-label">
+                Selected Chapters
+              </span>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                  marginTop: "8px",
+                }}
+              >
+                {selectedChapters.map((item) => (
+                  <span key={item} className="navta-tag boss">
+                    {item}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div style={styles.progress}>
-            Question {currentQuestion + 1} of {questions.length}
+          {generationError && (
+            <div className="navta-error">
+              {generationError}
+            </div>
+          )}
+
+          <button
+            type="button"
+            disabled={generatingTest}
+            style={{
+              ...styles.bossButton,
+              opacity: generatingTest ? 0.65 : 1,
+            }}
+            onClick={startBossBattle}
+          >
+            {generatingTest
+              ? "Preparing Boss Battle..."
+              : "⚔ Start Boss Battle"}
+          </button>
+        </div>
+      )}
+
+      {step === "difficulty" && !isBoss && (
+        <div className="navta-test-page">
+          <div className="navta-header">
+            <div>
+              <h1 className="navta-title">
+                Select Difficulty
+              </h1>
+              <p className="navta-subtitle">
+                {subject} → {classLevel} → {chapter}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              style={styles.backButton}
+              onClick={goBackFromDifficulty}
+            >
+              ← Chapters
+            </button>
           </div>
 
-          <div className="navta-question-card">
-            <h2 className="navta-question" style={styles.question}>
-              {questions[currentQuestion].question}
-            </h2>
+          <div className="navta-difficulty-grid">
+            {Object.entries(DIFFICULTY_INFO).map(
+              ([level, info]) => (
+                <button
+                  key={level}
+                  type="button"
+                  className={`navta-card${
+                    difficulty === level ? " active" : ""
+                  }`}
+                  onClick={() => {
+                    setDifficulty(level);
+                    setSelectedDuration(null);
+                    setGenerationError("");
+                  }}
+                >
+                  <div className="navta-card-icon">
+                    {info.icon}
+                  </div>
+                  <h2>{level}</h2>
+                  <p>{info.description}</p>
+                </button>
+              )
+            )}
+          </div>
 
-            <div>
-              {questions[currentQuestion].options.map(
-                (option, index) => (
+          {difficulty && (
+            <button
+              type="button"
+              style={styles.startButton}
+              onClick={() => {
+                if (preparation === "Boards") {
+                  setStep("questionType");
+                } else {
+                  setQuestionType("mcq");
+                  setStep("duration");
+                }
+              }}
+            >
+              {preparation === "Boards"
+                ? "Choose Question Type →"
+                : "Choose Test Duration →"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {step === "questionType" &&
+        !isBoss &&
+        preparation === "Boards" && (
+          <div className="navta-test-page">
+            <div className="navta-header">
+              <div>
+                <h1 className="navta-title">
+                  Choose Question Type
+                </h1>
+                <p className="navta-subtitle">
+                  {subject} → {classLevel} → {chapter} →{" "}
+                  {difficulty}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                style={styles.backButton}
+                onClick={goBackFromQuestionType}
+              >
+                ← Difficulty
+              </button>
+            </div>
+
+            <div className="navta-question-type-grid">
+              {Object.entries(QUESTION_TYPE_INFO).map(
+                ([type, info]) => (
                   <button
-                    key={option}
-                    onClick={() => selectAnswer(index)}
-                    className="navta-option"
-                    style={{
-                      ...styles.option,
-                      ...(answers[currentQuestion] === index
-                        ? styles.selectedOption
-                        : {}),
+                    key={type}
+                    type="button"
+                    className={`navta-card${
+                      questionType === type ? " active" : ""
+                    }`}
+                    onClick={() => {
+                      setQuestionType(type);
+                      setSelectedDuration(null);
+                      setGenerationError("");
                     }}
                   >
-                    <span style={styles.optionLetter}>
-                      {String.fromCharCode(65 + index)}
+                    <div className="navta-card-icon">
+                      {info.icon}
+                    </div>
+                    <h2>{info.title}</h2>
+                    <p>{info.description}</p>
+                    <span className="navta-continue">
+                      {info.minutesPerQuestion} minute
+                      {info.minutesPerQuestion !== 1 ? "s" : ""} / question
                     </span>
-
-                    <span>{option}</span>
                   </button>
                 )
               )}
             </div>
-          </div>
 
-          <div className="navta-navigation">
             <button
-              disabled={currentQuestion === 0}
-              onClick={() =>
-                setCurrentQuestion(
-                  (previous) => previous - 1
-                )
-              }
-              style={{
-                ...styles.navButton,
-                opacity: currentQuestion === 0 ? 0.5 : 1,
-              }}
+              type="button"
+              style={styles.startButton}
+              onClick={() => setStep("duration")}
             >
-              ← Previous
+              Choose Test Duration →
             </button>
+          </div>
+        )}
 
-            {currentQuestion < questions.length - 1 ? (
+      {step === "duration" &&
+        !isBoss &&
+        currentConfig && (
+          <div className="navta-test-page">
+            <div className="navta-header">
+              <div>
+                <h1 className="navta-title">
+                  Select Test Duration
+                </h1>
+                <p className="navta-subtitle">
+                  {subject} → {preparation} → {classLevel} →{" "}
+                  {chapter}
+                </p>
+              </div>
+
               <button
-                onClick={() =>
-                  setCurrentQuestion(
-                    (previous) => previous + 1
-                  )
-                }
-                style={styles.nextButton}
+                type="button"
+                style={styles.backButton}
+                onClick={goBackFromDuration}
               >
-                Next →
+                ← Back
               </button>
-            ) : (
+            </div>
+
+            <div className="navta-rule-banner">
+              {preparation === "NEET" &&
+                "NEET Mode • 1 minute allocated per MCQ"}
+
+              {preparation === "JEE" &&
+                "JEE Mode • 2 minutes allocated per MCQ"}
+
+              {preparation === "Boards" &&
+                `Boards • ${getQuestionTypeLabel(
+                  resolvedQuestionType
+                )} • ${minutesPerQuestion} minute${
+                  minutesPerQuestion !== 1 ? "s" : ""
+                } per question`}
+            </div>
+
+            <div className="navta-duration-grid">
+              {currentConfig.durations.map((duration) => {
+                const count = getQuestionCount(
+                  preparation,
+                  resolvedQuestionType,
+                  duration
+                );
+
+                return (
+                  <button
+                    key={duration}
+                    type="button"
+                    className={`navta-duration-card${
+                      selectedDuration === duration ? " active" : ""
+                    }`}
+                    onClick={() => {
+                      setSelectedDuration(duration);
+                      setGenerationError("");
+                    }}
+                  >
+                    <span className="navta-duration-time">
+                      ⏱ {duration} Minutes
+                    </span>
+                    <span className="navta-duration-questions">
+                      {count} Questions
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              disabled={!selectedDuration}
+              style={{
+                ...styles.startButton,
+                opacity: selectedDuration ? 1 : 0.5,
+              }}
+              onClick={() => setStep("summary")}
+            >
+              Review Test →
+            </button>
+          </div>
+        )}
+
+      {step === "summary" &&
+        !isBoss &&
+        selectedDuration && (
+          <div className="navta-test-page">
+            <div className="navta-header">
+              <div>
+                <h1 className="navta-title">
+                  Test Summary
+                </h1>
+                <p className="navta-subtitle">
+                  Check your setup before starting.
+                </p>
+              </div>
+
               <button
-                onClick={() => setSubmitted(true)}
-                style={styles.submitButton}
+                type="button"
+                style={styles.backButton}
+                onClick={() => setStep("duration")}
               >
-                Submit Test
+                ← Duration
               </button>
+            </div>
+
+            <div className="navta-summary-card">
+              <h2 style={{ marginTop: 0 }}>
+                Navta TEST
+              </h2>
+
+              <div className="navta-summary-grid">
+                <SummaryItem label="Subject" value={subject} />
+                <SummaryItem
+                  label="Preparation"
+                  value={preparation}
+                />
+                <SummaryItem label="Class" value={classLevel} />
+                <SummaryItem label="Chapter" value={chapter} />
+                <SummaryItem
+                  label="Difficulty"
+                  value={difficulty}
+                />
+                <SummaryItem
+                  label="Question Type"
+                  value={getQuestionTypeLabel(
+                    resolvedQuestionType
+                  )}
+                />
+                <SummaryItem
+                  label="Duration"
+                  value={`${selectedDuration} Minutes`}
+                />
+                <SummaryItem
+                  label="Questions"
+                  value={`${requestedQuestionCount} Questions`}
+                />
+                <SummaryItem
+                  label="Time Allocation"
+                  value={`${minutesPerQuestion} minute${
+                    minutesPerQuestion !== 1 ? "s" : ""
+                  } / question`}
+                />
+              </div>
+            </div>
+
+            {generationError && (
+              <div className="navta-error">
+                {generationError}
+              </div>
+            )}
+
+            <button
+              type="button"
+              disabled={generatingTest}
+              style={{
+                ...styles.startButton,
+                opacity: generatingTest ? 0.65 : 1,
+              }}
+              onClick={startStandardTest}
+            >
+              {generatingTest
+                ? "Generating Test..."
+                : "Start Navta TEST →"}
+            </button>
+          </div>
+        )}
+
+      {step === "test" &&
+        !submitted &&
+        currentTestQuestion && (
+          <div className="navta-test-page">
+            <div className="navta-test-header">
+              <div>
+                <h1 className="navta-title">
+                  {isBoss ? "⚔ Boss Battle" : "Navta TEST"}
+                </h1>
+
+                <p className="navta-subtitle">
+                  {subject} → {classLevel}
+                  {!isBoss && ` → ${chapter} → ${difficulty}`}
+                </p>
+              </div>
+
+              <div
+                style={{
+                  ...styles.timer,
+                  ...(timeLeft <= 60
+                    ? styles.dangerTimer
+                    : {}),
+                }}
+              >
+                ⏱ {formattedTime}
+              </div>
+            </div>
+
+            {isBoss && (
+              <div className="navta-boss-question-meta">
+                <span className="navta-tag boss">
+                  {BOSS_SIZES[bossSize]?.name || "Boss Battle"}
+                </span>
+                <span className="navta-tag">
+                  {currentTestQuestion.chapter || "Mixed Chapter"}
+                </span>
+                <span className="navta-tag">
+                  {currentTestQuestion.difficulty || "Mixed"}
+                </span>
+              </div>
+            )}
+
+            <div style={styles.progress}>
+              Question {currentQuestion + 1} of {questions.length}
+              {" • "}
+              {getQuestionTypeLabel(resolvedQuestionType)}
+            </div>
+
+            {resolvedQuestionType === "mcq" && (
+              <>
+                <div className="navta-question-card">
+                  <h2 className="navta-question">
+                    {currentTestQuestion.question}
+                  </h2>
+
+                  <div>
+                    {(currentTestQuestion.options || []).map(
+                      (option, index) => {
+                        const feedback =
+                          answerFeedback[currentQuestion];
+
+                        const correctAnswer =
+                          getCorrectAnswerIndex(
+                            currentTestQuestion
+                          );
+
+                        const isSelected =
+                          answers[currentQuestion] === index;
+
+                        const showWrongSelected =
+                          feedback &&
+                          !feedback.isCorrect &&
+                          isSelected;
+
+                        const showCorrectAnswer =
+                          feedback &&
+                          !feedback.isCorrect &&
+                          index === correctAnswer;
+
+                        return (
+                          <button
+                            key={`${currentQuestion}-${index}`}
+                            type="button"
+                            disabled={Boolean(feedback)}
+                            className="navta-option"
+                            onClick={() => selectAnswer(index)}
+                            style={{
+                              ...(isSelected && !feedback
+                                ? styles.selectedOption
+                                : {}),
+                              ...(showWrongSelected
+                                ? styles.wrongOption
+                                : {}),
+                              ...(showCorrectAnswer
+                                ? styles.correctOption
+                                : {}),
+                            }}
+                          >
+                            <span style={styles.optionLetter}>
+                              {String.fromCharCode(65 + index)}
+                            </span>
+
+                            <span>{option}</span>
+                          </button>
+                        );
+                      }
+                    )}
+                  </div>
+                </div>
+
+                {answerFeedback[currentQuestion] &&
+                  !answerFeedback[currentQuestion].isCorrect && (
+                    <div className="navta-answer-feedback wrong">
+                      <h3
+                        style={{
+                          marginTop: 0,
+                          color: "#fca5a5",
+                        }}
+                      >
+                        ✕ Incorrect
+                      </h3>
+
+                      <p
+                        style={{
+                          color: "#d1fae5",
+                          fontWeight: 700,
+                        }}
+                      >
+                        Correct Answer:{" "}
+                        {String.fromCharCode(
+                          65 +
+                            answerFeedback[currentQuestion]
+                              .correctAnswer
+                        )}
+                        .{" "}
+                        {
+                          currentTestQuestion.options[
+                            answerFeedback[currentQuestion]
+                              .correctAnswer
+                          ]
+                        }
+                      </p>
+
+                      <p
+                        style={{
+                          color: "#e2e8f0",
+                          lineHeight: 1.65,
+                        }}
+                      >
+                        <strong>Explanation: </strong>
+                        {currentTestQuestion.explanation ||
+                          "Explanation is not available for this question yet."}
+                      </p>
+
+                      <button
+                        type="button"
+                        style={styles.nextButton}
+                        onClick={goForwardAfterAnswer}
+                      >
+                        {currentQuestion <
+                        questions.length - 1
+                          ? "Next Question →"
+                          : isBoss
+                            ? "Finish Battle"
+                            : "Finish Test"}
+                      </button>
+                    </div>
+                  )}
+
+                <div className="navta-navigation">
+                  <span style={{ color: "#94a3b8" }}>
+                    {answerFeedback[currentQuestion]
+                      ? answerFeedback[currentQuestion]
+                          .isCorrect
+                        ? "✓ Correct — moving to next question..."
+                        : "Review the explanation, then continue."
+                      : "Select one answer"}
+                  </span>
+                </div>
+              </>
+            )}
+
+            {resolvedQuestionType !== "mcq" && (
+              <>
+                <div className="navta-question-card">
+                  <span className="navta-status-pill">
+                    {resolvedQuestionType === "short"
+                      ? "Short Answer"
+                      : "Long Answer"}
+                  </span>
+
+                  <h2 className="navta-question">
+                    {currentTestQuestion.question}
+                  </h2>
+
+                  <p
+                    style={{
+                      color: "#94a3b8",
+                      marginTop: "-15px",
+                      marginBottom: "18px",
+                    }}
+                  >
+                    Maximum Marks:{" "}
+                    {currentTestQuestion.maxMarks || "-"}
+                  </p>
+
+                  <textarea
+                    className="navta-written-answer"
+                    placeholder={
+                      resolvedQuestionType === "short"
+                        ? "Write your short answer here..."
+                        : "Write your detailed answer here..."
+                    }
+                    value={
+                      writtenAnswers[currentQuestion] || ""
+                    }
+                    disabled={Boolean(
+                      writtenFeedback[currentQuestion]
+                    )}
+                    onChange={(e) => {
+                      setWrittenAnswers((previous) => ({
+                        ...previous,
+                        [currentQuestion]: e.target.value,
+                      }));
+                      setEvaluationError("");
+                    }}
+                  />
+
+                  {!writtenFeedback[currentQuestion] && (
+                    <button
+                      type="button"
+                      disabled={evaluatingAnswer}
+                      style={{
+                        ...styles.startButton,
+                        margin: "20px 0 0",
+                        opacity: evaluatingAnswer ? 0.65 : 1,
+                      }}
+                      onClick={evaluateWrittenAnswer}
+                    >
+                      {evaluatingAnswer
+                        ? "AI is checking your answer..."
+                        : "Submit Answer for AI Check"}
+                    </button>
+                  )}
+                </div>
+
+                {evaluationError && (
+                  <div className="navta-error">
+                    {evaluationError}
+                  </div>
+                )}
+
+                {writtenFeedback[currentQuestion] && (
+                  <WrittenFeedback
+                    feedback={
+                      writtenFeedback[currentQuestion]
+                    }
+                    onNext={goForwardAfterAnswer}
+                    isLast={
+                      currentQuestion ===
+                      questions.length - 1
+                    }
+                  />
+                )}
+              </>
             )}
           </div>
-        </div>
-      )}
+        )}
 
       {step === "test" && submitted && (
         <div className="navta-test-page">
-          <div className="navta-result-card">
-            <div style={styles.resultIcon}>✓</div>
+          {isBoss ? (
+            <div className="navta-result-card boss">
+              <div style={{ fontSize: "48px" }}>
+                {bossRank.icon}
+              </div>
 
-            <h1>Test Completed!</h1>
+              <h1>Boss Battle Complete!</h1>
 
-            <p style={styles.resultSubject}>
-              {subject} → {chapter} → {difficulty}
-            </p>
+              <p style={{ color: "#94a3b8" }}>
+                {subject} → {preparation} → {classLevel}
+              </p>
 
-            <div className="navta-score" style={styles.score}>
-              {score}/{questions.length}
+              <div className="navta-rank">
+                {bossRank.rank}
+              </div>
+
+              <div
+                style={{
+                  color: "#fbbf24",
+                  fontWeight: 800,
+                  marginTop: "-12px",
+                }}
+              >
+                {bossRank.label}
+              </div>
+
+              <div className="navta-result-score">
+                {mcqScore}/{questions.length}
+              </div>
+
+              <p style={{ color: "#94a3b8" }}>
+                {bossPercentage}% accuracy
+              </p>
+
+              <div className="navta-performance-section">
+                <h3>Difficulty Performance</h3>
+
+                {["Easy", "Medium", "Hard"].map((level) => {
+                  const result =
+                    difficultyPerformance[level] || {
+                      correct: 0,
+                      total: 0,
+                    };
+
+                  return (
+                    <div
+                      key={level}
+                      className="navta-performance-row"
+                    >
+                      <span>{level}</span>
+                      <strong>
+                        {result.correct}/{result.total}
+                      </strong>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="navta-performance-section">
+                <h3>Chapter Performance</h3>
+
+                {Object.entries(chapterPerformance).map(
+                  ([name, result]) => {
+                    const percentage =
+                      result.total > 0
+                        ? Math.round(
+                            (result.correct /
+                              result.total) *
+                              100
+                          )
+                        : 0;
+
+                    return (
+                      <div
+                        key={name}
+                        className="navta-performance-row"
+                      >
+                        <span>{name}</span>
+                        <strong>
+                          {result.correct}/{result.total}
+                          {" • "}
+                          {percentage}%
+                        </strong>
+                      </div>
+                    );
+                  }
+                )}
+              </div>
+
+              <div className="navta-actions">
+                <button
+                  type="button"
+                  style={styles.bossButton}
+                  onClick={() => {
+                    clearTestRun();
+                    setStep("bossSummary");
+                  }}
+                >
+                  ⚔ Retry Battle
+                </button>
+
+                <button
+                  type="button"
+                  style={styles.startButtonNoMargin}
+                  onClick={resetTest}
+                >
+                  Choose Another Test
+                </button>
+              </div>
+
+              <Link
+                to="/dashboard"
+                style={styles.dashboardLink}
+              >
+                Back to Dashboard
+              </Link>
             </div>
+          ) : (
+            <div className="navta-result-card">
+              <div style={styles.resultIcon}>✓</div>
 
-            <p style={styles.resultText}>
-              You answered {score} question
-              {score !== 1 ? "s" : ""} correctly.
-            </p>
+              <h1>Test Completed!</h1>
 
-            <button
-              onClick={resetTest}
-              style={styles.startButton}
-            >
-              Take Another Test
-            </button>
+              <p style={{ color: "#94a3b8" }}>
+                {subject} → {classLevel} → {chapter} →{" "}
+                {difficulty}
+              </p>
 
-            <Link
-              to="/dashboard"
-              style={styles.dashboardLink}
-            >
-              Back to Dashboard
-            </Link>
-          </div>
+              {resolvedQuestionType === "mcq" ? (
+                <>
+                  <div className="navta-result-score">
+                    {mcqScore}/{questions.length}
+                  </div>
+
+                  <p style={{ color: "#94a3b8" }}>
+                    You answered {mcqScore} of{" "}
+                    {questions.length} questions correctly.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="navta-result-score">
+                    {writtenMarks.awarded}/
+                    {writtenMarks.maximum}
+                  </div>
+
+                  <p style={{ color: "#94a3b8" }}>
+                    AI-evaluated board answer score
+                  </p>
+                </>
+              )}
+
+              <button
+                type="button"
+                style={styles.startButton}
+                onClick={resetTest}
+              >
+                Take Another Test
+              </button>
+
+              <Link
+                to="/dashboard"
+                style={styles.dashboardLink}
+              >
+                Back to Dashboard
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </>
+  );
+}
+
+function SummaryItem({ label, value }) {
+  return (
+    <div className="navta-summary-item">
+      <span className="navta-summary-label">
+        {label}
+      </span>
+      <span className="navta-summary-value">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function WrittenFeedback({
+  feedback,
+  onNext,
+  isLast,
+}) {
+  const status = feedback?.status || "incorrect";
+
+  const className =
+    status === "correct"
+      ? "correct"
+      : status === "partially_correct"
+        ? "partial"
+        : "incorrect";
+
+  const title =
+    status === "correct"
+      ? "✓ Correct"
+      : status === "partially_correct"
+        ? "△ Partially Correct"
+        : "✕ Incorrect";
+
+  return (
+    <div
+      className={`navta-written-feedback ${className}`}
+    >
+      <h3 style={{ marginTop: 0 }}>
+        {title}
+      </h3>
+
+      <p
+        style={{
+          fontSize: "20px",
+          fontWeight: 800,
+        }}
+      >
+        Marks: {feedback?.marksAwarded ?? 0}/
+        {feedback?.maxMarks ?? 0}
+      </p>
+
+      {feedback?.feedback && (
+        <p
+          style={{
+            color: "#e2e8f0",
+            lineHeight: 1.65,
+          }}
+        >
+          <strong>AI Feedback: </strong>
+          {feedback.feedback}
+        </p>
+      )}
+
+      {Array.isArray(feedback?.missingPoints) &&
+        feedback.missingPoints.length > 0 && (
+          <div style={{ marginTop: "15px" }}>
+            <strong>Points to improve:</strong>
+
+            <ul
+              style={{
+                color: "#cbd5e1",
+                lineHeight: 1.7,
+              }}
+            >
+              {feedback.missingPoints.map(
+                (point, index) => (
+                  <li key={`${point}-${index}`}>
+                    {point}
+                  </li>
+                )
+              )}
+            </ul>
+          </div>
+        )}
+
+      <button
+        type="button"
+        style={styles.nextButton}
+        onClick={onNext}
+      >
+        {isLast ? "Finish Test" : "Next Question →"}
+      </button>
+    </div>
   );
 }
 
@@ -1476,89 +2949,7 @@ const styles = {
     color: "#ffffff",
     textDecoration: "none",
     cursor: "pointer",
-  },
-
-  subjectCard: {
-    padding: "35px",
-    borderRadius: "18px",
-    border: "1px solid #243047",
-    background: "#151d2d",
-    color: "#ffffff",
-    cursor: "pointer",
-    textAlign: "left",
-  },
-
-  subjectIcon: {
-    fontSize: "42px",
-    marginBottom: "20px",
-  },
-
-  preparationCard: {
-    padding: "35px",
-    borderRadius: "18px",
-    border: "1px solid #243047",
-    background: "#151d2d",
-    color: "#ffffff",
-    cursor: "pointer",
-    textAlign: "left",
-  },
-
-  preparationIcon: {
-    fontSize: "45px",
-    marginBottom: "15px",
-  },
-
-  classCard: {
-    padding: "35px",
-    borderRadius: "18px",
-    border: "1px solid #243047",
-    background: "#151d2d",
-    color: "#ffffff",
-    cursor: "pointer",
-    textAlign: "left",
-  },
-
-  classIcon: {
-    fontSize: "45px",
-    marginBottom: "15px",
-  },
-
-  continueText: {
-    display: "block",
-    marginTop: "20px",
-    color: "#38bdf8",
-    fontWeight: "700",
-  },
-
-  chapterCard: {
-    padding: "20px",
-    minWidth: 0,
-    borderRadius: "12px",
-    border: "1px solid #243047",
-    background: "#151d2d",
-    color: "#ffffff",
-    cursor: "pointer",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    textAlign: "left",
-    fontSize: "16px",
-    gap: "12px",
-    overflowWrap: "anywhere",
-  },
-
-  difficultyCard: {
-    padding: "35px",
-    borderRadius: "18px",
-    border: "2px solid #334155",
-    background: "#151d2d",
-    color: "#ffffff",
-    cursor: "pointer",
-  },
-
-  selectedDifficulty: {
-    border: "2px solid #00a8ff",
-    background: "#102a43",
+    font: "inherit",
   },
 
   startButton: {
@@ -1571,6 +2962,30 @@ const styles = {
     color: "#ffffff",
     fontSize: "16px",
     fontWeight: "700",
+    cursor: "pointer",
+  },
+
+  startButtonNoMargin: {
+    padding: "15px 28px",
+    border: "none",
+    borderRadius: "10px",
+    background: "#079de0",
+    color: "#ffffff",
+    fontSize: "16px",
+    fontWeight: "700",
+    cursor: "pointer",
+  },
+
+  bossButton: {
+    display: "block",
+    margin: "30px auto",
+    padding: "15px 28px",
+    border: "1px solid rgba(245, 158, 11, 0.55)",
+    borderRadius: "10px",
+    background: "linear-gradient(135deg, #d97706, #f59e0b)",
+    color: "#111827",
+    fontSize: "16px",
+    fontWeight: "900",
     cursor: "pointer",
   },
 
@@ -1595,47 +3010,25 @@ const styles = {
     color: "#94a3b8",
   },
 
-  question: {
-    fontSize: "22px",
-    marginBottom: "30px",
-  },
-
-  option: {
-    width: "100%",
-    minWidth: 0,
-    padding: "17px",
-    marginBottom: "12px",
-    borderRadius: "10px",
-    border: "1px solid #334155",
-    background: "#0f172a",
-    color: "#ffffff",
-    textAlign: "left",
-    cursor: "pointer",
-    fontSize: "16px",
-    display: "flex",
-    alignItems: "center",
-    gap: "15px",
-    overflowWrap: "anywhere",
-  },
-
   selectedOption: {
     border: "2px solid #079de0",
     background: "#102f49",
+  },
+
+  wrongOption: {
+    border: "2px solid #ef4444",
+    background: "#3f171c",
+  },
+
+  correctOption: {
+    border: "2px solid #22c55e",
+    background: "#123524",
   },
 
   optionLetter: {
     minWidth: "25px",
     flexShrink: 0,
     fontWeight: "800",
-  },
-
-  navButton: {
-    padding: "13px 20px",
-    borderRadius: "10px",
-    border: "1px solid #334155",
-    background: "#151d2d",
-    color: "#ffffff",
-    cursor: "pointer",
   },
 
   nextButton: {
@@ -1645,34 +3038,12 @@ const styles = {
     background: "#079de0",
     color: "#ffffff",
     cursor: "pointer",
-  },
-
-  submitButton: {
-    padding: "13px 24px",
-    borderRadius: "10px",
-    border: "none",
-    background: "#16a34a",
-    color: "#ffffff",
-    cursor: "pointer",
+    fontWeight: "700",
   },
 
   resultIcon: {
     fontSize: "50px",
     color: "#22c55e",
-  },
-
-  resultSubject: {
-    color: "#94a3b8",
-  },
-
-  score: {
-    fontSize: "60px",
-    fontWeight: "800",
-    margin: "30px",
-  },
-
-  resultText: {
-    color: "#94a3b8",
   },
 
   dashboardLink: {
