@@ -104,11 +104,11 @@ export default function Home() {
       ===================================================== */}
 
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute left-[8%] top-16 h-72 w-72 rounded-full bg-sky-400/15 blur-[110px] dark:bg-sky-500/10" />
+        <div className="absolute left-[8%] top-16 h-72 w-72 rounded-full bg-sky-400/15 blur-3xl dark:bg-sky-500/10" />
 
-        <div className="absolute right-[6%] top-[28rem] h-96 w-96 rounded-full bg-violet-500/10 blur-[140px] dark:bg-violet-500/10" />
+        <div className="absolute right-[6%] top-[28rem] h-96 w-96 rounded-full bg-violet-500/10 blur-3xl dark:bg-violet-500/10" />
 
-        <div className="absolute bottom-10 left-1/3 h-80 w-80 rounded-full bg-cyan-400/10 blur-[130px] dark:bg-cyan-500/5" />
+        <div className="absolute bottom-10 left-1/3 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl dark:bg-cyan-500/5" />
       </div>
 
       {/* =====================================================
@@ -125,12 +125,12 @@ export default function Home() {
             border
             border-slate-200/80
             bg-white/80
-            shadow-[0_30px_100px_rgba(15,23,42,0.12)]
-            backdrop-blur-2xl
+            shadow-xl
+            supports-[backdrop-filter]:backdrop-blur-sm
 
             dark:border-slate-700/50
             dark:bg-slate-950/78
-            dark:shadow-[0_30px_100px_rgba(0,0,0,0.35)]
+            dark:shadow-xl
           "
         >
 
@@ -277,8 +277,8 @@ export default function Home() {
                   border-slate-200/90
                   bg-white/90
                   p-4
-                  shadow-[0_24px_80px_rgba(15,23,42,0.16)]
-                  backdrop-blur-xl
+                  shadow-lg
+                  supports-[backdrop-filter]:backdrop-blur-sm
 
                   dark:border-slate-700
                   dark:bg-slate-950
@@ -394,7 +394,7 @@ export default function Home() {
           TRUST / METRICS
       ===================================================== */}
 
-      <section className="mx-auto mt-7 max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section className="navta-lazy-section mx-auto mt-7 max-w-7xl px-4 sm:px-6 lg:px-8">
 
         <div
           className="
@@ -406,8 +406,8 @@ export default function Home() {
             border-slate-200/80
             bg-white/80
             p-3
-            shadow-[0_18px_60px_rgba(15,23,42,0.08)]
-            backdrop-blur-xl
+            shadow-md
+            supports-[backdrop-filter]:backdrop-blur-sm
             md:grid-cols-4
 
             dark:border-slate-800/50
@@ -440,7 +440,7 @@ export default function Home() {
           FEATURES
       ===================================================== */}
 
-      <section className="mx-auto mt-24 max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section className="navta-lazy-section mx-auto mt-24 max-w-7xl px-4 sm:px-6 lg:px-8">
 
         <SectionHeading
           eyebrow="One learning system"
@@ -457,6 +457,7 @@ export default function Home() {
               <article
                 key={feature.title}
                 className="
+                  navta-lazy-section
                   group
                   relative
                   overflow-hidden
@@ -465,12 +466,11 @@ export default function Home() {
                   border-slate-200/80
                   bg-white/82
                   p-6
-                  shadow-[0_18px_60px_rgba(15,23,42,0.08)]
-                  backdrop-blur-xl
-                  transition
-                  duration-300
-                  hover:-translate-y-1.5
-                  hover:shadow-[0_26px_80px_rgba(15,23,42,0.14)]
+                  shadow-md
+                  supports-[backdrop-filter]:backdrop-blur-sm
+                  transition-shadow
+                  duration-200
+                  hover:shadow-lg
 
                   dark:border-slate-800/60
                   dark:bg-slate-950/65
@@ -530,7 +530,7 @@ export default function Home() {
           NAVTA TEST SPOTLIGHT
       ===================================================== */}
 
-      <section className="mx-auto mt-24 max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section className="navta-lazy-section mx-auto mt-24 max-w-7xl px-4 sm:px-6 lg:px-8">
 
         <div
           className="
@@ -540,12 +540,12 @@ export default function Home() {
             border
             border-slate-200/90
             bg-white/90
-            shadow-[0_30px_100px_rgba(15,23,42,0.14)]
-            backdrop-blur-xl
+            shadow-xl
+            supports-[backdrop-filter]:backdrop-blur-sm
 
             dark:border-slate-800
             dark:bg-slate-950
-            dark:shadow-[0_30px_100px_rgba(2,6,23,0.30)]
+            dark:shadow-xl
           "
         >
 
@@ -684,7 +684,7 @@ export default function Home() {
           JOURNEY
       ===================================================== */}
 
-      <section className="mx-auto mt-24 max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section className="navta-lazy-section mx-auto mt-24 max-w-7xl px-4 sm:px-6 lg:px-8">
 
         <SectionHeading
           eyebrow="Student journey"
@@ -705,8 +705,8 @@ export default function Home() {
                 bg-white/80
                 p-5
                 text-center
-                shadow-[0_14px_45px_rgba(15,23,42,0.07)]
-                backdrop-blur-xl
+                shadow-sm
+                supports-[backdrop-filter]:backdrop-blur-sm
 
                 dark:border-slate-800/50
                 dark:bg-slate-950/60
@@ -758,7 +758,7 @@ export default function Home() {
           EDUCATOR + FINAL CTA
       ===================================================== */}
 
-      <section className="mx-auto mt-24 max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section className="navta-lazy-section mx-auto mt-24 max-w-7xl px-4 sm:px-6 lg:px-8">
 
         <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
 
@@ -771,8 +771,8 @@ export default function Home() {
               border-slate-200/80
               bg-white/82
               p-7
-              shadow-[0_20px_70px_rgba(15,23,42,0.09)]
-              backdrop-blur-xl
+              shadow-md
+              supports-[backdrop-filter]:backdrop-blur-sm
 
               dark:border-slate-800/50
               dark:bg-slate-950/65
@@ -820,21 +820,21 @@ export default function Home() {
               via-sky-50
               to-violet-50
               p-7
-              shadow-[0_24px_90px_rgba(2,132,199,0.14)]
+              shadow-lg
 
               dark:border-sky-400/20
               dark:from-slate-950
               dark:via-[#07182b]
               dark:to-[#102a43]
-              dark:shadow-[0_24px_90px_rgba(2,132,199,0.18)]
+              dark:shadow-xl
 
               sm:p-8
             "
           >
 
-            <div className="absolute right-0 top-0 h-56 w-56 rounded-full bg-sky-400/15 blur-[90px] dark:bg-sky-500/20" />
+            <div className="absolute right-0 top-0 h-56 w-56 rounded-full bg-sky-400/15 blur-3xl dark:bg-sky-500/20" />
 
-            <div className="absolute bottom-0 left-1/3 h-48 w-48 rounded-full bg-violet-400/15 blur-[90px] dark:bg-violet-500/20" />
+            <div className="absolute bottom-0 left-1/3 h-48 w-48 rounded-full bg-violet-400/15 blur-3xl dark:bg-violet-500/20" />
 
             <div className="relative">
 
@@ -1086,13 +1086,14 @@ function ModeCard({
   return (
     <div
       className="
+        navta-lazy-section
         rounded-[24px]
         border
         border-slate-200
         bg-white/80
         p-5
-        shadow-[0_12px_40px_rgba(15,23,42,0.08)]
-        backdrop-blur-xl
+        shadow-sm
+        supports-[backdrop-filter]:backdrop-blur-sm
 
         dark:border-slate-800
         dark:bg-slate-900/75
