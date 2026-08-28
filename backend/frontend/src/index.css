@@ -54,12 +54,17 @@ html {
 html,
 body {
   width: 100%;
-  overflow-x: hidden;
+  min-height: 100%;
+}
+
+html {
+  overflow-x: clip;
+  overflow-y: auto;
 }
 
 body {
-  overscroll-behavior-y: none;
-  -webkit-overflow-scrolling: touch;
+  overflow-x: clip;
+  overflow-y: visible;
   text-rendering: optimizeLegibility;
 }
 
@@ -76,13 +81,10 @@ a {
 
 .navta-scroll-area {
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  touch-action: pan-y;
 }
 
 .navta-main-content {
   min-width: 0;
-  contain: inline-size;
 }
 
 body {
@@ -112,6 +114,7 @@ body {
 #root {
   min-height: 100vh;
   background: transparent !important;
+  overflow: visible;
 }
 
 /* =========================================================
