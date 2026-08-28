@@ -141,6 +141,14 @@ export default function StudentDashboard() {
   const [loading, setLoading] =
     useState(true);
 
+  const [mistakeStats, setMistakeStats] =
+    useState({
+      totalMistakes: 0,
+      needRevision: 0,
+      mastered: 0,
+      masteryPercentage: 0
+    });
+
   // ===================================================
   // LOAD DATA
   // ===================================================
@@ -165,6 +173,70 @@ export default function StudentDashboard() {
               analyticsResponse ||
               null
           );
+
+          // ===========================================
+          // MISTAKE NOTEBOOK STATS
+          // ===========================================
+
+          try {
+            const token =
+              localStorage.getItem('token') ||
+              localStorage.getItem('authToken') ||
+              localStorage.getItem('accessToken');
+
+            const mistakeResponse =
+              await fetch(
+                '/api/mistake-notebook/stats',
+                {
+                  method: 'GET',
+                  credentials: 'include',
+                  headers: token
+                    ? {
+                        Authorization:
+                          `Bearer ${token}`
+                      }
+                    : {}
+                }
+              );
+
+            if (mistakeResponse.ok) {
+              const mistakeData =
+                await mistakeResponse.json();
+
+              setMistakeStats({
+                totalMistakes:
+                  Number(
+                    mistakeData?.stats
+                      ?.totalMistakes || 0
+                  ),
+                needRevision:
+                  Number(
+                    mistakeData?.stats
+                      ?.needRevision || 0
+                  ),
+                mastered:
+                  Number(
+                    mistakeData?.stats
+                      ?.mastered || 0
+                  ),
+                masteryPercentage:
+                  Number(
+                    mistakeData?.stats
+                      ?.masteryPercentage || 0
+                  )
+              });
+            } else {
+              console.error(
+                'Failed to load Mistake Notebook stats:',
+                mistakeResponse.status
+              );
+            }
+          } catch (mistakeError) {
+            console.error(
+              'Failed to load Mistake Notebook stats:',
+              mistakeError
+            );
+          }
         } catch (error) {
           console.error(
             'Failed to load student dashboard:',
@@ -1360,35 +1432,330 @@ export default function StudentDashboard() {
             </div>
           </DashboardPanel>
 
-          {/* SUBJECTS */}
+          {/* MISTAKE NOTEBOOK */}
 
           <DashboardPanel
-            title="Top Subjects"
-            subtitle="Your current progress"
+            title="Mistake Notebook"
+            subtitle="Turn wrong answers into strengths"
           >
             <div
               className="
                 mt-4
-                space-y-5
+                space-y-4
               "
             >
-              {SUBJECT_PROGRESS.map(
-                (
-                  item
-                ) => (
-                  <SubjectProgress
-                    key={
-                      item.subject
-                    }
-                    subject={
-                      item.subject
-                    }
-                    value={
-                      item.value
-                    }
-                  />
-                )
-              )}
+              <div
+                className="
+                  rounded-2xl
+                  border
+                  border-rose-200
+                  bg-gradient-to-br
+                  from-rose-50
+                  via-white
+                  to-orange-50
+                  p-4
+
+                  dark:border-rose-500/20
+                  dark:from-rose-500/10
+                  dark:via-slate-950/40
+                  dark:to-orange-500/10
+                "
+              >
+                <div
+                  className="
+                    flex
+                    items-center
+                    justify-between
+                    gap-3
+                  "
+                >
+                  <div
+                    className="
+                      flex
+                      h-11
+                      w-11
+                      items-center
+                      justify-center
+                      rounded-xl
+                      bg-rose-100
+
+                      dark:bg-rose-500/10
+                    "
+                  >
+                    <BookOpen
+                      className="
+                        h-5
+                        w-5
+                        text-rose-600
+
+                        dark:text-rose-400
+                      "
+                    />
+                  </div>
+
+                  <span
+                    className="
+                      rounded-full
+                      border
+                      border-rose-200
+                      bg-white/80
+                      px-2.5
+                      py-1
+                      text-[9px]
+                      font-black
+                      uppercase
+                      tracking-wider
+                      text-rose-600
+
+                      dark:border-rose-500/20
+                      dark:bg-slate-950/50
+                      dark:text-rose-300
+                    "
+                  >
+                    Personal Revision
+                  </span>
+                </div>
+
+                <p
+                  className="
+                    mt-4
+                    text-3xl
+                    font-black
+                    text-slate-950
+
+                    dark:text-white
+                  "
+                >
+                  {mistakeStats.totalMistakes}
+                </p>
+
+                <p
+                  className="
+                    mt-1
+                    text-xs
+                    font-semibold
+                    text-slate-500
+
+                    dark:text-slate-400
+                  "
+                >
+                  Saved mistakes
+                </p>
+
+                <div
+                  className="
+                    mt-4
+                    grid
+                    grid-cols-2
+                    gap-2
+                  "
+                >
+                  <div
+                    className="
+                      rounded-xl
+                      border
+                      border-slate-200
+                      bg-white/80
+                      p-3
+
+                      dark:border-slate-800
+                      dark:bg-slate-950/40
+                    "
+                  >
+                    <p
+                      className="
+                        text-lg
+                        font-black
+                        text-amber-600
+
+                        dark:text-amber-400
+                      "
+                    >
+                      {mistakeStats.needRevision}
+                    </p>
+
+                    <p
+                      className="
+                        mt-0.5
+                        text-[9px]
+                        font-bold
+                        uppercase
+                        tracking-wider
+                        text-slate-400
+                      "
+                    >
+                      Need Revision
+                    </p>
+                  </div>
+
+                  <div
+                    className="
+                      rounded-xl
+                      border
+                      border-slate-200
+                      bg-white/80
+                      p-3
+
+                      dark:border-slate-800
+                      dark:bg-slate-950/40
+                    "
+                  >
+                    <p
+                      className="
+                        text-lg
+                        font-black
+                        text-emerald-600
+
+                        dark:text-emerald-400
+                      "
+                    >
+                      {mistakeStats.mastered}
+                    </p>
+
+                    <p
+                      className="
+                        mt-0.5
+                        text-[9px]
+                        font-bold
+                        uppercase
+                        tracking-wider
+                        text-slate-400
+                      "
+                    >
+                      Mastered
+                    </p>
+                  </div>
+                </div>
+
+                {mistakeStats.totalMistakes > 0 ? (
+                  <div className="mt-4">
+                    <div
+                      className="
+                        flex
+                        items-center
+                        justify-between
+                        gap-3
+                      "
+                    >
+                      <p
+                        className="
+                          text-[10px]
+                          font-bold
+                          text-slate-500
+
+                          dark:text-slate-400
+                        "
+                      >
+                        Mastery progress
+                      </p>
+
+                      <p
+                        className="
+                          text-[10px]
+                          font-black
+                          text-emerald-600
+
+                          dark:text-emerald-400
+                        "
+                      >
+                        {mistakeStats.masteryPercentage}%
+                      </p>
+                    </div>
+
+                    <div
+                      className="
+                        mt-2
+                        h-1.5
+                        overflow-hidden
+                        rounded-full
+                        bg-slate-200
+
+                        dark:bg-slate-800
+                      "
+                    >
+                      <div
+                        className="
+                          h-full
+                          rounded-full
+                          bg-gradient-to-r
+                          from-rose-500
+                          via-amber-500
+                          to-emerald-500
+                        "
+                        style={{
+                          width:
+                            `${Math.min(
+                              100,
+                              Math.max(
+                                0,
+                                mistakeStats
+                                  .masteryPercentage
+                              )
+                            )}%`
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <p
+                    className="
+                      mt-4
+                      text-[10px]
+                      leading-5
+                      text-slate-500
+
+                      dark:text-slate-400
+                    "
+                  >
+                    No mistakes saved yet.
+                    Incorrect NAVTA TEST
+                    questions you choose to save
+                    will appear here.
+                  </p>
+                )}
+              </div>
+
+              <Link
+                to="/mistake-notebook"
+                className="
+                  group
+                  flex
+                  items-center
+                  justify-between
+                  gap-3
+                  rounded-xl
+                  border
+                  border-slate-200
+                  bg-slate-50/80
+                  px-4
+                  py-3
+                  text-xs
+                  font-black
+                  text-slate-700
+                  transition
+                  hover:border-rose-300
+                  hover:bg-rose-50
+                  hover:text-rose-600
+
+                  dark:border-slate-800
+                  dark:bg-slate-950/35
+                  dark:text-slate-300
+                  dark:hover:border-rose-500/30
+                  dark:hover:bg-rose-500/5
+                  dark:hover:text-rose-300
+                "
+              >
+                Open Mistake Notebook
+
+                <ArrowRight
+                  className="
+                    h-4
+                    w-4
+                    transition
+                    group-hover:translate-x-1
+                  "
+                />
+              </Link>
             </div>
           </DashboardPanel>
 
