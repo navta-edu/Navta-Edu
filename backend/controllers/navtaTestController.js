@@ -61,6 +61,32 @@ const validQuestionTypes = [
 ];
 
 // ============================================
+// BOSS BATTLE SETTINGS
+// ============================================
+
+const BOSS_BATTLE_SIZES = [15, 30, 50];
+
+const BOSS_DIFFICULTY_TARGETS = {
+  15: {
+    Easy: 5,
+    Medium: 6,
+    Hard: 4,
+  },
+
+  30: {
+    Easy: 9,
+    Medium: 12,
+    Hard: 9,
+  },
+
+  50: {
+    Easy: 15,
+    Medium: 20,
+    Hard: 15,
+  },
+};
+
+// ============================================
 // HELPERS
 // ============================================
 
@@ -94,6 +120,27 @@ function isAllowedDuration(exam, questionType, duration) {
   return config.durations.includes(
     Number(duration)
   );
+}
+
+// ============================================
+// SHUFFLE HELPER
+// ============================================
+
+function shuffleArray(items) {
+  const copy = [...items];
+
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(
+      Math.random() * (i + 1)
+    );
+
+    [copy[i], copy[j]] = [
+      copy[j],
+      copy[i],
+    ];
+  }
+
+  return copy;
 }
 
 // ============================================
@@ -190,9 +237,11 @@ exports.createQuestion = async (req, res) => {
       difficulty: difficulty.trim(),
       questionType: resolvedQuestionType,
       question: question.trim(),
+
       explanation: String(
         explanation || ""
       ).trim(),
+
       isActive: true,
     };
 
@@ -389,14 +438,22 @@ exports.getQuestions = async (req, res) => {
 
     if (subject) filter.subject = subject;
     if (exam) filter.exam = exam;
-    if (classLevel)
+
+    if (classLevel) {
       filter.classLevel = classLevel;
-    if (chapter)
+    }
+
+    if (chapter) {
       filter.chapter = chapter;
-    if (difficulty)
+    }
+
+    if (difficulty) {
       filter.difficulty = difficulty;
-    if (questionType)
+    }
+
+    if (questionType) {
       filter.questionType = questionType;
+    }
 
     const questions =
       await NavtaQuestion.find(filter)
@@ -467,7 +524,7 @@ exports.deleteQuestion = async (req, res) => {
 };
 
 // ============================================
-// GENERATE STUDENT TEST
+// GENERATE STANDARD STUDENT TEST
 // ============================================
 
 exports.generateTest = async (req, res) => {
@@ -549,8 +606,10 @@ exports.generateTest = async (req, res) => {
       classLevel,
       chapter,
       difficulty,
+
       questionType:
         resolvedQuestionType,
+
       isActive: true,
     };
 
@@ -600,6 +659,7 @@ exports.generateTest = async (req, res) => {
             maxMarks: 1,
             correctAnswer: 1,
             explanation: 1,
+            chapter: 1,
           },
         },
       ]);
@@ -608,6 +668,8 @@ exports.generateTest = async (req, res) => {
       success: true,
 
       test: {
+        mode: "standard",
+
         subject,
         exam,
         classLevel,
@@ -642,6 +704,702 @@ exports.generateTest = async (req, res) => {
       message:
         "Failed to generate Navta TEST.",
       error: error.message,
+    });
+  }
+};
+
+// ============================================
+// GENERATE BOSS BATTLE
+// ============================================
+//
+// Boss Battle:
+// - MCQ only
+// - minimum 2 chapters
+// - multiple chapters
+// - Easy + Medium + Hard automatically
+// - 15 / 30 / 50 question sizes
+// - tries to represent every chapter
+// - fills missing difficulty slots automatically
+//
+// ============================================
+
+exports.generateBossBattle = async (req, res) => {
+  try {
+    const {
+      subject,
+      exam,
+      classLevel,
+      chapters,
+      totalQuestions,
+    } = req.body;
+
+    // ========================================
+    // VALIDATE BASIC DETAILS
+    // ========================================
+
+    if (
+      !subject ||
+      !exam ||
+      !classLevel
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Subject, preparation and class are required.",
+      });
+    }
+
+    if (!allowedExams[subject]) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid subject.",
+      });
+    }
+
+    if (
+      !allowedExams[subject].includes(
+        exam
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          `${exam} is not available for ${subject}.`,
+      });
+    }
+
+    if (
+      classLevel !== "Class 11" &&
+      classLevel !== "Class 12"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid class.",
+      });
+    }
+
+    // ========================================
+    // VALIDATE CHAPTERS
+    // ========================================
+
+    if (!Array.isArray(chapters)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Chapters must be provided as a list.",
+      });
+    }
+
+    const selectedChapters = [
+      ...new Set(
+        chapters
+          .map((chapter) =>
+            String(
+              chapter || ""
+            ).trim()
+          )
+          .filter(Boolean)
+      ),
+    ];
+
+    if (
+      selectedChapters.length < 2
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Select at least 2 chapters for Boss Battle.",
+      });
+    }
+
+    // ========================================
+    // VALIDATE BOSS SIZE
+    // ========================================
+
+    const questionCount =
+      Number(totalQuestions);
+
+    if (
+      !BOSS_BATTLE_SIZES.includes(
+        questionCount
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Boss Battle must contain 15, 30 or 50 questions.",
+      });
+    }
+
+    // ========================================
+    // CHECK EACH SELECTED CHAPTER
+    // ========================================
+
+    const unavailableChapters = [];
+
+    const chapterAvailability = {};
+
+    for (
+      const chapter of selectedChapters
+    ) {
+      const questions =
+        await NavtaQuestion.find({
+          subject,
+          exam,
+          classLevel,
+          chapter,
+
+          questionType: "mcq",
+
+          difficulty: {
+            $in: [
+              "Easy",
+              "Medium",
+              "Hard",
+            ],
+          },
+
+          isActive: true,
+        })
+          .select(
+            "_id difficulty"
+          )
+          .lean();
+
+      chapterAvailability[
+        chapter
+      ] = {
+        total:
+          questions.length,
+
+        Easy:
+          questions.filter(
+            (q) =>
+              q.difficulty ===
+              "Easy"
+          ).length,
+
+        Medium:
+          questions.filter(
+            (q) =>
+              q.difficulty ===
+              "Medium"
+          ).length,
+
+        Hard:
+          questions.filter(
+            (q) =>
+              q.difficulty ===
+              "Hard"
+          ).length,
+      };
+
+      if (
+        questions.length === 0
+      ) {
+        unavailableChapters.push(
+          chapter
+        );
+      }
+    }
+
+    if (
+      unavailableChapters.length > 0
+    ) {
+      return res.status(400).json({
+        success: false,
+
+        message:
+          "Some selected chapters do not have questions available for Boss Battle.",
+
+        unavailableChapters,
+
+        chapterAvailability,
+      });
+    }
+
+    // ========================================
+    // FETCH ALL AVAILABLE QUESTIONS
+    // ========================================
+
+    const availableQuestions =
+      await NavtaQuestion.find({
+        subject,
+        exam,
+        classLevel,
+
+        chapter: {
+          $in:
+            selectedChapters,
+        },
+
+        questionType: "mcq",
+
+        difficulty: {
+          $in: [
+            "Easy",
+            "Medium",
+            "Hard",
+          ],
+        },
+
+        isActive: true,
+      }).lean();
+
+    // ========================================
+    // CHECK TOTAL QUESTION AVAILABILITY
+    // ========================================
+
+    if (
+      availableQuestions.length <
+      questionCount
+    ) {
+      return res.status(400).json({
+        success: false,
+
+        message:
+          "Not enough questions are available for this Boss Battle.",
+
+        required:
+          questionCount,
+
+        available:
+          availableQuestions.length,
+
+        chapterAvailability,
+      });
+    }
+
+    // ========================================
+    // GET DIFFICULTY TARGET
+    // ========================================
+
+    const difficultyTargets =
+      BOSS_DIFFICULTY_TARGETS[
+        questionCount
+      ];
+
+    // ========================================
+    // GROUP QUESTIONS BY DIFFICULTY
+    // ========================================
+
+    const questionsByDifficulty = {
+      Easy: [],
+      Medium: [],
+      Hard: [],
+    };
+
+    availableQuestions.forEach(
+      (question) => {
+        if (
+          questionsByDifficulty[
+            question.difficulty
+          ]
+        ) {
+          questionsByDifficulty[
+            question.difficulty
+          ].push(
+            question
+          );
+        }
+      }
+    );
+
+    // ========================================
+    // SELECT QUESTIONS
+    // ========================================
+
+    let selectedQuestions = [];
+
+    const selectedIds =
+      new Set();
+
+    const difficulties = [
+      "Easy",
+      "Medium",
+      "Hard",
+    ];
+
+    // ========================================
+    // FIRST PASS:
+    // SELECT EASY/MEDIUM/HARD TARGETS
+    // ========================================
+
+    for (
+      const difficulty of difficulties
+    ) {
+      const pool =
+        shuffleArray(
+          questionsByDifficulty[
+            difficulty
+          ]
+        );
+
+      const target =
+        difficultyTargets[
+          difficulty
+        ];
+
+      const picked =
+        pool.slice(
+          0,
+          target
+        );
+
+      picked.forEach(
+        (question) => {
+          selectedQuestions.push(
+            question
+          );
+
+          selectedIds.add(
+            String(
+              question._id
+            )
+          );
+        }
+      );
+    }
+
+    // ========================================
+    // FALLBACK
+    //
+    // Example:
+    // Need 9 Hard but only 6 exist.
+    // Remaining positions are filled using
+    // unused Easy/Medium questions.
+    // ========================================
+
+    if (
+      selectedQuestions.length <
+      questionCount
+    ) {
+      const remaining =
+        shuffleArray(
+          availableQuestions.filter(
+            (question) =>
+              !selectedIds.has(
+                String(
+                  question._id
+                )
+              )
+          )
+        );
+
+      const needed =
+        questionCount -
+        selectedQuestions.length;
+
+      const fallback =
+        remaining.slice(
+          0,
+          needed
+        );
+
+      fallback.forEach(
+        (question) => {
+          selectedQuestions.push(
+            question
+          );
+
+          selectedIds.add(
+            String(
+              question._id
+            )
+          );
+        }
+      );
+    }
+
+    if (
+      selectedQuestions.length <
+      questionCount
+    ) {
+      return res.status(400).json({
+        success: false,
+
+        message:
+          "Not enough unique questions are available to build this Boss Battle.",
+
+        required:
+          questionCount,
+
+        available:
+          selectedQuestions.length,
+      });
+    }
+
+    // ========================================
+    // MAKE SURE EVERY SELECTED CHAPTER
+    // APPEARS IN THE BATTLE
+    // ========================================
+
+    for (
+      const chapter of selectedChapters
+    ) {
+      const chapterAlreadyIncluded =
+        selectedQuestions.some(
+          (question) =>
+            question.chapter ===
+            chapter
+        );
+
+      if (
+        chapterAlreadyIncluded
+      ) {
+        continue;
+      }
+
+      const replacementCandidate =
+        shuffleArray(
+          availableQuestions.filter(
+            (question) =>
+              question.chapter ===
+                chapter &&
+              !selectedIds.has(
+                String(
+                  question._id
+                )
+              )
+          )
+        )[0];
+
+      if (
+        !replacementCandidate
+      ) {
+        continue;
+      }
+
+      let replacementIndex = -1;
+
+      // Find a question from a chapter
+      // that currently has more than
+      // one question in the battle.
+
+      for (
+        let i =
+          selectedQuestions.length - 1;
+        i >= 0;
+        i--
+      ) {
+        const currentChapter =
+          selectedQuestions[
+            i
+          ].chapter;
+
+        const currentChapterCount =
+          selectedQuestions.filter(
+            (question) =>
+              question.chapter ===
+              currentChapter
+          ).length;
+
+        if (
+          currentChapterCount > 1
+        ) {
+          replacementIndex =
+            i;
+
+          break;
+        }
+      }
+
+      if (
+        replacementIndex !== -1
+      ) {
+        const oldQuestion =
+          selectedQuestions[
+            replacementIndex
+          ];
+
+        selectedIds.delete(
+          String(
+            oldQuestion._id
+          )
+        );
+
+        selectedQuestions[
+          replacementIndex
+        ] =
+          replacementCandidate;
+
+        selectedIds.add(
+          String(
+            replacementCandidate._id
+          )
+        );
+      }
+    }
+
+    // ========================================
+    // FINAL SHUFFLE
+    // ========================================
+
+    selectedQuestions =
+      shuffleArray(
+        selectedQuestions
+      );
+
+    // ========================================
+    // TIMER
+    // ========================================
+
+    let minutesPerQuestion = 1;
+
+    if (exam === "JEE") {
+      minutesPerQuestion = 2;
+    }
+
+    const durationMinutes =
+      questionCount *
+      minutesPerQuestion;
+
+    // ========================================
+    // ACTUAL DIFFICULTY BREAKDOWN
+    // ========================================
+
+    const difficultyBreakdown = {
+      Easy: 0,
+      Medium: 0,
+      Hard: 0,
+    };
+
+    selectedQuestions.forEach(
+      (question) => {
+        if (
+          difficultyBreakdown[
+            question.difficulty
+          ] !== undefined
+        ) {
+          difficultyBreakdown[
+            question.difficulty
+          ] += 1;
+        }
+      }
+    );
+
+    // ========================================
+    // ACTUAL CHAPTER BREAKDOWN
+    // ========================================
+
+    const chapterBreakdown = {};
+
+    selectedChapters.forEach(
+      (chapter) => {
+        chapterBreakdown[
+          chapter
+        ] = 0;
+      }
+    );
+
+    selectedQuestions.forEach(
+      (question) => {
+        if (
+          chapterBreakdown[
+            question.chapter
+          ] !== undefined
+        ) {
+          chapterBreakdown[
+            question.chapter
+          ] += 1;
+        }
+      }
+    );
+
+    // ========================================
+    // FORMAT QUESTIONS
+    // ========================================
+
+    const questions =
+      selectedQuestions.map(
+        (question) => ({
+          _id:
+            question._id,
+
+          question:
+            question.question,
+
+          questionType:
+            question.questionType,
+
+          options:
+            question.options ||
+            [],
+
+          correctAnswer:
+            question.correctAnswer,
+
+          explanation:
+            question.explanation ||
+            "",
+
+          chapter:
+            question.chapter,
+
+          difficulty:
+            question.difficulty,
+
+          maxMarks:
+            question.maxMarks ||
+            1,
+        })
+      );
+
+    // ========================================
+    // RETURN BOSS BATTLE
+    // ========================================
+
+    return res.status(200).json({
+      success: true,
+
+      bossBattle: {
+        mode: "boss",
+
+        subject,
+        exam,
+        classLevel,
+
+        chapters:
+          selectedChapters,
+
+        totalQuestions:
+          questions.length,
+
+        difficultyTargets,
+
+        difficultyBreakdown,
+
+        chapterBreakdown,
+
+        chapterAvailability,
+
+        minutesPerQuestion,
+
+        durationMinutes,
+
+        durationSeconds:
+          durationMinutes *
+          60,
+
+        questions,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "GENERATE BOSS BATTLE ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+
+      message:
+        "Failed to generate Boss Battle.",
+
+      error:
+        error.message,
     });
   }
 };
