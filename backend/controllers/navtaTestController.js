@@ -48,23 +48,16 @@ const allowedExams = {
   Biology: ["NEET", "Boards"],
 };
 
-const validDifficulties = [
-  "Easy",
-  "Medium",
-  "Hard",
-];
+const validDifficulties = ["Easy", "Medium", "Hard"];
 
-const validQuestionTypes = [
-  "mcq",
-  "short",
-  "long",
-];
+const validQuestionTypes = ["mcq", "short", "long"];
 
 // ============================================
 // BOSS BATTLE SETTINGS
 // ============================================
 
 const BOSS_BATTLE_SIZES = [15, 30, 50];
+
 const BOSS_WIN_PERCENTAGE = 70;
 
 const BOSS_DIFFICULTY_TARGETS = {
@@ -118,9 +111,7 @@ function isAllowedDuration(exam, questionType, duration) {
     return false;
   }
 
-  return config.durations.includes(
-    Number(duration)
-  );
+  return config.durations.includes(Number(duration));
 }
 
 // ============================================
@@ -309,7 +300,9 @@ exports.createQuestion = async (req, res) => {
         answerIndex;
 
       payload.modelAnswer = "";
+
       payload.keyPoints = [];
+
       payload.evaluationInstructions = "";
 
       payload.maxMarks =
@@ -334,7 +327,11 @@ exports.createQuestion = async (req, res) => {
         });
       }
 
-      if (!String(modelAnswer || "").trim()) {
+      if (
+        !String(
+          modelAnswer || ""
+        ).trim()
+      ) {
         return res.status(400).json({
           success: false,
           message:
@@ -437,8 +434,13 @@ exports.getQuestions = async (req, res) => {
 
     const filter = {};
 
-    if (subject) filter.subject = subject;
-    if (exam) filter.exam = exam;
+    if (subject) {
+      filter.subject = subject;
+    }
+
+    if (exam) {
+      filter.exam = exam;
+    }
 
     if (classLevel) {
       filter.classLevel = classLevel;
@@ -715,12 +717,11 @@ exports.generateTest = async (req, res) => {
 //
 // Boss Battle:
 // - MCQ only
-// - minimum 2 chapters
-// - multiple chapters
-// - Easy + Medium + Hard automatically
-// - 15 / 30 / 50 question sizes
-// - tries to represent every chapter
-// - fills missing difficulty slots automatically
+// - Minimum 2 chapters
+// - Multiple chapters
+// - Automatic Easy / Medium / Hard mix
+// - 15 / 30 / 50 questions
+// - 70% required to defeat Boss
 //
 // ============================================
 
@@ -831,6 +832,17 @@ exports.generateBossBattle = async (req, res) => {
         success: false,
         message:
           "Boss Battle must contain 15, 30 or 50 questions.",
+      });
+    }
+
+    if (
+      selectedChapters.length >
+      questionCount
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "The number of selected chapters cannot exceed the battle size.",
       });
     }
 
@@ -950,7 +962,7 @@ exports.generateBossBattle = async (req, res) => {
       }).lean();
 
     // ========================================
-    // CHECK TOTAL QUESTION AVAILABILITY
+    // CHECK TOTAL AVAILABILITY
     // ========================================
 
     if (
@@ -974,17 +986,13 @@ exports.generateBossBattle = async (req, res) => {
     }
 
     // ========================================
-    // GET DIFFICULTY TARGET
+    // DIFFICULTY TARGETS
     // ========================================
 
     const difficultyTargets =
       BOSS_DIFFICULTY_TARGETS[
         questionCount
       ];
-
-    // ========================================
-    // GROUP QUESTIONS BY DIFFICULTY
-    // ========================================
 
     const questionsByDifficulty = {
       Easy: [],
@@ -1009,7 +1017,7 @@ exports.generateBossBattle = async (req, res) => {
     );
 
     // ========================================
-    // SELECT QUESTIONS
+    // SELECT TARGET QUESTIONS
     // ========================================
 
     let selectedQuestions = [];
@@ -1022,11 +1030,6 @@ exports.generateBossBattle = async (req, res) => {
       "Medium",
       "Hard",
     ];
-
-    // ========================================
-    // FIRST PASS:
-    // SELECT EASY/MEDIUM/HARD TARGETS
-    // ========================================
 
     for (
       const difficulty of difficulties
@@ -1066,11 +1069,12 @@ exports.generateBossBattle = async (req, res) => {
 
     // ========================================
     // FALLBACK
+    // ========================================
     //
-    // Example:
-    // Need 9 Hard but only 6 exist.
-    // Remaining positions are filled using
-    // unused Easy/Medium questions.
+    // If one difficulty does not have enough
+    // questions, fill remaining positions from
+    // unused Easy / Medium / Hard questions.
+    //
     // ========================================
 
     if (
@@ -1133,8 +1137,7 @@ exports.generateBossBattle = async (req, res) => {
     }
 
     // ========================================
-    // MAKE SURE EVERY SELECTED CHAPTER
-    // APPEARS IN THE BATTLE
+    // ENSURE EVERY CHAPTER APPEARS
     // ========================================
 
     for (
@@ -1174,10 +1177,6 @@ exports.generateBossBattle = async (req, res) => {
       }
 
       let replacementIndex = -1;
-
-      // Find a question from a chapter
-      // that currently has more than
-      // one question in the battle.
 
       for (
         let i =
@@ -1258,7 +1257,7 @@ exports.generateBossBattle = async (req, res) => {
       minutesPerQuestion;
 
     // ========================================
-    // ACTUAL DIFFICULTY BREAKDOWN
+    // DIFFICULTY BREAKDOWN
     // ========================================
 
     const difficultyBreakdown = {
@@ -1282,7 +1281,7 @@ exports.generateBossBattle = async (req, res) => {
     );
 
     // ========================================
-    // ACTUAL CHAPTER BREAKDOWN
+    // CHAPTER BREAKDOWN
     // ========================================
 
     const chapterBreakdown = {};
@@ -1358,6 +1357,9 @@ exports.generateBossBattle = async (req, res) => {
       bossBattle: {
         mode: "boss",
 
+        winPercentage:
+          BOSS_WIN_PERCENTAGE,
+
         subject,
         exam,
         classLevel,
@@ -1409,11 +1411,17 @@ exports.generateBossBattle = async (req, res) => {
 // GENERATE REVENGE BATTLE
 // ============================================
 //
-// Revenge Battle unlocks after a Boss Battle score below 70%.
-// It keeps the same subject, exam, class, chapters and battle size,
-// but prioritises the chapters and difficulty levels where the
-// student performed worst. Previous questions are avoided whenever
-// the question bank has enough unused questions.
+// Revenge Battle:
+// - Unlocks after Boss score below 70%
+// - Same subject
+// - Same exam
+// - Same class
+// - Same chapters
+// - Same battle size
+// - Focuses on weak chapters
+// - Focuses on weak difficulties
+// - Avoids previous questions when possible
+// - Supports Revenge Again
 //
 // ============================================
 
@@ -1432,345 +1440,920 @@ exports.generateRevengeBattle = async (req, res) => {
       originalPercentage,
     } = req.body;
 
-    if (!subject || !exam || !classLevel) {
+    // ========================================
+    // BASIC VALIDATION
+    // ========================================
+
+    if (
+      !subject ||
+      !exam ||
+      !classLevel
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Subject, preparation and class are required.",
+        message:
+          "Subject, preparation and class are required.",
       });
     }
 
     if (!allowedExams[subject]) {
       return res.status(400).json({
         success: false,
-        message: "Invalid subject.",
+        message:
+          "Invalid subject.",
       });
     }
 
-    if (!allowedExams[subject].includes(exam)) {
+    if (
+      !allowedExams[
+        subject
+      ].includes(exam)
+    ) {
       return res.status(400).json({
         success: false,
-        message: `${exam} is not available for ${subject}.`,
+        message:
+          `${exam} is not available for ${subject}.`,
       });
     }
 
-    if (classLevel !== "Class 11" && classLevel !== "Class 12") {
+    if (
+      classLevel !== "Class 11" &&
+      classLevel !== "Class 12"
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Invalid class.",
+        message:
+          "Invalid class.",
       });
     }
 
-    if (!Array.isArray(chapters)) {
+    // ========================================
+    // CHAPTER VALIDATION
+    // ========================================
+
+    if (
+      !Array.isArray(chapters)
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Chapters must be provided as a list.",
+        message:
+          "Chapters must be provided as a list.",
       });
     }
 
     const selectedChapters = [
       ...new Set(
         chapters
-          .map((chapter) => String(chapter || "").trim())
+          .map(
+            (chapter) =>
+              String(
+                chapter || ""
+              ).trim()
+          )
           .filter(Boolean)
       ),
     ];
 
-    if (selectedChapters.length < 2) {
+    if (
+      selectedChapters.length < 2
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Select at least 2 chapters for Revenge Battle.",
+        message:
+          "Select at least 2 chapters for Revenge Battle.",
       });
     }
 
-    const questionCount = Number(totalQuestions);
+    // ========================================
+    // BATTLE SIZE VALIDATION
+    // ========================================
 
-    if (!BOSS_BATTLE_SIZES.includes(questionCount)) {
+    const questionCount =
+      Number(totalQuestions);
+
+    if (
+      !BOSS_BATTLE_SIZES.includes(
+        questionCount
+      )
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Revenge Battle must contain 15, 30 or 50 questions.",
+        message:
+          "Revenge Battle must contain 15, 30 or 50 questions.",
       });
     }
 
-    if (selectedChapters.length > questionCount) {
+    if (
+      selectedChapters.length >
+      questionCount
+    ) {
       return res.status(400).json({
         success: false,
-        message: "The number of selected chapters cannot exceed the battle size.",
+        message:
+          "The number of selected chapters cannot exceed the battle size.",
       });
     }
 
-    const previousIds = Array.isArray(previousQuestionIds)
-      ? [...new Set(previousQuestionIds.map((id) => String(id || "").trim()).filter(Boolean))]
-      : [];
+    // ========================================
+    // PREVIOUS QUESTION IDS
+    // ========================================
 
-    const answerMap = new Map();
+    const previousIds =
+      Array.isArray(
+        previousQuestionIds
+      )
+        ? [
+            ...new Set(
+              previousQuestionIds
+                .map(
+                  (id) =>
+                    String(
+                      id || ""
+                    ).trim()
+                )
+                .filter(Boolean)
+            ),
+          ]
+        : [];
 
-    if (Array.isArray(answers)) {
-      answers.forEach((item) => {
-        const id = String(item?.questionId || "").trim();
-        if (!id) return;
+    // ========================================
+    // BUILD ANSWER MAP
+    // ========================================
 
-        const rawSelectedAnswer = item?.selectedAnswer;
-        const selectedAnswer = Number(rawSelectedAnswer);
-        const hasValidAnswer =
-          rawSelectedAnswer !== null &&
-          rawSelectedAnswer !== undefined &&
-          Number.isInteger(selectedAnswer) &&
-          selectedAnswer >= 0 &&
-          selectedAnswer <= 3;
+    const answerMap =
+      new Map();
 
-        answerMap.set(id, hasValidAnswer ? selectedAnswer : null);
-      });
+    if (
+      Array.isArray(answers)
+    ) {
+      answers.forEach(
+        (item) => {
+          const id =
+            String(
+              item?.questionId ||
+                ""
+            ).trim();
+
+          if (!id) {
+            return;
+          }
+
+          const rawSelectedAnswer =
+            item?.selectedAnswer;
+
+          const selectedAnswer =
+            Number(
+              rawSelectedAnswer
+            );
+
+          const hasValidAnswer =
+            rawSelectedAnswer !==
+              null &&
+            rawSelectedAnswer !==
+              undefined &&
+            Number.isInteger(
+              selectedAnswer
+            ) &&
+            selectedAnswer >= 0 &&
+            selectedAnswer <= 3;
+
+          answerMap.set(
+            id,
+            hasValidAnswer
+              ? selectedAnswer
+              : null
+          );
+        }
+      );
     }
 
-    const previousQuestions = previousIds.length
-      ? await NavtaQuestion.find({
-          _id: { $in: previousIds },
-          subject,
-          exam,
-          classLevel,
-          chapter: { $in: selectedChapters },
-          questionType: "mcq",
-          isActive: true,
-        })
-          .select("_id chapter difficulty correctAnswer")
-          .lean()
-      : [];
+    // ========================================
+    // GET PREVIOUS BATTLE QUESTIONS
+    // ========================================
+
+    const previousQuestions =
+      previousIds.length
+        ? await NavtaQuestion.find({
+            _id: {
+              $in:
+                previousIds,
+            },
+
+            subject,
+            exam,
+            classLevel,
+
+            chapter: {
+              $in:
+                selectedChapters,
+            },
+
+            questionType:
+              "mcq",
+
+            isActive: true,
+          })
+            .select(
+              "_id chapter difficulty correctAnswer"
+            )
+            .lean()
+        : [];
+
+    // ========================================
+    // CHAPTER PERFORMANCE
+    // ========================================
 
     const chapterPerformance = {};
-    selectedChapters.forEach((chapter) => {
-      chapterPerformance[chapter] = { correct: 0, total: 0, percentage: 0 };
-    });
+
+    selectedChapters.forEach(
+      (chapter) => {
+        chapterPerformance[
+          chapter
+        ] = {
+          correct: 0,
+          total: 0,
+          percentage: 0,
+        };
+      }
+    );
+
+    // ========================================
+    // DIFFICULTY PERFORMANCE
+    // ========================================
 
     const difficultyPerformance = {
-      Easy: { correct: 0, total: 0, percentage: 0 },
-      Medium: { correct: 0, total: 0, percentage: 0 },
-      Hard: { correct: 0, total: 0, percentage: 0 },
+      Easy: {
+        correct: 0,
+        total: 0,
+        percentage: 0,
+      },
+
+      Medium: {
+        correct: 0,
+        total: 0,
+        percentage: 0,
+      },
+
+      Hard: {
+        correct: 0,
+        total: 0,
+        percentage: 0,
+      },
     };
 
-    previousQuestions.forEach((question) => {
-      const id = String(question._id);
-      const selectedAnswer = answerMap.get(id);
-      const isCorrect =
-        Number.isInteger(selectedAnswer) &&
-        selectedAnswer === Number(question.correctAnswer);
+    // ========================================
+    // CALCULATE PREVIOUS PERFORMANCE
+    // ========================================
 
-      if (chapterPerformance[question.chapter]) {
-        chapterPerformance[question.chapter].total += 1;
-        if (isCorrect) chapterPerformance[question.chapter].correct += 1;
+    previousQuestions.forEach(
+      (question) => {
+        const id =
+          String(
+            question._id
+          );
+
+        const selectedAnswer =
+          answerMap.get(id);
+
+        const isCorrect =
+          Number.isInteger(
+            selectedAnswer
+          ) &&
+          selectedAnswer ===
+            Number(
+              question.correctAnswer
+            );
+
+        if (
+          chapterPerformance[
+            question.chapter
+          ]
+        ) {
+          chapterPerformance[
+            question.chapter
+          ].total += 1;
+
+          if (isCorrect) {
+            chapterPerformance[
+              question.chapter
+            ].correct += 1;
+          }
+        }
+
+        if (
+          difficultyPerformance[
+            question.difficulty
+          ]
+        ) {
+          difficultyPerformance[
+            question.difficulty
+          ].total += 1;
+
+          if (isCorrect) {
+            difficultyPerformance[
+              question.difficulty
+            ].correct += 1;
+          }
+        }
       }
-
-      if (difficultyPerformance[question.difficulty]) {
-        difficultyPerformance[question.difficulty].total += 1;
-        if (isCorrect) difficultyPerformance[question.difficulty].correct += 1;
-      }
-    });
-
-    Object.values(chapterPerformance).forEach((result) => {
-      result.percentage = result.total
-        ? Math.round((result.correct / result.total) * 100)
-        : 0;
-    });
-
-    Object.values(difficultyPerformance).forEach((result) => {
-      result.percentage = result.total
-        ? Math.round((result.correct / result.total) * 100)
-        : 0;
-    });
-
-    const weakChapters = Object.entries(chapterPerformance)
-      .sort((a, b) => a[1].percentage - b[1].percentage)
-      .map(([chapter, result]) => ({ chapter, ...result }));
-
-    const weakDifficulties = Object.entries(difficultyPerformance)
-      .sort((a, b) => a[1].percentage - b[1].percentage)
-      .map(([difficulty, result]) => ({ difficulty, ...result }));
-
-    const availableQuestions = await NavtaQuestion.find({
-      subject,
-      exam,
-      classLevel,
-      chapter: { $in: selectedChapters },
-      questionType: "mcq",
-      difficulty: { $in: ["Easy", "Medium", "Hard"] },
-      isActive: true,
-    }).lean();
-
-    if (availableQuestions.length < questionCount) {
-      return res.status(400).json({
-        success: false,
-        message: "Not enough questions are available for this Revenge Battle.",
-        required: questionCount,
-        available: availableQuestions.length,
-      });
-    }
-
-    const previousIdSet = new Set(previousIds);
-    const unusedQuestions = availableQuestions.filter(
-      (question) => !previousIdSet.has(String(question._id))
     );
 
-    // If the bank has enough unused questions, Revenge uses only new ones.
-    // Otherwise it uses every unused question first, then fills the remaining
-    // slots from the older pool without duplicating a question in this battle.
-    const primaryPool =
-      unusedQuestions.length >= questionCount
-        ? unusedQuestions
-        : availableQuestions;
+    // ========================================
+    // CALCULATE PERCENTAGES
+    // ========================================
 
-    const chapterScore = Object.fromEntries(
-      weakChapters.map((item, index) => [
-        item.chapter,
-        (100 - item.percentage) * 4 + (weakChapters.length - index) * 8,
-      ])
-    );
-
-    const difficultyScore = Object.fromEntries(
-      weakDifficulties.map((item, index) => [
-        item.difficulty,
-        (100 - item.percentage) * 3 + (weakDifficulties.length - index) * 6,
-      ])
-    );
-
-    const scoredPool = shuffleArray(primaryPool)
-      .map((question) => ({
-        question,
-        score:
-          (chapterScore[question.chapter] || 0) +
-          (difficultyScore[question.difficulty] || 0) +
-          Math.random() * 12,
-      }))
-      .sort((a, b) => b.score - a.score);
-
-    let selectedQuestions = [];
-    const selectedIds = new Set();
-
-    // Guarantee that every selected chapter is still represented at least once.
-    for (const chapter of selectedChapters) {
-      const candidate = scoredPool.find(
-        (item) =>
-          item.question.chapter === chapter &&
-          !selectedIds.has(String(item.question._id))
-      );
-
-      if (candidate) {
-        selectedQuestions.push(candidate.question);
-        selectedIds.add(String(candidate.question._id));
+    Object.values(
+      chapterPerformance
+    ).forEach(
+      (result) => {
+        result.percentage =
+          result.total
+            ? Math.round(
+                (
+                  result.correct /
+                  result.total
+                ) * 100
+              )
+            : 0;
       }
-    }
+    );
 
-    for (const item of scoredPool) {
-      if (selectedQuestions.length >= questionCount) break;
+    Object.values(
+      difficultyPerformance
+    ).forEach(
+      (result) => {
+        result.percentage =
+          result.total
+            ? Math.round(
+                (
+                  result.correct /
+                  result.total
+                ) * 100
+              )
+            : 0;
+      }
+    );
 
-      const id = String(item.question._id);
-      if (selectedIds.has(id)) continue;
+    // ========================================
+    // FIND WEAKEST CHAPTERS
+    // ========================================
 
-      selectedQuestions.push(item.question);
-      selectedIds.add(id);
-    }
-
-    // When the unused pool was too small, make sure unused questions are
-    // preferred before any old questions that may have entered the scored pool.
-    if (unusedQuestions.length < questionCount) {
-      const unusedSelectedIds = new Set(
-        selectedQuestions
-          .filter((q) => !previousIdSet.has(String(q._id)))
-          .map((q) => String(q._id))
-      );
-
-      const missingUnused = shuffleArray(
-        unusedQuestions.filter((q) => !unusedSelectedIds.has(String(q._id)))
-      );
-
-      for (const freshQuestion of missingUnused) {
-        const replaceIndex = selectedQuestions.findIndex((q) =>
-          previousIdSet.has(String(q._id))
+    const weakChapters =
+      Object.entries(
+        chapterPerformance
+      )
+        .sort(
+          (a, b) =>
+            a[1].percentage -
+            b[1].percentage
+        )
+        .map(
+          ([chapter, result]) => ({
+            chapter,
+            ...result,
+          })
         );
 
-        if (replaceIndex === -1) break;
+    // ========================================
+    // FIND WEAKEST DIFFICULTIES
+    // ========================================
 
-        selectedQuestions[replaceIndex] = freshQuestion;
-      }
-    }
+    const weakDifficulties =
+      Object.entries(
+        difficultyPerformance
+      )
+        .sort(
+          (a, b) =>
+            a[1].percentage -
+            b[1].percentage
+        )
+        .map(
+          ([
+            difficulty,
+            result,
+          ]) => ({
+            difficulty,
+            ...result,
+          })
+        );
 
-    selectedQuestions = shuffleArray(selectedQuestions.slice(0, questionCount));
+    // ========================================
+    // FETCH AVAILABLE REVENGE QUESTIONS
+    // ========================================
 
-    if (selectedQuestions.length < questionCount) {
-      return res.status(400).json({
-        success: false,
-        message: "Not enough unique questions are available to build this Revenge Battle.",
-        required: questionCount,
-        available: selectedQuestions.length,
-      });
-    }
-
-    const minutesPerQuestion = exam === "JEE" ? 2 : 1;
-    const durationMinutes = questionCount * minutesPerQuestion;
-
-    const difficultyBreakdown = { Easy: 0, Medium: 0, Hard: 0 };
-    const chapterBreakdown = {};
-    selectedChapters.forEach((chapter) => {
-      chapterBreakdown[chapter] = 0;
-    });
-
-    selectedQuestions.forEach((question) => {
-      if (difficultyBreakdown[question.difficulty] !== undefined) {
-        difficultyBreakdown[question.difficulty] += 1;
-      }
-
-      if (chapterBreakdown[question.chapter] !== undefined) {
-        chapterBreakdown[question.chapter] += 1;
-      }
-    });
-
-    const questions = selectedQuestions.map((question) => ({
-      _id: question._id,
-      question: question.question,
-      questionType: question.questionType,
-      options: question.options || [],
-      correctAnswer: question.correctAnswer,
-      explanation: question.explanation || "",
-      chapter: question.chapter,
-      difficulty: question.difficulty,
-      maxMarks: question.maxMarks || 1,
-    }));
-
-    const repeatedQuestionCount = questions.filter((question) =>
-      previousIdSet.has(String(question._id))
-    ).length;
-
-    return res.status(200).json({
-      success: true,
-      revengeBattle: {
-        mode: "revenge",
-        winPercentage: BOSS_WIN_PERCENTAGE,
-        revengeAttempt: Math.max(1, Number(revengeAttempt) || 1),
-        previousPercentage: Number(previousPercentage) || 0,
-        originalPercentage: Number(originalPercentage) || 0,
+    const availableQuestions =
+      await NavtaQuestion.find({
         subject,
         exam,
         classLevel,
-        chapters: selectedChapters,
-        totalQuestions: questions.length,
+
+        chapter: {
+          $in:
+            selectedChapters,
+        },
+
+        questionType:
+          "mcq",
+
+        difficulty: {
+          $in: [
+            "Easy",
+            "Medium",
+            "Hard",
+          ],
+        },
+
+        isActive: true,
+      }).lean();
+
+    if (
+      availableQuestions.length <
+      questionCount
+    ) {
+      return res.status(400).json({
+        success: false,
+
+        message:
+          "Not enough questions are available for this Revenge Battle.",
+
+        required:
+          questionCount,
+
+        available:
+          availableQuestions.length,
+      });
+    }
+
+    // ========================================
+    // REMOVE PREVIOUS QUESTIONS WHEN POSSIBLE
+    // ========================================
+
+    const previousIdSet =
+      new Set(
+        previousIds
+      );
+
+    const unusedQuestions =
+      availableQuestions.filter(
+        (question) =>
+          !previousIdSet.has(
+            String(
+              question._id
+            )
+          )
+      );
+
+    // If enough fresh questions exist,
+    // Revenge uses only fresh questions.
+    //
+    // If not enough fresh questions exist,
+    // older questions may be reused.
+
+    const primaryPool =
+      unusedQuestions.length >=
+      questionCount
+        ? unusedQuestions
+        : availableQuestions;
+
+    // ========================================
+    // WEAKNESS PRIORITY SCORE
+    // ========================================
+
+    const chapterScore =
+      Object.fromEntries(
+        weakChapters.map(
+          (item, index) => [
+            item.chapter,
+
+            (100 -
+              item.percentage) *
+              4 +
+              (
+                weakChapters.length -
+                index
+              ) *
+                8,
+          ]
+        )
+      );
+
+    const difficultyScore =
+      Object.fromEntries(
+        weakDifficulties.map(
+          (item, index) => [
+            item.difficulty,
+
+            (100 -
+              item.percentage) *
+              3 +
+              (
+                weakDifficulties.length -
+                index
+              ) *
+                6,
+          ]
+        )
+      );
+
+    // ========================================
+    // SCORE THE QUESTION POOL
+    // ========================================
+
+    const scoredPool =
+      shuffleArray(
+        primaryPool
+      )
+        .map(
+          (question) => ({
+            question,
+
+            score:
+              (
+                chapterScore[
+                  question.chapter
+                ] || 0
+              ) +
+              (
+                difficultyScore[
+                  question.difficulty
+                ] || 0
+              ) +
+              Math.random() *
+                12,
+          })
+        )
+        .sort(
+          (a, b) =>
+            b.score -
+            a.score
+        );
+
+    let selectedQuestions = [];
+
+    const selectedIds =
+      new Set();
+
+    // ========================================
+    // GUARANTEE EACH CHAPTER
+    // ========================================
+
+    for (
+      const chapter of
+      selectedChapters
+    ) {
+      const candidate =
+        scoredPool.find(
+          (item) =>
+            item.question
+              .chapter ===
+              chapter &&
+            !selectedIds.has(
+              String(
+                item.question
+                  ._id
+              )
+            )
+        );
+
+      if (candidate) {
+        selectedQuestions.push(
+          candidate.question
+        );
+
+        selectedIds.add(
+          String(
+            candidate.question
+              ._id
+          )
+        );
+      }
+    }
+
+    // ========================================
+    // FILL REMAINING QUESTIONS
+    // ========================================
+
+    for (
+      const item of scoredPool
+    ) {
+      if (
+        selectedQuestions.length >=
+        questionCount
+      ) {
+        break;
+      }
+
+      const id =
+        String(
+          item.question._id
+        );
+
+      if (
+        selectedIds.has(id)
+      ) {
+        continue;
+      }
+
+      selectedQuestions.push(
+        item.question
+      );
+
+      selectedIds.add(id);
+    }
+
+    // ========================================
+    // PREFER UNUSED QUESTIONS
+    // ========================================
+
+    if (
+      unusedQuestions.length <
+      questionCount
+    ) {
+      const unusedSelectedIds =
+        new Set(
+          selectedQuestions
+            .filter(
+              (question) =>
+                !previousIdSet.has(
+                  String(
+                    question._id
+                  )
+                )
+            )
+            .map(
+              (question) =>
+                String(
+                  question._id
+                )
+            )
+        );
+
+      const missingUnused =
+        shuffleArray(
+          unusedQuestions.filter(
+            (question) =>
+              !unusedSelectedIds.has(
+                String(
+                  question._id
+                )
+              )
+          )
+        );
+
+      for (
+        const freshQuestion of
+        missingUnused
+      ) {
+        const replaceIndex =
+          selectedQuestions.findIndex(
+            (question) =>
+              previousIdSet.has(
+                String(
+                  question._id
+                )
+              )
+          );
+
+        if (
+          replaceIndex === -1
+        ) {
+          break;
+        }
+
+        selectedQuestions[
+          replaceIndex
+        ] =
+          freshQuestion;
+      }
+    }
+
+    // ========================================
+    // FINALIZE REVENGE QUESTIONS
+    // ========================================
+
+    selectedQuestions =
+      shuffleArray(
+        selectedQuestions.slice(
+          0,
+          questionCount
+        )
+      );
+
+    if (
+      selectedQuestions.length <
+      questionCount
+    ) {
+      return res.status(400).json({
+        success: false,
+
+        message:
+          "Not enough unique questions are available to build this Revenge Battle.",
+
+        required:
+          questionCount,
+
+        available:
+          selectedQuestions.length,
+      });
+    }
+
+    // ========================================
+    // TIMER
+    // ========================================
+
+    const minutesPerQuestion =
+      exam === "JEE"
+        ? 2
+        : 1;
+
+    const durationMinutes =
+      questionCount *
+      minutesPerQuestion;
+
+    // ========================================
+    // DIFFICULTY BREAKDOWN
+    // ========================================
+
+    const difficultyBreakdown = {
+      Easy: 0,
+      Medium: 0,
+      Hard: 0,
+    };
+
+    // ========================================
+    // CHAPTER BREAKDOWN
+    // ========================================
+
+    const chapterBreakdown = {};
+
+    selectedChapters.forEach(
+      (chapter) => {
+        chapterBreakdown[
+          chapter
+        ] = 0;
+      }
+    );
+
+    selectedQuestions.forEach(
+      (question) => {
+        if (
+          difficultyBreakdown[
+            question.difficulty
+          ] !== undefined
+        ) {
+          difficultyBreakdown[
+            question.difficulty
+          ] += 1;
+        }
+
+        if (
+          chapterBreakdown[
+            question.chapter
+          ] !== undefined
+        ) {
+          chapterBreakdown[
+            question.chapter
+          ] += 1;
+        }
+      }
+    );
+
+    // ========================================
+    // FORMAT QUESTIONS
+    // ========================================
+
+    const questions =
+      selectedQuestions.map(
+        (question) => ({
+          _id:
+            question._id,
+
+          question:
+            question.question,
+
+          questionType:
+            question.questionType,
+
+          options:
+            question.options ||
+            [],
+
+          correctAnswer:
+            question.correctAnswer,
+
+          explanation:
+            question.explanation ||
+            "",
+
+          chapter:
+            question.chapter,
+
+          difficulty:
+            question.difficulty,
+
+          maxMarks:
+            question.maxMarks ||
+            1,
+        })
+      );
+
+    // ========================================
+    // COUNT REPEATED QUESTIONS
+    // ========================================
+
+    const repeatedQuestionCount =
+      questions.filter(
+        (question) =>
+          previousIdSet.has(
+            String(
+              question._id
+            )
+          )
+      ).length;
+
+    // ========================================
+    // RETURN REVENGE BATTLE
+    // ========================================
+
+    return res.status(200).json({
+      success: true,
+
+      revengeBattle: {
+        mode:
+          "revenge",
+
+        winPercentage:
+          BOSS_WIN_PERCENTAGE,
+
+        revengeAttempt:
+          Math.max(
+            1,
+            Number(
+              revengeAttempt
+            ) || 1
+          ),
+
+        previousPercentage:
+          Number(
+            previousPercentage
+          ) || 0,
+
+        originalPercentage:
+          Number(
+            originalPercentage
+          ) || 0,
+
+        subject,
+        exam,
+        classLevel,
+
+        chapters:
+          selectedChapters,
+
+        totalQuestions:
+          questions.length,
+
         minutesPerQuestion,
+
         durationMinutes,
-        durationSeconds: durationMinutes * 60,
+
+        durationSeconds:
+          durationMinutes *
+          60,
+
         weakChapters,
+
         weakDifficulties,
-        previousChapterPerformance: chapterPerformance,
-        previousDifficultyPerformance: difficultyPerformance,
+
+        previousChapterPerformance:
+          chapterPerformance,
+
+        previousDifficultyPerformance:
+          difficultyPerformance,
+
         difficultyBreakdown,
+
         chapterBreakdown,
+
         repeatedQuestionCount,
+
         questions,
       },
     });
   } catch (error) {
-    console.error("GENERATE REVENGE BATTLE ERROR:", error);
+    console.error(
+      "GENERATE REVENGE BATTLE ERROR:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to generate Revenge Battle.",
-      error: error.message,
+
+      message:
+        "Failed to generate Revenge Battle.",
+
+      error:
+        error.message,
     });
   }
 };
@@ -1787,6 +2370,10 @@ exports.evaluateWrittenAnswer =
         studentAnswer,
       } = req.body;
 
+      // ========================================
+      // VALIDATE INPUT
+      // ========================================
+
       if (
         !questionId ||
         !String(
@@ -1799,6 +2386,10 @@ exports.evaluateWrittenAnswer =
             "Question ID and student answer are required.",
         });
       }
+
+      // ========================================
+      // FIND QUESTION
+      // ========================================
 
       const question =
         await NavtaQuestion.findById(
@@ -1813,8 +2404,13 @@ exports.evaluateWrittenAnswer =
         });
       }
 
+      // ========================================
+      // ONLY BOARDS WRITTEN ANSWERS
+      // ========================================
+
       if (
-        question.exam !== "Boards" ||
+        question.exam !==
+          "Boards" ||
         ![
           "short",
           "long",
@@ -1829,8 +2425,13 @@ exports.evaluateWrittenAnswer =
         });
       }
 
+      // ========================================
+      // CHECK OPENAI CONFIG
+      // ========================================
+
       if (
-        !process.env.OPENAI_API_KEY
+        !process.env
+          .OPENAI_API_KEY
       ) {
         return res.status(503).json({
           success: false,
@@ -1838,6 +2439,10 @@ exports.evaluateWrittenAnswer =
             "AI evaluation is not configured yet.",
         });
       }
+
+      // ========================================
+      // BUILD EVALUATION PROMPT
+      // ========================================
 
       const evaluationPrompt = `
 You are evaluating a school board examination answer.
@@ -1862,30 +2467,53 @@ ${(question.keyPoints || [])
   )
   .join("\n")}
 
+ADDITIONAL EVALUATION INSTRUCTIONS:
+${question.evaluationInstructions || "None"}
+
 STUDENT ANSWER:
 ${String(studentAnswer).trim()}
 
-Return ONLY valid JSON:
+Evaluate the student's answer fairly.
+
+Award marks between 0 and ${question.maxMarks}.
+
+Use the model answer and required key points as the marking guide.
+
+Do not require exact wording if the student's meaning is correct.
+
+Return ONLY valid JSON.
+
+Do not include markdown.
+
+Do not include code fences.
+
+Return exactly this structure:
 
 {
   "status": "correct",
   "marksAwarded": 0,
-  "maxMarks": 0,
+  "maxMarks": ${question.maxMarks},
   "feedback": "",
   "missingPoints": []
 }
 
-Allowed status:
+Allowed status values:
+
 correct
 partially_correct
 incorrect
 `;
 
+      // ========================================
+      // CALL OPENAI RESPONSES API
+      // ========================================
+
       const aiResponse =
         await fetch(
           "https://api.openai.com/v1/responses",
           {
-            method: "POST",
+            method:
+              "POST",
 
             headers: {
               "Content-Type":
@@ -1898,7 +2526,8 @@ incorrect
             body:
               JSON.stringify({
                 model:
-                  process.env.OPENAI_MODEL ||
+                  process.env
+                    .OPENAI_MODEL ||
                   "gpt-4.1-mini",
 
                 input:
@@ -1911,6 +2540,11 @@ incorrect
         await aiResponse.json();
 
       if (!aiResponse.ok) {
+        console.error(
+          "OPENAI EVALUATION ERROR:",
+          aiData
+        );
+
         return res.status(502).json({
           success: false,
           message:
@@ -1918,9 +2552,22 @@ incorrect
         });
       }
 
+      // ========================================
+      // EXTRACT RESPONSE TEXT
+      // ========================================
+
       let rawText = "";
 
       if (
+        typeof aiData.output_text ===
+        "string"
+      ) {
+        rawText =
+          aiData.output_text;
+      }
+
+      if (
+        !rawText &&
         Array.isArray(
           aiData.output
         )
@@ -1930,21 +2577,23 @@ incorrect
           aiData.output
         ) {
           if (
-            Array.isArray(
+            !Array.isArray(
               outputItem.content
             )
           ) {
-            for (
-              const contentItem of
-              outputItem.content
+            continue;
+          }
+
+          for (
+            const contentItem of
+            outputItem.content
+          ) {
+            if (
+              typeof contentItem.text ===
+              "string"
             ) {
-              if (
-                typeof contentItem.text ===
-                "string"
-              ) {
-                rawText +=
-                  contentItem.text;
-              }
+              rawText +=
+                contentItem.text;
             }
           }
         }
@@ -1966,6 +2615,10 @@ incorrect
             ""
           );
 
+      // ========================================
+      // PARSE AI JSON
+      // ========================================
+
       let evaluation;
 
       try {
@@ -1973,13 +2626,27 @@ incorrect
           JSON.parse(
             rawText
           );
-      } catch {
+      } catch (parseError) {
+        console.error(
+          "AI JSON PARSE ERROR:",
+          parseError
+        );
+
+        console.error(
+          "AI RAW RESPONSE:",
+          rawText
+        );
+
         return res.status(502).json({
           success: false,
           message:
             "AI returned an invalid evaluation format.",
         });
       }
+
+      // ========================================
+      // VALIDATE MARKS
+      // ========================================
 
       const maxMarks =
         Number(
@@ -2008,6 +2675,10 @@ incorrect
           )
         );
 
+      // ========================================
+      // VALIDATE STATUS
+      // ========================================
+
       const allowedStatuses = [
         "correct",
         "partially_correct",
@@ -2021,12 +2692,18 @@ incorrect
           ? evaluation.status
           : "incorrect";
 
+      // ========================================
+      // RETURN EVALUATION
+      // ========================================
+
       return res.status(200).json({
         success: true,
 
         evaluation: {
           status,
+
           marksAwarded,
+
           maxMarks,
 
           feedback:
@@ -2052,7 +2729,8 @@ incorrect
         success: false,
         message:
           "Failed to evaluate written answer.",
-        error: error.message,
+        error:
+          error.message,
       });
     }
   };
