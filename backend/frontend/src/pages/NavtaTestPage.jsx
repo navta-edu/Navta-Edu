@@ -908,12 +908,86 @@ export default function NavtaTestPage() {
         }
 
         .navta-test-page {
+          --nt-page-bg: rgba(248, 250, 252, 0.82);
+          --nt-card-bg: rgba(255, 255, 255, 0.88);
+          --nt-card-bg-strong: #ffffff;
+          --nt-surface: #f8fafc;
+          --nt-surface-2: #f1f5f9;
+          --nt-border: #dbe3ee;
+          --nt-border-strong: #cbd5e1;
+          --nt-text: #0f172a;
+          --nt-muted: #64748b;
+          --nt-soft-text: #475569;
+          --nt-accent: #0284c7;
+          --nt-accent-soft: #e0f2fe;
+          --nt-accent-text: #0369a1;
+          --nt-boss-bg: rgba(255, 247, 237, 0.92);
+          --nt-boss-soft: rgba(245, 158, 11, 0.12);
+          --nt-boss-text: #b45309;
+          --nt-danger-bg: #fef2f2;
+          --nt-danger-text: #dc2626;
+          --nt-danger-border: rgba(220, 38, 38, 0.3);
+          --nt-success-bg: #f0fdf4;
+          --nt-success-text: #15803d;
+          --nt-success-border: rgba(22, 163, 74, 0.3);
+
           min-height: 100vh;
           width: 100%;
           overflow-x: hidden;
-          background: rgba(11, 18, 32, 0.94);
-          color: #ffffff;
+          background: var(--nt-page-bg);
+          color: var(--nt-text);
           padding: 40px;
+          transition: background 0.25s ease, color 0.25s ease;
+        }
+
+        html.dark .navta-test-page {
+          --nt-page-bg: rgba(11, 18, 32, 0.94);
+          --nt-card-bg: #151d2d;
+          --nt-card-bg-strong: #151d2d;
+          --nt-surface: #0f172a;
+          --nt-surface-2: #111827;
+          --nt-border: #243047;
+          --nt-border-strong: #334155;
+          --nt-text: #ffffff;
+          --nt-muted: #94a3b8;
+          --nt-soft-text: #cbd5e1;
+          --nt-accent: #0ea5e9;
+          --nt-accent-soft: #102a43;
+          --nt-accent-text: #38bdf8;
+          --nt-boss-bg: rgba(120, 53, 15, 0.22);
+          --nt-boss-soft: rgba(245, 158, 11, 0.16);
+          --nt-boss-text: #fbbf24;
+          --nt-danger-bg: rgba(127, 29, 29, 0.2);
+          --nt-danger-text: #fca5a5;
+          --nt-danger-border: rgba(239, 68, 68, 0.45);
+          --nt-success-bg: rgba(20, 83, 45, 0.22);
+          --nt-success-text: #86efac;
+          --nt-success-border: rgba(34, 197, 94, 0.5);
+        }
+
+        .navta-card,
+        .navta-mode-card,
+        .navta-duration-card,
+        .navta-summary-card,
+        .navta-question-card,
+        .navta-result-card {
+          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+          backdrop-filter: blur(14px);
+        }
+
+        html.dark .navta-card,
+        html.dark .navta-mode-card,
+        html.dark .navta-duration-card,
+        html.dark .navta-summary-card,
+        html.dark .navta-question-card,
+        html.dark .navta-result-card {
+          box-shadow: none;
+        }
+
+        .navta-written-answer,
+        .navta-option {
+          background: var(--nt-surface);
+          color: var(--nt-text);
         }
 
         .navta-header,
@@ -935,7 +1009,7 @@ export default function NavtaTestPage() {
         .navta-subtitle {
           margin-top: 8px;
           margin-bottom: 0;
-          color: #94a3b8;
+          color: var(--nt-muted);
           line-height: 1.5;
         }
 
@@ -979,9 +1053,9 @@ export default function NavtaTestPage() {
           min-width: 0;
           padding: 28px;
           border-radius: 18px;
-          border: 1px solid #243047;
-          background: #151d2d;
-          color: #ffffff;
+          border: 1px solid var(--nt-border);
+          background: var(--nt-card-bg);
+          color: var(--nt-text);
           cursor: pointer;
           text-align: left;
           transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
@@ -1000,14 +1074,14 @@ export default function NavtaTestPage() {
         .navta-mode-card.boss {
           border-color: rgba(245, 158, 11, 0.45);
           background:
-            radial-gradient(circle at top right, rgba(245, 158, 11, 0.16), transparent 40%),
-            #151d2d;
+            radial-gradient(circle at top right, var(--nt-boss-soft), transparent 40%),
+            var(--nt-card-bg);
         }
 
         .navta-card:hover,
         .navta-mode-card:hover {
           transform: translateY(-3px);
-          border-color: #0ea5e9;
+          border-color: var(--nt-accent);
         }
 
         .navta-mode-card.boss:hover {
@@ -1015,8 +1089,8 @@ export default function NavtaTestPage() {
         }
 
         .navta-card.active {
-          border: 2px solid #0ea5e9;
-          background: #102a43;
+          border: 2px solid var(--nt-accent);
+          background: var(--nt-accent-soft);
         }
 
         .navta-card-icon {
@@ -1038,7 +1112,7 @@ export default function NavtaTestPage() {
         .navta-card p,
         .navta-mode-card p {
           margin: 0;
-          color: #94a3b8;
+          color: var(--nt-muted);
           line-height: 1.5;
         }
 
@@ -1046,19 +1120,19 @@ export default function NavtaTestPage() {
           display: grid;
           gap: 8px;
           margin: 20px 0 0;
-          color: #cbd5e1;
+          color: var(--nt-soft-text);
           font-size: 14px;
         }
 
         .navta-continue {
           display: block;
           margin-top: 18px;
-          color: #38bdf8;
+          color: var(--nt-accent-text);
           font-weight: 700;
         }
 
         .navta-boss-continue {
-          color: #fbbf24;
+          color: var(--nt-boss-text);
         }
 
         .navta-chapter-card {
@@ -1066,9 +1140,9 @@ export default function NavtaTestPage() {
           min-width: 0;
           padding: 18px;
           border-radius: 12px;
-          border: 1px solid #243047;
-          background: #151d2d;
-          color: #ffffff;
+          border: 1px solid var(--nt-border);
+          background: var(--nt-card-bg);
+          color: var(--nt-text);
           cursor: pointer;
           display: flex;
           justify-content: space-between;
@@ -1080,12 +1154,12 @@ export default function NavtaTestPage() {
         }
 
         .navta-chapter-card:hover {
-          border-color: #0ea5e9;
+          border-color: var(--nt-accent);
         }
 
         .navta-chapter-card.selected {
           border-color: #f59e0b;
-          background: rgba(120, 53, 15, 0.32);
+          background: var(--nt-boss-bg);
         }
 
         .navta-check {
@@ -1110,9 +1184,9 @@ export default function NavtaTestPage() {
           min-height: 120px;
           padding: 22px;
           border-radius: 16px;
-          border: 2px solid #334155;
-          background: #151d2d;
-          color: #ffffff;
+          border: 2px solid var(--nt-border-strong);
+          background: var(--nt-card-bg);
+          color: var(--nt-text);
           cursor: pointer;
           display: flex;
           flex-direction: column;
@@ -1124,18 +1198,18 @@ export default function NavtaTestPage() {
 
         .navta-duration-card:hover {
           transform: translateY(-2px);
-          border-color: #0ea5e9;
+          border-color: var(--nt-accent);
         }
 
         .navta-duration-card.active {
-          border-color: #0ea5e9;
-          background: #102a43;
-          box-shadow: 0 0 0 1px #0ea5e9;
+          border-color: var(--nt-accent);
+          background: var(--nt-accent-soft);
+          box-shadow: 0 0 0 1px var(--nt-accent);
         }
 
         .navta-boss-card.active {
           border-color: #f59e0b;
-          background: rgba(120, 53, 15, 0.28);
+          background: var(--nt-boss-bg);
           box-shadow: 0 0 0 1px #f59e0b;
         }
 
@@ -1145,7 +1219,7 @@ export default function NavtaTestPage() {
         }
 
         .navta-duration-questions {
-          color: #94a3b8;
+          color: var(--nt-muted);
           font-size: 14px;
         }
 
@@ -1153,17 +1227,17 @@ export default function NavtaTestPage() {
           max-width: 900px;
           margin: 0 auto 10px;
           padding: 14px 18px;
-          border: 1px solid #243047;
+          border: 1px solid var(--nt-border);
           border-radius: 12px;
-          background: #111827;
-          color: #cbd5e1;
+          background: var(--nt-surface-2);
+          color: var(--nt-soft-text);
           text-align: center;
           line-height: 1.5;
         }
 
         .navta-boss-banner {
           border-color: rgba(245, 158, 11, 0.35);
-          background: rgba(120, 53, 15, 0.2);
+          background: var(--nt-boss-bg);
         }
 
         .navta-selection-count {
@@ -1172,8 +1246,8 @@ export default function NavtaTestPage() {
           padding: 14px 18px;
           border-radius: 12px;
           border: 1px solid rgba(245, 158, 11, 0.35);
-          background: rgba(120, 53, 15, 0.18);
-          color: #fde68a;
+          background: var(--nt-boss-bg);
+          color: var(--nt-boss-text);
           font-weight: 700;
         }
 
@@ -1188,8 +1262,8 @@ export default function NavtaTestPage() {
         .navta-mix-item {
           padding: 16px;
           border-radius: 14px;
-          border: 1px solid #334155;
-          background: #0f172a;
+          border: 1px solid var(--nt-border-strong);
+          background: var(--nt-surface);
           text-align: center;
         }
 
@@ -1204,15 +1278,15 @@ export default function NavtaTestPage() {
           margin: 35px auto;
           padding: 28px;
           border-radius: 18px;
-          background: #151d2d;
-          border: 1px solid #243047;
+          background: var(--nt-card-bg);
+          border: 1px solid var(--nt-border);
         }
 
         .navta-summary-card.boss {
           border-color: rgba(245, 158, 11, 0.42);
           background:
-            radial-gradient(circle at top right, rgba(245, 158, 11, 0.11), transparent 38%),
-            #151d2d;
+            radial-gradient(circle at top right, var(--nt-boss-soft), transparent 38%),
+            var(--nt-card-bg);
         }
 
         .navta-summary-grid {
@@ -1225,20 +1299,20 @@ export default function NavtaTestPage() {
         .navta-summary-item {
           padding: 14px;
           border-radius: 12px;
-          background: #0f172a;
-          border: 1px solid #243047;
+          background: var(--nt-surface);
+          border: 1px solid var(--nt-border);
         }
 
         .navta-summary-label {
           display: block;
           margin-bottom: 5px;
-          color: #94a3b8;
+          color: var(--nt-muted);
           font-size: 12px;
         }
 
         .navta-summary-value {
           font-weight: 700;
-          color: #ffffff;
+          color: var(--nt-text);
           overflow-wrap: anywhere;
         }
 
@@ -1246,10 +1320,10 @@ export default function NavtaTestPage() {
           max-width: 760px;
           margin: 18px auto;
           padding: 14px 16px;
-          border: 1px solid rgba(239, 68, 68, 0.45);
+          border: 1px solid var(--nt-danger-border);
           border-radius: 12px;
-          background: rgba(127, 29, 29, 0.2);
-          color: #fca5a5;
+          background: var(--nt-danger-bg);
+          color: var(--nt-danger-text);
           line-height: 1.5;
           text-align: center;
         }
@@ -1263,8 +1337,8 @@ export default function NavtaTestPage() {
           margin: 0 auto;
           padding: 35px;
           border-radius: 18px;
-          background: #151d2d;
-          border: 1px solid #243047;
+          background: var(--nt-card-bg);
+          border: 1px solid var(--nt-border);
         }
 
         .navta-boss-question-meta {
@@ -1278,16 +1352,16 @@ export default function NavtaTestPage() {
         .navta-tag {
           padding: 6px 10px;
           border-radius: 999px;
-          background: #111827;
-          border: 1px solid #334155;
-          color: #cbd5e1;
+          background: var(--nt-surface-2);
+          border: 1px solid var(--nt-border-strong);
+          color: var(--nt-soft-text);
           font-size: 12px;
           font-weight: 700;
         }
 
         .navta-tag.boss {
           border-color: rgba(245, 158, 11, 0.38);
-          color: #fbbf24;
+          color: var(--nt-boss-text);
         }
 
         .navta-question {
@@ -1302,9 +1376,9 @@ export default function NavtaTestPage() {
           padding: 17px;
           margin-bottom: 12px;
           border-radius: 10px;
-          border: 1px solid #334155;
-          background: #0f172a;
-          color: #ffffff;
+          border: 1px solid var(--nt-border-strong);
+          background: var(--nt-surface);
+          color: var(--nt-text);
           text-align: left;
           cursor: pointer;
           font-size: 16px;
@@ -1324,38 +1398,38 @@ export default function NavtaTestPage() {
           margin: 18px auto 0;
           padding: 18px;
           border-radius: 14px;
-          border: 1px solid #334155;
-          background: #111827;
+          border: 1px solid var(--nt-border-strong);
+          background: var(--nt-surface-2);
         }
 
         .navta-answer-feedback.wrong {
           border-color: rgba(239, 68, 68, 0.5);
-          background: rgba(127, 29, 29, 0.2);
+          background: var(--nt-danger-bg);
         }
 
         .navta-written-feedback.correct {
           border-color: rgba(34, 197, 94, 0.5);
-          background: rgba(20, 83, 45, 0.22);
+          background: var(--nt-success-bg);
         }
 
         .navta-written-feedback.partial {
           border-color: rgba(245, 158, 11, 0.5);
-          background: rgba(120, 53, 15, 0.2);
+          background: var(--nt-boss-bg);
         }
 
         .navta-written-feedback.incorrect {
           border-color: rgba(239, 68, 68, 0.5);
-          background: rgba(127, 29, 29, 0.2);
+          background: var(--nt-danger-bg);
         }
 
         .navta-written-answer {
           width: 100%;
           min-height: 220px;
           padding: 16px;
-          border: 1px solid #334155;
+          border: 1px solid var(--nt-border-strong);
           border-radius: 12px;
-          background: #0f172a;
-          color: #ffffff;
+          background: var(--nt-surface);
+          color: var(--nt-text);
           font: inherit;
           line-height: 1.65;
           resize: vertical;
@@ -1363,7 +1437,7 @@ export default function NavtaTestPage() {
         }
 
         .navta-written-answer:focus {
-          border-color: #0ea5e9;
+          border-color: var(--nt-accent);
           box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
         }
 
@@ -1381,16 +1455,16 @@ export default function NavtaTestPage() {
           margin: 60px auto;
           padding: 40px;
           border-radius: 20px;
-          background: #151d2d;
-          border: 1px solid #243047;
+          background: var(--nt-card-bg);
+          border: 1px solid var(--nt-border);
           text-align: center;
         }
 
         .navta-result-card.boss {
           border-color: rgba(245, 158, 11, 0.5);
           background:
-            radial-gradient(circle at top, rgba(245, 158, 11, 0.12), transparent 34%),
-            #151d2d;
+            radial-gradient(circle at top, var(--nt-boss-soft), transparent 34%),
+            var(--nt-card-bg);
         }
 
         .navta-result-score {
@@ -1403,7 +1477,7 @@ export default function NavtaTestPage() {
           margin: 18px auto;
           font-size: 70px;
           font-weight: 900;
-          color: #fbbf24;
+          color: var(--nt-boss-text);
           letter-spacing: -2px;
         }
 
@@ -1422,7 +1496,7 @@ export default function NavtaTestPage() {
           gap: 16px;
           padding: 12px 0;
           border-bottom: 1px solid #243047;
-          color: #cbd5e1;
+          color: var(--nt-soft-text);
         }
 
         .navta-status-pill {
@@ -1430,8 +1504,8 @@ export default function NavtaTestPage() {
           margin-bottom: 12px;
           padding: 7px 12px;
           border-radius: 999px;
-          background: #0f172a;
-          color: #cbd5e1;
+          background: var(--nt-surface);
+          color: var(--nt-soft-text);
           font-size: 12px;
           font-weight: 800;
           text-transform: uppercase;
@@ -1959,7 +2033,7 @@ export default function NavtaTestPage() {
                     {level}
                   </span>
                   <strong>{count}</strong>
-                  <span style={{ color: "#94a3b8", fontSize: "12px" }}>
+                  <span style={{ color: "var(--nt-muted)", fontSize: "12px" }}>
                     target questions
                   </span>
                 </div>
@@ -2511,7 +2585,7 @@ export default function NavtaTestPage() {
                       <h3
                         style={{
                           marginTop: 0,
-                          color: "#fca5a5",
+                          color: "var(--nt-danger-text)",
                         }}
                       >
                         ✕ Incorrect
@@ -2519,7 +2593,7 @@ export default function NavtaTestPage() {
 
                       <p
                         style={{
-                          color: "#d1fae5",
+                          color: "var(--nt-success-text)",
                           fontWeight: 700,
                         }}
                       >
@@ -2540,7 +2614,7 @@ export default function NavtaTestPage() {
 
                       <p
                         style={{
-                          color: "#e2e8f0",
+                          color: "var(--nt-soft-text)",
                           lineHeight: 1.65,
                         }}
                       >
@@ -2592,7 +2666,7 @@ export default function NavtaTestPage() {
 
                   <p
                     style={{
-                      color: "#94a3b8",
+                      color: "var(--nt-muted)",
                       marginTop: "-15px",
                       marginBottom: "18px",
                     }}
@@ -2684,7 +2758,7 @@ export default function NavtaTestPage() {
 
               <div
                 style={{
-                  color: "#fbbf24",
+                  color: "var(--nt-boss-text)",
                   fontWeight: 800,
                   marginTop: "-12px",
                 }}
@@ -2895,7 +2969,7 @@ function WrittenFeedback({
       {feedback?.feedback && (
         <p
           style={{
-            color: "#e2e8f0",
+            color: "var(--nt-soft-text)",
             lineHeight: 1.65,
           }}
         >
@@ -2911,7 +2985,7 @@ function WrittenFeedback({
 
             <ul
               style={{
-                color: "#cbd5e1",
+                color: "var(--nt-soft-text)",
                 lineHeight: 1.7,
               }}
             >
@@ -2944,9 +3018,9 @@ const styles = {
     justifyContent: "center",
     padding: "12px 18px",
     borderRadius: "10px",
-    border: "1px solid #334155",
-    background: "#111827",
-    color: "#ffffff",
+    border: "1px solid var(--nt-border-strong)",
+    background: "var(--nt-surface-2)",
+    color: "var(--nt-text)",
     textDecoration: "none",
     cursor: "pointer",
     font: "inherit",
@@ -2992,37 +3066,37 @@ const styles = {
   timer: {
     padding: "14px 22px",
     borderRadius: "12px",
-    background: "#132238",
-    color: "#00c6ff",
+    background: "var(--nt-accent-soft)",
+    color: "var(--nt-accent)",
     fontSize: "24px",
     fontWeight: "800",
     whiteSpace: "nowrap",
   },
 
   dangerTimer: {
-    background: "#451a1a",
-    color: "#ff5555",
+    background: "var(--nt-danger-bg)",
+    color: "var(--nt-danger-text)",
   },
 
   progress: {
     maxWidth: "1000px",
     margin: "0 auto 15px",
-    color: "#94a3b8",
+    color: "var(--nt-muted)",
   },
 
   selectedOption: {
     border: "2px solid #079de0",
-    background: "#102f49",
+    background: "var(--nt-accent-soft)",
   },
 
   wrongOption: {
     border: "2px solid #ef4444",
-    background: "#3f171c",
+    background: "var(--nt-danger-bg)",
   },
 
   correctOption: {
     border: "2px solid #22c55e",
-    background: "#123524",
+    background: "var(--nt-success-bg)",
   },
 
   optionLetter: {
@@ -3048,7 +3122,7 @@ const styles = {
 
   dashboardLink: {
     display: "block",
-    color: "#38bdf8",
+    color: "var(--nt-accent-text)",
     marginTop: "20px",
     textDecoration: "none",
   },
