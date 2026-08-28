@@ -41,6 +41,7 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import RewardsPage from './pages/RewardsPage';
 import ResultDetail from './pages/ResultDetail';
 import MistakeNotebookPage from './pages/MistakeNotebookPage';
+import StreakPage from './pages/StreakPage';
 
 // =====================================================
 // TEACHER / EDUCATOR PAGES
@@ -357,6 +358,13 @@ export default function App() {
                 path="/mistake-notebook"
                 element={
                   <MistakeNotebookPage />
+                }
+              />
+
+              <Route
+                path="/streak"
+                element={
+                  <StreakPage />
                 }
               />
 
