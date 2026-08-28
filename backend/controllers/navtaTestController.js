@@ -1,4 +1,6 @@
 const NavtaQuestion = require("../models/NavtaQuestion");
+const Result = require("../models/Result");
+const Student = require("../models/Student");
 
 // ============================================
 // TEST RULES
@@ -112,6 +114,67 @@ function isAllowedDuration(exam, questionType, duration) {
   }
 
   return config.durations.includes(Number(duration));
+}
+
+// ============================================
+// NAVTA RESULT / COIN HELPERS
+// ============================================
+
+const NAVTA_RESULT_TYPES = [
+  "standard",
+  "boss",
+  "revenge",
+];
+
+function calculateNavtaCoins(
+  percentage,
+  selectedDuration
+) {
+  const numericPercentage =
+    Number(percentage);
+
+  const numericDuration =
+    Number(selectedDuration);
+
+  if (
+    !Number.isFinite(
+      numericPercentage
+    ) ||
+    !Number.isFinite(
+      numericDuration
+    )
+  ) {
+    return 0;
+  }
+
+  if (numericPercentage <= 80) {
+    return 0;
+  }
+
+  return numericDuration < 30
+    ? 1
+    : 2;
+}
+
+function normaliseSubmittedAnswer(
+  value
+) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  const numericValue =
+    Number(value);
+
+  return Number.isInteger(
+    numericValue
+  )
+    ? numericValue
+    : null;
 }
 
 // ============================================
@@ -2357,6 +2420,881 @@ exports.generateRevengeBattle = async (req, res) => {
     });
   }
 };
+
+// ============================================
+// COMPLETE NAVTA TEST
+// ============================================
+//
+// Saves Standard Test / Boss Battle / Revenge
+// results for dashboard performance analytics.
+//
+// Coin rule:
+// - Score <= 80%: 0 coins
+// - Score > 80% and duration < 30 min: 1 coin
+// - Score > 80% and duration >= 30 min: 2 coins
+//
+// IMPORTANT:
+// This endpoint must be protected by the
+// student authentication middleware in routes.
+//
+// Endpoint:
+// POST /api/navta-test/complete
+//
+// ============================================
+
+exports.completeNavtaTest =
+  async (req, res) => {
+    try {
+      const userId =
+        req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message:
+            "Authentication is required.",
+        });
+      }
+
+      const {
+        attemptId,
+        testType = "standard",
+        subject,
+        exam,
+        classLevel,
+        chapter,
+        chapters = [],
+        difficulty,
+        questionType,
+        selectedDuration,
+        timeTaken,
+        answers = [],
+      } = req.body;
+
+      // ========================================
+      // ATTEMPT ID
+      // ========================================
+
+      const cleanedAttemptId =
+        String(
+          attemptId || ""
+        ).trim();
+
+      if (!cleanedAttemptId) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Attempt ID is required.",
+        });
+      }
+
+      // ========================================
+      // DUPLICATE ATTEMPT PROTECTION
+      // ========================================
+
+      const existingResult =
+        await Result.findOne({
+          user: userId,
+          attemptId:
+            cleanedAttemptId,
+        });
+
+      if (existingResult) {
+        const existingStudent =
+          await Student.findOne({
+            user: userId,
+          }).select(
+            "coins xp level"
+          );
+
+        return res.status(200).json({
+          success: true,
+          alreadySubmitted: true,
+          message:
+            "This NAVTA Test attempt was already saved.",
+          data: {
+            result:
+              existingResult,
+            percentage:
+              existingResult.percentage,
+            selectedDuration:
+              existingResult.selectedDuration,
+            coinsEarned:
+              Number(
+                existingResult.coinsAwarded ||
+                  0
+              ),
+            coinBalance:
+              Number(
+                existingStudent?.coins ||
+                  0
+              ),
+            newCoins:
+              Number(
+                existingStudent?.coins ||
+                  0
+              ),
+          },
+        });
+      }
+
+      // ========================================
+      // BASIC TEST VALIDATION
+      // ========================================
+
+      if (
+        !NAVTA_RESULT_TYPES.includes(
+          testType
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid NAVTA Test type.",
+        });
+      }
+
+      if (
+        !subject ||
+        !exam ||
+        !classLevel
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Subject, preparation and class are required.",
+        });
+      }
+
+      if (
+        !allowedExams[subject] ||
+        !allowedExams[
+          subject
+        ].includes(exam)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid subject or preparation.",
+        });
+      }
+
+      if (
+        classLevel !==
+          "Class 11" &&
+        classLevel !==
+          "Class 12"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid class.",
+        });
+      }
+
+      if (
+        !Array.isArray(answers) ||
+        answers.length === 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Completed test answers are required.",
+        });
+      }
+
+      // ========================================
+      // DURATION
+      // ========================================
+
+      const numericDuration =
+        Number(selectedDuration);
+
+      if (
+        !Number.isFinite(
+          numericDuration
+        ) ||
+        numericDuration <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "A valid selected test duration is required.",
+        });
+      }
+
+      // ========================================
+      // QUESTION IDS
+      // ========================================
+
+      const questionIds =
+        answers
+          .map(
+            (item) =>
+              String(
+                item?.questionId ||
+                  ""
+              ).trim()
+          )
+          .filter(Boolean);
+
+      const uniqueQuestionIds = [
+        ...new Set(
+          questionIds
+        ),
+      ];
+
+      if (
+        uniqueQuestionIds.length !==
+        answers.length
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Every submitted answer must contain one unique question ID.",
+        });
+      }
+
+      // ========================================
+      // LOAD REAL QUESTIONS FROM DATABASE
+      // ========================================
+
+      const storedQuestions =
+        await NavtaQuestion.find({
+          _id: {
+            $in:
+              uniqueQuestionIds,
+          },
+          subject,
+          exam,
+          classLevel,
+          isActive: true,
+        })
+          .select(
+            "_id chapter difficulty questionType correctAnswer maxMarks modelAnswer"
+          )
+          .lean();
+
+      if (
+        storedQuestions.length !==
+        uniqueQuestionIds.length
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "One or more submitted questions are invalid for this NAVTA Test.",
+        });
+      }
+
+      const questionMap =
+        new Map(
+          storedQuestions.map(
+            (item) => [
+              String(item._id),
+              item,
+            ]
+          )
+        );
+
+      // ========================================
+      // STANDARD TEST VALIDATION
+      // ========================================
+
+      const resolvedQuestionType =
+        normaliseQuestionType(
+          exam,
+          questionType
+        );
+
+      if (
+        testType ===
+        "standard"
+      ) {
+        if (
+          !chapter ||
+          !difficulty ||
+          !validDifficulties.includes(
+            difficulty
+          ) ||
+          !validQuestionTypes.includes(
+            resolvedQuestionType
+          )
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Chapter, difficulty and question type are required for a Standard Test.",
+          });
+        }
+
+        if (
+          !isAllowedDuration(
+            exam,
+            resolvedQuestionType,
+            numericDuration
+          )
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Invalid duration for this Standard Test.",
+          });
+        }
+
+        const expectedQuestionCount =
+          getQuestionCount(
+            exam,
+            resolvedQuestionType,
+            numericDuration
+          );
+
+        if (
+          answers.length !==
+          expectedQuestionCount
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "The submitted Standard Test question count does not match the selected duration.",
+          });
+        }
+
+        const invalidStandardQuestion =
+          storedQuestions.some(
+            (item) =>
+              item.chapter !==
+                chapter ||
+              item.difficulty !==
+                difficulty ||
+              item.questionType !==
+                resolvedQuestionType
+          );
+
+        if (
+          invalidStandardQuestion
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "One or more questions do not match the selected Standard Test setup.",
+          });
+        }
+      }
+
+      // ========================================
+      // BOSS / REVENGE VALIDATION
+      // ========================================
+
+      let cleanedChapters = [];
+
+      if (
+        testType === "boss" ||
+        testType === "revenge"
+      ) {
+        cleanedChapters = [
+          ...new Set(
+            (Array.isArray(
+              chapters
+            )
+              ? chapters
+              : []
+            )
+              .map(
+                (item) =>
+                  String(
+                    item || ""
+                  ).trim()
+              )
+              .filter(Boolean)
+          ),
+        ];
+
+        if (
+          cleanedChapters.length <
+          2
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Boss and Revenge Battle results require at least 2 selected chapters.",
+          });
+        }
+
+        if (
+          !BOSS_BATTLE_SIZES.includes(
+            answers.length
+          )
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Boss and Revenge Battle results must contain 15, 30 or 50 questions.",
+          });
+        }
+
+        const invalidBattleQuestion =
+          storedQuestions.some(
+            (item) =>
+              item.questionType !==
+                "mcq" ||
+              !cleanedChapters.includes(
+                item.chapter
+              ) ||
+              !validDifficulties.includes(
+                item.difficulty
+              )
+          );
+
+        if (
+          invalidBattleQuestion
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "One or more questions do not match the Boss/Revenge Battle setup.",
+          });
+        }
+
+        const expectedDuration =
+          answers.length *
+          (exam === "JEE"
+            ? 2
+            : 1);
+
+        if (
+          numericDuration !==
+          expectedDuration
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "The submitted Boss/Revenge duration does not match the official battle timer.",
+          });
+        }
+      }
+
+      // ========================================
+      // GRADE TEST ON SERVER
+      // ========================================
+
+      let earnedMarks = 0;
+      let maximumMarks = 0;
+      let correctAnswers = 0;
+
+      const gradedAnswers =
+        answers.map(
+          (submitted) => {
+            const id =
+              String(
+                submitted.questionId
+              );
+
+            const question =
+              questionMap.get(id);
+
+            if (!question) {
+              return null;
+            }
+
+            // ------------------------------------
+            // MCQ
+            // ------------------------------------
+
+            if (
+              question.questionType ===
+              "mcq"
+            ) {
+              const selectedOption =
+                normaliseSubmittedAnswer(
+                  submitted.selectedOption
+                );
+
+              const correctOption =
+                Number(
+                  question.correctAnswer
+                );
+
+              const isCorrect =
+                Number.isInteger(
+                  selectedOption
+                ) &&
+                selectedOption ===
+                  correctOption;
+
+              maximumMarks += 1;
+
+              if (isCorrect) {
+                earnedMarks += 1;
+                correctAnswers += 1;
+              }
+
+              return {
+                question:
+                  question._id,
+                selectedOption,
+                textAnswer: "",
+                isCorrect,
+              };
+            }
+
+            // ------------------------------------
+            // WRITTEN
+            // ------------------------------------
+            //
+            // Written answers have already been
+            // evaluated by the backend evaluation
+            // endpoint during the test.
+            //
+            // We cap submitted marks to the real
+            // stored maxMarks so impossible values
+            // cannot be stored.
+            //
+            // ------------------------------------
+
+            const maxMarks =
+              Math.max(
+                1,
+                Number(
+                  question.maxMarks ||
+                    1
+                )
+              );
+
+            const rawAwarded =
+              Number(
+                submitted
+                  ?.evaluation
+                  ?.marksAwarded
+              );
+
+            const awarded =
+              Number.isFinite(
+                rawAwarded
+              )
+                ? Math.max(
+                    0,
+                    Math.min(
+                      maxMarks,
+                      rawAwarded
+                    )
+                  )
+                : 0;
+
+            maximumMarks +=
+              maxMarks;
+
+            earnedMarks +=
+              awarded;
+
+            const isCorrect =
+              awarded >= maxMarks;
+
+            if (isCorrect) {
+              correctAnswers += 1;
+            }
+
+            return {
+              question:
+                question._id,
+              selectedOption:
+                null,
+              textAnswer:
+                String(
+                  submitted.textAnswer ||
+                    ""
+                ),
+              isCorrect,
+            };
+          }
+        )
+        .filter(Boolean);
+
+      if (
+        maximumMarks <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Unable to calculate this test result.",
+        });
+      }
+
+      const percentage =
+        Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round(
+              (
+                earnedMarks /
+                maximumMarks
+              ) * 100
+            )
+          )
+        );
+
+      const totalQuestions =
+        storedQuestions.length;
+
+      const score =
+        Math.round(
+          earnedMarks * 100
+        ) / 100;
+
+      // 70% is retained as the NAVTA
+      // performance success threshold.
+      const isPassed =
+        percentage >= 70;
+
+      // ========================================
+      // COIN REWARD
+      // ========================================
+
+      const coinsEarned =
+        calculateNavtaCoins(
+          percentage,
+          numericDuration
+        );
+
+      // ========================================
+      // ACTUAL TIME TAKEN
+      // ========================================
+
+      const numericTimeTaken =
+        Number(timeTaken);
+
+      const safeTimeTaken =
+        Number.isFinite(
+          numericTimeTaken
+        ) &&
+        numericTimeTaken >= 0
+          ? Math.round(
+              numericTimeTaken
+            )
+          : 0;
+
+      // ========================================
+      // STUDENT PROFILE
+      // ========================================
+
+      const student =
+        await Student.findOne({
+          user: userId,
+        });
+
+      if (!student) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Student profile not found.",
+        });
+      }
+
+      // ========================================
+      // SAVE RESULT FIRST
+      // ========================================
+      //
+      // NOTE:
+      // Result.test must be optional for NAVTA
+      // generated tests because these tests are
+      // generated dynamically and do not have a
+      // Test document.
+      //
+      // ========================================
+
+      let result;
+
+      try {
+        result =
+          await Result.create({
+            user: userId,
+            answers:
+              gradedAnswers,
+            score,
+            percentage,
+            timeTaken:
+              safeTimeTaken,
+            selectedDuration:
+              numericDuration,
+            testType,
+            subject,
+            exam,
+            classLevel,
+            chapter:
+              testType === "standard"
+                ? String(chapter || "")
+                : "",
+            chapters:
+              testType === "standard"
+                ? [String(chapter || "")]
+                : cleanedChapters,
+            difficulty:
+              testType === "standard"
+                ? String(difficulty || "")
+                : "",
+            questionType:
+              testType === "standard"
+                ? resolvedQuestionType
+                : "mcq",
+            attemptId:
+              cleanedAttemptId,
+            coinsAwarded:
+              coinsEarned,
+            coinRewardProcessed:
+              false,
+            coinRewardProcessedAt:
+              null,
+            correctAnswers,
+            totalQuestions,
+            isPassed,
+          });
+      } catch (createError) {
+        if (
+          createError?.code ===
+          11000
+        ) {
+          const duplicateResult =
+            await Result.findOne({
+              user: userId,
+              attemptId:
+                cleanedAttemptId,
+            });
+
+          const duplicateStudent =
+            await Student.findOne({
+              user: userId,
+            }).select("coins");
+
+          return res.status(200).json({
+            success: true,
+            alreadySubmitted: true,
+            message:
+              "This NAVTA Test attempt was already saved.",
+            data: {
+              result:
+                duplicateResult,
+              percentage:
+                duplicateResult?.percentage ||
+                0,
+              selectedDuration:
+                duplicateResult?.selectedDuration ||
+                numericDuration,
+              coinsEarned:
+                Number(
+                  duplicateResult?.coinsAwarded ||
+                    0
+                ),
+              coinBalance:
+                Number(
+                  duplicateStudent?.coins ||
+                    0
+                ),
+              newCoins:
+                Number(
+                  duplicateStudent?.coins ||
+                    0
+                ),
+            },
+          });
+        }
+
+        throw createError;
+      }
+
+      // ========================================
+      // APPLY COINS ONCE
+      // ========================================
+
+      const claimedReward =
+        await Result.findOneAndUpdate(
+          {
+            _id: result._id,
+            coinRewardProcessed:
+              false,
+          },
+          {
+            $set: {
+              coinRewardProcessed:
+                true,
+              coinRewardProcessedAt:
+                new Date(),
+            },
+          },
+          {
+            new: true,
+          }
+        );
+
+      if (claimedReward) {
+        if (
+          coinsEarned > 0
+        ) {
+          student.coins +=
+            coinsEarned;
+        }
+
+        await student.save();
+      }
+
+      const finalStudent =
+        await Student.findOne({
+          user: userId,
+        }).select(
+          "coins xp level"
+        );
+
+      result =
+        await Result.findById(
+          result._id
+        );
+
+      // ========================================
+      // RESPONSE
+      // ========================================
+
+      return res.status(201).json({
+        success: true,
+        alreadySubmitted: false,
+        message:
+          "NAVTA Test performance saved successfully.",
+        data: {
+          result,
+          percentage,
+          score,
+          correctAnswers,
+          totalQuestions,
+          selectedDuration:
+            numericDuration,
+          testType,
+          coinsEarned,
+          coinBalance:
+            Number(
+              finalStudent?.coins ||
+                0
+            ),
+          newCoins:
+            Number(
+              finalStudent?.coins ||
+                0
+            ),
+        },
+      });
+    } catch (error) {
+      console.error(
+        "COMPLETE NAVTA TEST ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Failed to save NAVTA Test performance.",
+        error:
+          error.message,
+      });
+    }
+  };
+
 
 // ============================================
 // BOARDS WRITTEN ANSWER EVALUATION
