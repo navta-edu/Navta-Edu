@@ -1,121 +1,125 @@
-const mongoose = require("mongoose");
+const express = require("express");
 
-const mistakeNotebookSchema = new mongoose.Schema(
-  {
-    // Student who saved this mistake
-    student: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-      index: true,
-    },
+const {
+  saveMistake,
+  getMistakes,
+  getMistakeById,
+  updateNote,
+  updateMastered,
+  recordReview,
+  deleteMistake,
+  getMistakeStats,
+} = require("../controllers/mistakeNotebookController");
 
-    // Original NAVTA question
-    question: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "NavtaQuestion",
-      required: true,
-    },
+const {
+  protect,
+  authorizeRoles,
+} = require("../middleware/auth");
 
-    // Question information
-    subject: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+const router = express.Router();
 
-    exam: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+// ============================================
+// PROTECT ALL MISTAKE NOTEBOOK ROUTES
+// ============================================
+//
+// Student must:
+// 1. Be logged in
+// 2. Have the "student" role
+//
+// The protect middleware provides req.user,
+// which mistakeNotebookController.js uses
+// to identify the notebook owner.
+//
+// ============================================
 
-    classLevel: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+router.use(protect);
+router.use(authorizeRoles("student"));
 
-    chapter: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+// ============================================
+// MISTAKE NOTEBOOK ROUTES
+// ============================================
 
-    difficulty: {
-      type: String,
-      enum: ["Easy", "Medium", "Hard"],
-      required: true,
-    },
+// --------------------------------------------
+// SAVE A MISTAKE
+// POST /api/mistake-notebook
+// --------------------------------------------
 
-    // Where the mistake happened
-    source: {
-      type: String,
-      enum: ["standard", "boss", "revenge"],
-      required: true,
-      default: "standard",
-    },
-
-    // Student's incorrect answer
-    selectedAnswer: {
-      type: Number,
-      min: 0,
-      max: 3,
-      default: null,
-    },
-
-    // Correct answer
-    correctAnswer: {
-      type: Number,
-      min: 0,
-      max: 3,
-      required: true,
-    },
-
-    // Student's personal note
-    note: {
-      type: String,
-      trim: true,
-      maxlength: 2000,
-      default: "",
-    },
-
-    // Has the student mastered this mistake?
-    isMastered: {
-      type: Boolean,
-      default: false,
-    },
-
-    // Number of times reviewed
-    reviewCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    lastReviewedAt: {
-      type: Date,
-      default: null,
-    },
-  },
-  {
-    timestamps: true,
-  }
+router.post(
+  "/",
+  saveMistake
 );
 
-// Prevent the same question from appearing
-// multiple times for the same student.
-mistakeNotebookSchema.index(
-  {
-    student: 1,
-    question: 1,
-  },
-  {
-    unique: true,
-  }
+// --------------------------------------------
+// GET ALL MY MISTAKES
+// GET /api/mistake-notebook
+// --------------------------------------------
+
+router.get(
+  "/",
+  getMistakes
 );
 
-module.exports = mongoose.model(
-  "MistakeNotebook",
-  mistakeNotebookSchema
+// --------------------------------------------
+// DASHBOARD STATS
+// GET /api/mistake-notebook/stats
+//
+// IMPORTANT:
+// Keep this BEFORE /:id
+// --------------------------------------------
+
+router.get(
+  "/stats",
+  getMistakeStats
 );
+
+// --------------------------------------------
+// GET ONE MISTAKE
+// GET /api/mistake-notebook/:id
+// --------------------------------------------
+
+router.get(
+  "/:id",
+  getMistakeById
+);
+
+// --------------------------------------------
+// UPDATE PERSONAL NOTE
+// PUT /api/mistake-notebook/:id/note
+// --------------------------------------------
+
+router.put(
+  "/:id/note",
+  updateNote
+);
+
+// --------------------------------------------
+// MARK MASTERED / NOT MASTERED
+// PUT /api/mistake-notebook/:id/mastered
+// --------------------------------------------
+
+router.put(
+  "/:id/mastered",
+  updateMastered
+);
+
+// --------------------------------------------
+// RECORD REVIEW
+// PUT /api/mistake-notebook/:id/review
+// --------------------------------------------
+
+router.put(
+  "/:id/review",
+  recordReview
+);
+
+// --------------------------------------------
+// DELETE FROM NOTEBOOK
+// DELETE /api/mistake-notebook/:id
+// --------------------------------------------
+
+router.delete(
+  "/:id",
+  deleteMistake
+);
+
+module.exports = router;
