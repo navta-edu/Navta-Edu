@@ -42,6 +42,7 @@ const RewardsPage = lazy(() => import('./pages/RewardsPage'));
 const ResultDetail = lazy(() => import('./pages/ResultDetail'));
 const MistakeNotebookPage = lazy(() => import('./pages/MistakeNotebookPage'));
 const StreakPage = lazy(() => import('./pages/StreakPage'));
+const PanicModePage = lazy(() => import('./pages/PanicModePage'));
 
 // =====================================================
 // TEACHER / EDUCATOR PAGES
@@ -400,6 +401,13 @@ export default function App() {
                 path="/streak"
                 element={
                   <StreakPage />
+                }
+              />
+
+              <Route
+                path="/panic-mode"
+                element={
+                  <PanicModePage />
                 }
               />
 
