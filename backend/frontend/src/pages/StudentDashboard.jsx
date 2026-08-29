@@ -2085,233 +2085,392 @@ export default function StudentDashboard() {
         </section>
 
         {/* =================================================
-            RECENT RESULTS
+            PANIC MODE
         ================================================= */}
 
         <DashboardPanel
-          title="Recent Quiz Attempts"
-          subtitle="Review your latest performance"
+          title="🚨 Panic Mode"
+          subtitle="Exam close? Revise weak chapters, practise targeted questions and fix them."
         >
           <div
             className="
               mt-4
-              space-y-3
+              overflow-hidden
+              rounded-[22px]
+              border
+              border-rose-200/80
+              bg-gradient-to-br
+              from-rose-50
+              via-orange-50/70
+              to-amber-50
+              p-5
+              sm:p-6
+
+              dark:border-rose-500/20
+              dark:from-rose-950/25
+              dark:via-orange-950/15
+              dark:to-amber-950/10
             "
           >
-            {results
-              .slice(
-                0,
-                3
-              )
-              .map(
-                (
-                  result
-                ) => (
-                  <div
-                    key={
-                      result._id
-                    }
+            <div
+              className="
+                flex
+                flex-col
+                gap-5
+                lg:flex-row
+                lg:items-center
+                lg:justify-between
+              "
+            >
+              <div
+                className="
+                  min-w-0
+                  flex-1
+                "
+              >
+                <div
+                  className="
+                    inline-flex
+                    items-center
+                    gap-2
+                    rounded-full
+                    border
+                    border-rose-200
+                    bg-white/80
+                    px-3
+                    py-1.5
+                    text-[10px]
+                    font-black
+                    uppercase
+                    tracking-[0.16em]
+                    text-rose-600
+
+                    dark:border-rose-500/20
+                    dark:bg-white/5
+                    dark:text-rose-300
+                  "
+                >
+                  <Zap
                     className="
-                      flex
-                      flex-col
-                      gap-3
+                      h-3.5
+                      w-3.5
+                    "
+                  />
+                  Emergency Revision
+                </div>
+
+                <h3
+                  className="
+                    mt-4
+                    text-xl
+                    font-black
+                    text-slate-950
+                    sm:text-2xl
+
+                    dark:text-white
+                  "
+                >
+                  Fix your weakest chapters before the exam.
+                </h3>
+
+                <p
+                  className="
+                    mt-2
+                    max-w-2xl
+                    text-sm
+                    leading-6
+                    text-slate-600
+
+                    dark:text-slate-400
+                  "
+                >
+                  NAVTA will help you focus on what needs attention first:
+                  revise the chapter from Study Notes, practise targeted
+                  questions, then take a short Fix Test to prove the weakness
+                  is repaired.
+                </p>
+
+                <div
+                  className="
+                    mt-5
+                    grid
+                    gap-3
+                    sm:grid-cols-3
+                  "
+                >
+                  <div
+                    className="
                       rounded-2xl
                       border
-                      border-slate-200
-                      bg-slate-50/75
+                      border-white/80
+                      bg-white/75
                       p-4
-                      sm:flex-row
-                      sm:items-center
-                      sm:justify-between
 
-                      dark:border-slate-800
-                      dark:bg-slate-950/35
+                      dark:border-white/5
+                      dark:bg-white/[0.04]
                     "
                   >
                     <div
                       className="
                         flex
-                        min-w-0
+                        h-9
+                        w-9
                         items-center
-                        gap-3
+                        justify-center
+                        rounded-xl
+                        bg-sky-100
+                        text-sky-600
+
+                        dark:bg-sky-500/10
+                        dark:text-sky-400
                       "
                     >
-                      <div
+                      <BookOpen
                         className="
-                          flex
-                          h-10
-                          w-10
-                          shrink-0
-                          items-center
-                          justify-center
-                          rounded-xl
-                          bg-sky-100
-
-                          dark:bg-sky-500/10
+                          h-4
+                          w-4
                         "
-                      >
-                        <GraduationCap
-                          className="
-                            h-5
-                            w-5
-                            text-sky-500
-
-                            dark:text-sky-400
-                          "
-                        />
-                      </div>
-
-                      <div
-                        className="
-                          min-w-0
-                        "
-                      >
-                        <p
-                          className="
-                            truncate
-                            text-sm
-                            font-bold
-                            text-slate-900
-
-                            dark:text-white
-                          "
-                        >
-                          {result.test?.title ||
-                            'Chapter Quiz'}
-                        </p>
-
-                        <p
-                          className="
-                            mt-0.5
-                            text-[10px]
-                            text-slate-500
-                          "
-                        >
-                          {result.correctAnswers ||
-                            0}{' '}
-                          /{' '}
-                          {result.totalQuestions ||
-                            0}{' '}
-                          correct
-                        </p>
-                      </div>
+                      />
                     </div>
 
+                    <p
+                      className="
+                        mt-3
+                        text-xs
+                        font-black
+                        text-slate-900
+
+                        dark:text-white
+                      "
+                    >
+                      1. Revise
+                    </p>
+
+                    <p
+                      className="
+                        mt-1
+                        text-[10px]
+                        leading-4
+                        text-slate-500
+                      "
+                    >
+                      Open the Study Notes for your weak chapter.
+                    </p>
+                  </div>
+
+                  <div
+                    className="
+                      rounded-2xl
+                      border
+                      border-white/80
+                      bg-white/75
+                      p-4
+
+                      dark:border-white/5
+                      dark:bg-white/[0.04]
+                    "
+                  >
                     <div
                       className="
                         flex
+                        h-9
+                        w-9
                         items-center
-                        justify-between
-                        gap-4
-                        sm:justify-end
+                        justify-center
+                        rounded-xl
+                        bg-violet-100
+                        text-violet-600
+
+                        dark:bg-violet-500/10
+                        dark:text-violet-400
                       "
                     >
-                      <p
-                        className={`
-                          text-lg
-                          font-black
-                          ${
-                            result.isPassed
-                              ? 'text-emerald-500'
-                              : 'text-rose-500'
-                          }
-                        `}
-                      >
-                        {result.percentage ||
-                          0}
-                        %
-                      </p>
-
-                      <Link
-                        to={`/results/${result._id}`}
-                      >
-                        <button
-                          type="button"
-                          className="
-                            rounded-lg
-                            border
-                            border-slate-300
-                            bg-white
-                            px-3
-                            py-2
-                            text-xs
-                            font-bold
-                            text-slate-700
-                            transition
-                            hover:border-sky-400
-                            hover:text-sky-600
-
-                            dark:border-slate-700
-                            dark:bg-transparent
-                            dark:text-slate-300
-                            dark:hover:border-sky-500
-                            dark:hover:text-white
-                          "
-                        >
-                          Review
-                        </button>
-                      </Link>
+                      <BrainCircuit
+                        className="
+                          h-4
+                          w-4
+                        "
+                      />
                     </div>
-                  </div>
-                )
-              )}
 
-            {results.length ===
-              0 && (
+                    <p
+                      className="
+                        mt-3
+                        text-xs
+                        font-black
+                        text-slate-900
+
+                        dark:text-white
+                      "
+                    >
+                      2. Practise
+                    </p>
+
+                    <p
+                      className="
+                        mt-1
+                        text-[10px]
+                        leading-4
+                        text-slate-500
+                      "
+                    >
+                      Solve targeted questions from that chapter.
+                    </p>
+                  </div>
+
+                  <div
+                    className="
+                      rounded-2xl
+                      border
+                      border-white/80
+                      bg-white/75
+                      p-4
+
+                      dark:border-white/5
+                      dark:bg-white/[0.04]
+                    "
+                  >
+                    <div
+                      className="
+                        flex
+                        h-9
+                        w-9
+                        items-center
+                        justify-center
+                        rounded-xl
+                        bg-emerald-100
+                        text-emerald-600
+
+                        dark:bg-emerald-500/10
+                        dark:text-emerald-400
+                      "
+                    >
+                      <Target
+                        className="
+                          h-4
+                          w-4
+                        "
+                      />
+                    </div>
+
+                    <p
+                      className="
+                        mt-3
+                        text-xs
+                        font-black
+                        text-slate-900
+
+                        dark:text-white
+                      "
+                    >
+                      3. Fix Test
+                    </p>
+
+                    <p
+                      className="
+                        mt-1
+                        text-[10px]
+                        leading-4
+                        text-slate-500
+                      "
+                    >
+                      Reach 70%+ to mark the weakness as fixed.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div
                 className="
-                  py-10
-                  text-center
+                  shrink-0
+                  lg:w-52
                 "
               >
-                <Trophy
+                <div
                   className="
-                    mx-auto
-                    h-9
-                    w-9
-                    text-slate-300
+                    rounded-2xl
+                    border
+                    border-rose-200
+                    bg-white/80
+                    p-4
+                    text-center
 
-                    dark:text-slate-700
-                  "
-                />
-
-                <p
-                  className="
-                    mt-3
-                    text-sm
-                    text-slate-500
+                    dark:border-rose-500/20
+                    dark:bg-slate-950/35
                   "
                 >
-                  No assessments
-                  taken yet.
-                </p>
+                  <p
+                    className="
+                      text-[10px]
+                      font-black
+                      uppercase
+                      tracking-[0.16em]
+                      text-rose-500
+                    "
+                  >
+                    Fix Target
+                  </p>
+
+                  <p
+                    className="
+                      mt-2
+                      text-3xl
+                      font-black
+                      text-slate-950
+
+                      dark:text-white
+                    "
+                  >
+                    70%+
+                  </p>
+
+                  <p
+                    className="
+                      mt-1
+                      text-[10px]
+                      leading-4
+                      text-slate-500
+                    "
+                  >
+                    Prove the chapter is ready before moving on.
+                  </p>
+                </div>
 
                 <Link
-                  to="/assessments"
+                  to="/panic-mode"
                   className="
                     mt-3
-                    inline-flex
+                    flex
+                    w-full
                     items-center
-                    gap-1
+                    justify-center
+                    gap-2
+                    rounded-xl
+                    bg-rose-600
+                    px-4
+                    py-3
                     text-xs
-                    font-bold
-                    text-sky-600
-                    hover:underline
+                    font-black
+                    text-white
+                    shadow-sm
+                    transition-colors
+                    hover:bg-rose-700
 
-                    dark:text-sky-400
+                    dark:bg-rose-500
+                    dark:hover:bg-rose-400
                   "
                 >
-                  Take your first quiz
+                  Start Panic Mode
 
                   <ArrowRight
                     className="
-                      h-3
-                      w-3
+                      h-4
+                      w-4
                     "
                   />
                 </Link>
               </div>
-            )}
+            </div>
           </div>
         </DashboardPanel>
 
