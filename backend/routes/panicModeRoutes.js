@@ -1,4 +1,4 @@
-const express = require('express');
+const express = require("express");
 
 const router = express.Router();
 
@@ -6,78 +6,90 @@ const {
   createPanicPlan,
   getActivePanicPlan,
   updateChapterProgress,
+  generateTargetedPractice,
+  checkPracticeAnswer,
+  completeTargetedPractice,
   saveFixTestResult,
-  resetPanicPlan
+  resetPanicPlan,
 } = require(
-  '../controllers/panicModeController'
+  "../controllers/panicModeController"
 );
 
 const {
   protect,
-  authorizeRoles
-} = require(
-  '../middleware/auth'
-);
+  authorizeRoles,
+} = require("../middleware/auth");
 
-/*
-|--------------------------------------------------------------------------
-| All Panic Mode routes are student-only
-|--------------------------------------------------------------------------
-*/
+// ============================================
+// ALL PANIC MODE ROUTES ARE STUDENT ONLY
+// ============================================
+
+router.use(protect);
 
 router.use(
-  protect
+  authorizeRoles("student")
 );
 
-router.use(
-  authorizeRoles('student')
-);
+// ============================================
+// PANIC PLAN
+// ============================================
 
-/*
-|--------------------------------------------------------------------------
-| PANIC PLAN
-|--------------------------------------------------------------------------
-*/
-
-// Create a new plan
+// Create Panic Mode plan
 router.post(
-  '/plan',
+  "/plan",
   createPanicPlan
 );
 
-// Get current active plan
+// Get active Panic Mode plan
 router.get(
-  '/plan',
+  "/plan",
   getActivePanicPlan
 );
 
-// Reset current plan
+// Reset active Panic Mode plan
 router.delete(
-  '/plan',
+  "/plan",
   resetPanicPlan
 );
 
-/*
-|--------------------------------------------------------------------------
-| CHAPTER PROGRESS
-|--------------------------------------------------------------------------
-*/
+// ============================================
+// CHAPTER PROGRESS
+// ============================================
 
-// Mark Study Notes / practice progress
+// Save Study Notes revision progress
 router.patch(
-  '/chapters/:chapterId',
+  "/chapters/:chapterId",
   updateChapterProgress
 );
 
-/*
-|--------------------------------------------------------------------------
-| FIX TEST
-|--------------------------------------------------------------------------
-*/
+// ============================================
+// TARGETED PRACTICE
+// ============================================
 
-// Save Fix Test result
+// Generate targeted practice questions
 router.post(
-  '/chapters/:chapterId/fix-test',
+  "/chapters/:chapterId/practice",
+  generateTargetedPractice
+);
+
+// Check one answer
+router.post(
+  "/chapters/:chapterId/practice/check",
+  checkPracticeAnswer
+);
+
+// Complete targeted practice
+router.post(
+  "/chapters/:chapterId/practice/complete",
+  completeTargetedPractice
+);
+
+// ============================================
+// FIX TEST
+// ============================================
+
+router.post(
+  "/chapters/:chapterId/fix-test",
   saveFixTestResult
 );
 
