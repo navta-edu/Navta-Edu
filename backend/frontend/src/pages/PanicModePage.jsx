@@ -1,22 +1,42 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useEffect,
+  useMemo,
+  useState
+} from 'react';
+
+import {
+  Link
+} from 'react-router-dom';
 
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   BookOpen,
   BrainCircuit,
+  Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Flame,
+  Loader2,
+  Lock,
   RotateCcw,
   Sparkles,
   Target,
-  TimerReset,
+  X,
+  XCircle,
   Zap
 } from 'lucide-react';
 
-import { Link } from 'react-router-dom';
-import { panicModeAPI } from '../utils/api';
+import {
+  panicModeAPI
+} from '../utils/api';
+
+// ============================================
+// OPTIONS
+// ============================================
 
 const EXAM_OPTIONS = [
   {
@@ -82,198 +102,459 @@ const STUDY_TIME_OPTIONS = [
   }
 ];
 
-const PRACTICE_QUESTION_COUNT = {
+const PRACTICE_COUNT = {
   tomorrow: 5,
   '3-days': 10,
   '7-days': 15,
   '14-days': 20
 };
 
+// ============================================
+// HELPERS
+// ============================================
+
+function getErrorMessage(
+  error,
+  fallback = 'Something went wrong.'
+) {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    fallback
+  );
+}
+
+function chapterId(chapter) {
+  return String(
+    chapter?._id ||
+    chapter?.id ||
+    ''
+  );
+}
+
+function getOptionText(option) {
+  if (
+    option === null ||
+    option === undefined
+  ) {
+    return '';
+  }
+
+  if (
+    typeof option === 'string' ||
+    typeof option === 'number'
+  ) {
+    return String(option);
+  }
+
+  return (
+    option.text ||
+    option.label ||
+    option.value ||
+    ''
+  );
+}
+
+// ============================================
+// MAIN PAGE
+// ============================================
+
 export default function PanicModePage() {
-  const [exam, setExam] = useState('NEET');
-  const [examWindow, setExamWindow] = useState('3-days');
-  const [studyTime, setStudyTime] = useState('2-hours');
+  const [exam, setExam] =
+    useState('NEET');
 
-  const [session, setSession] = useState(null);
-  const [activeChapterId, setActiveChapterId] = useState('');
-  const [loadingPlan, setLoadingPlan] = useState(true);
-  const [creatingPlan, setCreatingPlan] = useState(false);
-  const [updatingProgress, setUpdatingProgress] = useState(false);
-  const [resettingPlan, setResettingPlan] = useState(false);
-  const [error, setError] = useState('');
+  const [
+    examWindow,
+    setExamWindow
+  ] = useState('3-days');
 
-  const planCreated = Boolean(session);
+  const [
+    studyTime,
+    setStudyTime
+  ] = useState('2-hours');
 
-  const selectedWindow = useMemo(
-    () =>
-      EXAM_WINDOWS.find(
-        (option) => option.id === examWindow
-      ) || EXAM_WINDOWS[1],
-    [examWindow]
-  );
+  const [
+    session,
+    setSession
+  ] = useState(null);
 
-  const selectedStudyTime = useMemo(
-    () =>
-      STUDY_TIME_OPTIONS.find(
-        (option) => option.id === studyTime
-      ) || STUDY_TIME_OPTIONS[1],
-    [studyTime]
-  );
+  const [
+    activeChapterId,
+    setActiveChapterId
+  ] = useState('');
 
-  const chapters = useMemo(
-    () => (Array.isArray(session?.chapters) ? session.chapters : []),
-    [session]
-  );
+  const [
+    loadingPlan,
+    setLoadingPlan
+  ] = useState(true);
 
-  const fixFirst = useMemo(
-    () =>
-      chapters.filter(
-        (item) =>
-          item.status === 'fix-first' &&
-          !item.fixTestPassed
-      ),
-    [chapters]
-  );
+  const [
+    creatingPlan,
+    setCreatingPlan
+  ] = useState(false);
 
-  const quickRevision = useMemo(
-    () =>
-      chapters.filter(
-        (item) => item.status === 'quick-revision'
-      ),
-    [chapters]
-  );
+  const [
+    resettingPlan,
+    setResettingPlan
+  ] = useState(false);
 
-  const strong = useMemo(
-    () =>
-      chapters.filter(
-        (item) =>
-          item.status === 'strong' ||
-          item.status === 'fixed' ||
-          item.fixTestPassed
-      ),
-    [chapters]
-  );
+  const [
+    updatingProgress,
+    setUpdatingProgress
+  ] = useState(false);
 
-  const activeChapter = useMemo(
-    () =>
-      chapters.find(
-        (item) => String(item._id) === String(activeChapterId)
-      ) ||
-      fixFirst[0] ||
-      quickRevision[0] ||
-      strong[0] ||
-      null,
-    [
-      chapters,
-      activeChapterId,
-      fixFirst,
-      quickRevision,
-      strong
-    ]
-  );
+  const [
+    error,
+    setError
+  ] = useState('');
 
-  const progress = {
-    revised: Boolean(activeChapter?.revised),
-    practised: Boolean(activeChapter?.practised),
-    fixTestPassed: Boolean(activeChapter?.fixTestPassed)
-  };
+  // ============================================
+  // PRACTICE STATE
+  // ============================================
 
-  const practiceCount =
-    Number(session?.practiceQuestionCount) ||
-    PRACTICE_QUESTION_COUNT[examWindow] ||
-    10;
+  const [
+    practice,
+    setPractice
+  ] = useState(null);
 
-  const getErrorMessage = (requestError, fallback) => {
-    return (
-      requestError?.response?.data?.message ||
-      requestError?.message ||
-      fallback
-    );
-  };
+  const [
+    loadingPractice,
+    setLoadingPractice
+  ] = useState(false);
 
-  const syncSession = (nextSession) => {
-    setSession(nextSession || null);
+  const [
+    practiceIndex,
+    setPracticeIndex
+  ] = useState(0);
 
-    const nextChapters = Array.isArray(nextSession?.chapters)
-      ? nextSession.chapters
+  const [
+    selectedAnswers,
+    setSelectedAnswers
+  ] = useState({});
+
+  const [
+    answerFeedback,
+    setAnswerFeedback
+  ] = useState({});
+
+  const [
+    checkingAnswer,
+    setCheckingAnswer
+  ] = useState(false);
+
+  const [
+    completingPractice,
+    setCompletingPractice
+  ] = useState(false);
+
+  const [
+    practiceMessage,
+    setPracticeMessage
+  ] = useState('');
+
+  // ============================================
+  // DERIVED DATA
+  // ============================================
+
+  const chapters =
+    Array.isArray(
+      session?.chapters
+    )
+      ? session.chapters
       : [];
 
-    if (nextChapters.length === 0) {
+  const fixFirst =
+    chapters.filter(
+      (chapter) =>
+        chapter.status ===
+          'fix-first' &&
+        !chapter.fixTestPassed
+    );
+
+  const quickRevision =
+    chapters.filter(
+      (chapter) =>
+        chapter.status ===
+        'quick-revision'
+    );
+
+  const strong =
+    chapters.filter(
+      (chapter) =>
+        chapter.status ===
+          'strong' ||
+        chapter.status ===
+          'fixed' ||
+        chapter.fixTestPassed
+    );
+
+  const activeChapter =
+    chapters.find(
+      (chapter) =>
+        chapterId(chapter) ===
+        activeChapterId
+    ) ||
+    fixFirst[0] ||
+    quickRevision[0] ||
+    strong[0] ||
+    null;
+
+  const progress = {
+    revised:
+      Boolean(
+        activeChapter?.revised
+      ),
+
+    practised:
+      Boolean(
+        activeChapter?.practised
+      ),
+
+    fixTestPassed:
+      Boolean(
+        activeChapter?.fixTestPassed
+      )
+  };
+
+  const selectedWindow =
+    EXAM_WINDOWS.find(
+      (option) =>
+        option.id ===
+        (
+          session?.examWindow ||
+          examWindow
+        )
+    ) ||
+    EXAM_WINDOWS[1];
+
+  const selectedStudyTime =
+    STUDY_TIME_OPTIONS.find(
+      (option) =>
+        Number(
+          option.minutes
+        ) ===
+        Number(
+          session?.studyTimeMinutes
+        )
+    ) ||
+    STUDY_TIME_OPTIONS.find(
+      (option) =>
+        option.id === studyTime
+    ) ||
+    STUDY_TIME_OPTIONS[1];
+
+  const practiceCount =
+    Number(
+      session?.practiceQuestionCount
+    ) ||
+    PRACTICE_COUNT[
+      session?.examWindow ||
+      examWindow
+    ] ||
+    10;
+
+  const planCreated =
+    Boolean(session);
+
+  // ============================================
+  // PRACTICE DERIVED DATA
+  // ============================================
+
+  const practiceQuestions =
+    Array.isArray(
+      practice?.questions
+    )
+      ? practice.questions
+      : [];
+
+  const currentPracticeQuestion =
+    practiceQuestions[
+      practiceIndex
+    ] || null;
+
+  const currentQuestionId =
+    String(
+      currentPracticeQuestion?._id ||
+      ''
+    );
+
+  const currentFeedback =
+    answerFeedback[
+      currentQuestionId
+    ] || null;
+
+  const answeredQuestionCount =
+    Object.keys(
+      answerFeedback
+    ).length;
+
+  const allPracticeAnswered =
+    practiceQuestions.length > 0 &&
+    answeredQuestionCount >=
+      practiceQuestions.length;
+
+  const practiceCorrectCount =
+    Object.values(
+      answerFeedback
+    ).filter(
+      (item) =>
+        item?.isCorrect
+    ).length;
+
+  const practicePercentage =
+    practiceQuestions.length
+      ? Math.round(
+          (
+            practiceCorrectCount /
+            practiceQuestions.length
+          ) * 100
+        )
+      : 0;
+
+  // ============================================
+  // SYNC SESSION
+  // ============================================
+
+  const syncSession = (
+    nextSession
+  ) => {
+    setSession(
+      nextSession || null
+    );
+
+    if (
+      !nextSession
+    ) {
       setActiveChapterId('');
       return;
     }
 
-    setActiveChapterId((currentId) => {
-      const stillExists = nextChapters.some(
-        (item) => String(item._id) === String(currentId)
-      );
+    const nextChapters =
+      Array.isArray(
+        nextSession.chapters
+      )
+        ? nextSession.chapters
+        : [];
 
-      if (stillExists) {
-        return currentId;
+    if (
+      nextChapters.length === 0
+    ) {
+      setActiveChapterId('');
+      return;
+    }
+
+    setActiveChapterId(
+      (currentId) => {
+        const stillExists =
+          nextChapters.some(
+            (chapter) =>
+              chapterId(
+                chapter
+              ) ===
+              currentId
+          );
+
+        if (stillExists) {
+          return currentId;
+        }
+
+        const firstWeak =
+          nextChapters.find(
+            (chapter) =>
+              chapter.status ===
+                'fix-first' &&
+              !chapter.fixTestPassed
+          );
+
+        return chapterId(
+          firstWeak ||
+          nextChapters[0]
+        );
       }
-
-      const preferred =
-        nextChapters.find(
-          (item) =>
-            item.status === 'fix-first' &&
-            !item.fixTestPassed
-        ) ||
-        nextChapters.find(
-          (item) => item.status === 'quick-revision'
-        ) ||
-        nextChapters[0];
-
-      return String(preferred?._id || '');
-    });
+    );
   };
+
+  // ============================================
+  // LOAD EXISTING PLAN
+  // ============================================
 
   useEffect(() => {
     let active = true;
 
-    const loadPlan = async () => {
-      setLoadingPlan(true);
-      setError('');
+    const loadPlan =
+      async () => {
+        setLoadingPlan(true);
+        setError('');
 
-      try {
-        const response = await panicModeAPI.getPlan();
-        const existingSession = response?.data?.session || null;
+        try {
+          const response =
+            await panicModeAPI.getPlan();
 
-        if (!active) {
-          return;
-        }
+          const existingSession =
+            response?.data
+              ?.session ||
+            null;
 
-        if (existingSession) {
-          setExam(existingSession.exam || 'NEET');
-          setExamWindow(existingSession.examWindow || '3-days');
-
-          const matchingStudyTime =
-            STUDY_TIME_OPTIONS.find(
-              (option) =>
-                Number(option.minutes) ===
-                Number(existingSession.studyTimeMinutes)
-            );
-
-          if (matchingStudyTime) {
-            setStudyTime(matchingStudyTime.id);
+          if (!active) {
+            return;
           }
 
-          syncSession(existingSession);
+          if (
+            existingSession
+          ) {
+            setExam(
+              existingSession.exam ||
+              'NEET'
+            );
+
+            setExamWindow(
+              existingSession.examWindow ||
+              '3-days'
+            );
+
+            const matchingTime =
+              STUDY_TIME_OPTIONS.find(
+                (option) =>
+                  Number(
+                    option.minutes
+                  ) ===
+                  Number(
+                    existingSession
+                      .studyTimeMinutes
+                  )
+              );
+
+            if (
+              matchingTime
+            ) {
+              setStudyTime(
+                matchingTime.id
+              );
+            }
+
+            syncSession(
+              existingSession
+            );
+          }
+        } catch (
+          requestError
+        ) {
+          if (active) {
+            setError(
+              getErrorMessage(
+                requestError,
+                'Unable to load your Panic Mode plan.'
+              )
+            );
+          }
+        } finally {
+          if (active) {
+            setLoadingPlan(
+              false
+            );
+          }
         }
-      } catch (requestError) {
-        if (active) {
-          setError(
-            getErrorMessage(
-              requestError,
-              'Unable to load your Panic Mode plan.'
-            )
-          );
-        }
-      } finally {
-        if (active) {
-          setLoadingPlan(false);
-        }
-      }
-    };
+      };
 
     loadPlan();
 
@@ -282,94 +563,372 @@ export default function PanicModePage() {
     };
   }, []);
 
-  const changeActiveChapter = (chapterId) => {
-    setActiveChapterId(String(chapterId));
-    setError('');
-  };
+  // ============================================
+  // CREATE PLAN
+  // ============================================
 
-  const createPlan = async () => {
-    const selectedStudyOption =
-      STUDY_TIME_OPTIONS.find(
-        (option) => option.id === studyTime
-      ) || STUDY_TIME_OPTIONS[1];
+  const createPlan =
+    async () => {
+      const studyOption =
+        STUDY_TIME_OPTIONS.find(
+          (option) =>
+            option.id ===
+            studyTime
+        ) ||
+        STUDY_TIME_OPTIONS[1];
 
-    setCreatingPlan(true);
-    setError('');
+      setCreatingPlan(true);
+      setError('');
 
-    try {
-      const response = await panicModeAPI.createPlan({
-        exam,
-        examWindow,
-        studyTimeMinutes: selectedStudyOption.minutes
-      });
+      try {
+        const response =
+          await panicModeAPI.createPlan({
+            exam,
 
-      const nextSession = response?.data?.session || null;
-      syncSession(nextSession);
+            examWindow,
 
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
-    } catch (requestError) {
-      setError(
-        getErrorMessage(
-          requestError,
-          'Unable to build your Panic Mode plan.'
-        )
+            studyTimeMinutes:
+              studyOption.minutes
+          });
+
+        syncSession(
+          response?.data
+            ?.session ||
+          null
+        );
+      } catch (
+        requestError
+      ) {
+        setError(
+          getErrorMessage(
+            requestError,
+            'Unable to build your Panic Mode plan.'
+          )
+        );
+      } finally {
+        setCreatingPlan(
+          false
+        );
+      }
+    };
+
+  // ============================================
+  // RESET PLAN
+  // ============================================
+
+  const resetPlan =
+    async () => {
+      setResettingPlan(true);
+      setError('');
+
+      try {
+        await panicModeAPI.resetPlan();
+
+        setSession(null);
+        setActiveChapterId('');
+        closePractice();
+      } catch (
+        requestError
+      ) {
+        setError(
+          getErrorMessage(
+            requestError,
+            'Unable to reset Panic Mode.'
+          )
+        );
+      } finally {
+        setResettingPlan(
+          false
+        );
+      }
+    };
+
+  // ============================================
+  // UPDATE REVISION
+  // ============================================
+
+  const markRevised =
+    async () => {
+      if (
+        !activeChapter?._id
+      ) {
+        return;
+      }
+
+      setUpdatingProgress(
+        true
       );
-    } finally {
-      setCreatingPlan(false);
-    }
-  };
 
-  const resetPlan = async () => {
-    setResettingPlan(true);
-    setError('');
+      setError('');
 
-    try {
-      await panicModeAPI.resetPlan();
+      try {
+        const response =
+          await panicModeAPI
+            .updateChapterProgress(
+              activeChapter._id,
+              {
+                revised: true
+              }
+            );
 
-      setSession(null);
-      setActiveChapterId('');
-    } catch (requestError) {
-      setError(
-        getErrorMessage(
-          requestError,
-          'Unable to reset your Panic Mode plan.'
-        )
-      );
-    } finally {
-      setResettingPlan(false);
-    }
-  };
+        syncSession(
+          response?.data
+            ?.session ||
+          session
+        );
+      } catch (
+        requestError
+      ) {
+        setError(
+          getErrorMessage(
+            requestError,
+            'Unable to update revision progress.'
+          )
+        );
+      } finally {
+        setUpdatingProgress(
+          false
+        );
+      }
+    };
 
-  const updateProgress = async (updates) => {
-    if (!activeChapter?._id) {
+  // ============================================
+  // START TARGETED PRACTICE
+  // ============================================
+
+  const startPractice =
+    async () => {
+      if (
+        !activeChapter?._id
+      ) {
+        return;
+      }
+
+      setLoadingPractice(true);
+      setPracticeMessage('');
+      setError('');
+
+      try {
+        const response =
+          await panicModeAPI
+            .generatePractice(
+              activeChapter._id
+            );
+
+        const nextPractice =
+          response?.data
+            ?.practice ||
+          null;
+
+        setPractice(
+          nextPractice
+        );
+
+        setPracticeIndex(0);
+
+        setSelectedAnswers(
+          {}
+        );
+
+        setAnswerFeedback(
+          {}
+        );
+
+        setPracticeMessage(
+          response?.message ||
+          ''
+        );
+      } catch (
+        requestError
+      ) {
+        setError(
+          getErrorMessage(
+            requestError,
+            'Unable to generate targeted practice.'
+          )
+        );
+      } finally {
+        setLoadingPractice(
+          false
+        );
+      }
+    };
+
+  // ============================================
+  // SELECT PRACTICE ANSWER
+  // ============================================
+
+  const selectPracticeAnswer = (
+    optionIndex
+  ) => {
+    if (
+      !currentQuestionId ||
+      currentFeedback
+    ) {
       return;
     }
 
-    setUpdatingProgress(true);
-    setError('');
+    setSelectedAnswers(
+      (previous) => ({
+        ...previous,
 
-    try {
-      const response =
-        await panicModeAPI.updateChapterProgress(
-          activeChapter._id,
-          updates
+        [currentQuestionId]:
+          optionIndex
+      })
+    );
+  };
+
+  // ============================================
+  // CHECK PRACTICE ANSWER
+  // ============================================
+
+  const checkPracticeAnswer =
+    async () => {
+      if (
+        !activeChapter?._id ||
+        !currentQuestionId
+      ) {
+        return;
+      }
+
+      const selectedOption =
+        selectedAnswers[
+          currentQuestionId
+        ];
+
+      if (
+        selectedOption ===
+          undefined ||
+        selectedOption ===
+          null
+      ) {
+        setPracticeMessage(
+          'Select an answer first.'
         );
 
-      syncSession(response?.data?.session || session);
-    } catch (requestError) {
-      setError(
-        getErrorMessage(
-          requestError,
-          'Unable to update Panic Mode progress.'
-        )
+        return;
+      }
+
+      setCheckingAnswer(true);
+      setPracticeMessage('');
+
+      try {
+        const response =
+          await panicModeAPI
+            .checkPracticeAnswer(
+              activeChapter._id,
+              {
+                questionId:
+                  currentQuestionId,
+
+                selectedOption
+              }
+            );
+
+        const feedback =
+          response?.data ||
+          null;
+
+        setAnswerFeedback(
+          (previous) => ({
+            ...previous,
+
+            [currentQuestionId]:
+              feedback
+          })
+        );
+      } catch (
+        requestError
+      ) {
+        setPracticeMessage(
+          getErrorMessage(
+            requestError,
+            'Unable to check this answer.'
+          )
+        );
+      } finally {
+        setCheckingAnswer(
+          false
+        );
+      }
+    };
+
+  // ============================================
+  // COMPLETE PRACTICE
+  // ============================================
+
+  const completePractice =
+    async () => {
+      if (
+        !activeChapter?._id ||
+        !allPracticeAnswered
+      ) {
+        return;
+      }
+
+      setCompletingPractice(
+        true
       );
-    } finally {
-      setUpdatingProgress(false);
-    }
-  };
+
+      setPracticeMessage('');
+
+      try {
+        const questionIds =
+          practiceQuestions.map(
+            (question) =>
+              String(
+                question._id
+              )
+          );
+
+        const response =
+          await panicModeAPI
+            .completePractice(
+              activeChapter._id,
+              questionIds
+            );
+
+        syncSession(
+          response?.data
+            ?.session ||
+          session
+        );
+
+        setPracticeMessage(
+          response?.message ||
+          'Targeted practice completed.'
+        );
+      } catch (
+        requestError
+      ) {
+        setPracticeMessage(
+          getErrorMessage(
+            requestError,
+            'Unable to complete targeted practice.'
+          )
+        );
+      } finally {
+        setCompletingPractice(
+          false
+        );
+      }
+    };
+
+  // ============================================
+  // CLOSE PRACTICE
+  // ============================================
+
+  function closePractice() {
+    setPractice(null);
+    setPracticeIndex(0);
+    setSelectedAnswers({});
+    setAnswerFeedback({});
+    setPracticeMessage('');
+  }
+
+  // ============================================
+  // RENDER
+  // ============================================
 
   return (
     <div
@@ -388,16 +947,19 @@ export default function PanicModePage() {
           max-w-7xl
         "
       >
+        {/* ====================================
+            HERO
+        ==================================== */}
+
         <section
           className="
-            relative
             overflow-hidden
             rounded-[28px]
             border
-            border-rose-200/80
+            border-rose-200
             bg-gradient-to-br
             from-white
-            via-rose-50/70
+            via-rose-50
             to-orange-50
             p-6
             shadow-lg
@@ -405,134 +967,142 @@ export default function PanicModePage() {
 
             dark:border-rose-500/20
             dark:from-slate-950
-            dark:via-rose-950/15
+            dark:via-rose-950/20
             dark:to-orange-950/10
           "
         >
+          <Link
+            to="/dashboard"
+            className="
+              inline-flex
+              items-center
+              gap-2
+              text-sm
+              font-bold
+              text-slate-600
+
+              dark:text-slate-300
+            "
+          >
+            <ArrowLeft
+              className="h-4 w-4"
+            />
+
+            Dashboard
+          </Link>
+
           <div
             className="
-              pointer-events-none
-              absolute
-              -right-20
-              -top-20
-              h-56
-              w-56
-              rounded-full
-              bg-rose-400/15
-              blur-3xl
+              mt-6
+              flex
+              flex-col
+              gap-6
+              lg:flex-row
+              lg:items-end
+              lg:justify-between
             "
-          />
+          >
+            <div>
+              <div
+                className="
+                  inline-flex
+                  items-center
+                  gap-2
+                  rounded-full
+                  bg-rose-100
+                  px-3
+                  py-2
+                  text-xs
+                  font-black
+                  uppercase
+                  tracking-wider
+                  text-rose-600
 
-          <div className="relative">
-            <div
-              className="
-                inline-flex
-                items-center
-                gap-2
-                rounded-full
-                border
-                border-rose-200
-                bg-white/80
-                px-3
-                py-2
-                text-xs
-                font-black
-                uppercase
-                tracking-[0.16em]
-                text-rose-600
+                  dark:bg-rose-500/10
+                  dark:text-rose-300
+                "
+              >
+                <AlertTriangle
+                  className="h-4 w-4"
+                />
 
-                dark:border-rose-500/20
-                dark:bg-white/5
-                dark:text-rose-300
-              "
-            >
-              <AlertTriangle className="h-4 w-4" />
-              Emergency Revision System
+                Emergency Revision
+              </div>
+
+              <h1
+                className="
+                  mt-4
+                  text-3xl
+                  font-black
+                  text-slate-950
+                  sm:text-4xl
+
+                  dark:text-white
+                "
+              >
+                🚨 Panic Mode
+              </h1>
+
+              <p
+                className="
+                  mt-4
+                  max-w-3xl
+                  leading-7
+                  text-slate-600
+
+                  dark:text-slate-300
+                "
+              >
+                Fix your weakest
+                chapters first.
+                Revise the notes,
+                practise targeted
+                questions, then prove
+                the weakness is fixed.
+              </p>
             </div>
 
             <div
               className="
-                mt-5
                 grid
-                gap-6
-                lg:grid-cols-[1.15fr_0.85fr]
-                lg:items-end
+                grid-cols-3
+                gap-3
               "
             >
-              <div>
-                <h1
-                  className="
-                    text-3xl
-                    font-black
-                    tracking-tight
-                    text-slate-950
-                    sm:text-4xl
-                    lg:text-5xl
+              <HeroMetric
+                icon={BookOpen}
+                label="Step 1"
+                value="Revise"
+              />
 
-                    dark:text-white
-                  "
-                >
-                  🚨 Panic Mode
-                </h1>
+              <HeroMetric
+                icon={BrainCircuit}
+                label="Step 2"
+                value="Practice"
+              />
 
-                <p
-                  className="
-                    mt-4
-                    max-w-3xl
-                    text-sm
-                    leading-7
-                    text-slate-600
-                    sm:text-base
-
-                    dark:text-slate-300
-                  "
-                >
-                  When your exam is close, do not revise everything.
-                  NAVTA helps you focus on weak chapters first:
-                  revise the Study Notes, practise targeted questions,
-                  then complete a Fix Test.
-                </p>
-              </div>
-
-              <div
-                className="
-                  grid
-                  grid-cols-3
-                  gap-3
-                "
-              >
-                <HeroMetric
-                  icon={BookOpen}
-                  label="Revise"
-                  value="Notes"
-                />
-
-                <HeroMetric
-                  icon={BrainCircuit}
-                  label="Practise"
-                  value="Targeted"
-                />
-
-                <HeroMetric
-                  icon={Target}
-                  label="Fix"
-                  value="70%+"
-                />
-              </div>
+              <HeroMetric
+                icon={Target}
+                label="Step 3"
+                value="70%+"
+              />
             </div>
           </div>
         </section>
 
+        {/* ====================================
+            ERROR
+        ==================================== */}
+
         {error && (
           <div
             className="
-              mt-6
+              mt-5
               rounded-2xl
               border
               border-rose-200
               bg-rose-50
-              px-4
-              py-3
+              p-4
               text-sm
               font-bold
               text-rose-700
@@ -546,335 +1116,638 @@ export default function PanicModePage() {
           </div>
         )}
 
+        {/* ====================================
+            LOADING
+        ==================================== */}
+
         {loadingPlan ? (
-          <section
-            className="
-              mt-6
-              rounded-[26px]
-              border
-              border-slate-200
-              bg-white/90
-              p-8
-              text-center
-              shadow-sm
-
-              dark:border-slate-800
-              dark:bg-slate-950/70
-            "
-          >
-            <p
-              className="
-                text-sm
-                font-black
-                text-slate-700
-
-                dark:text-slate-200
-              "
-            >
-              Loading your Panic Mode plan...
-            </p>
-          </section>
+          <LoadingCard
+            text="Loading your Panic Mode plan..."
+          />
         ) : !planCreated ? (
-          <section
-            className="
-              mt-6
-              rounded-[26px]
-              border
-              border-slate-200
-              bg-white/90
-              p-5
-              shadow-md
-              sm:p-7
-
-              dark:border-slate-800
-              dark:bg-slate-950/70
-            "
-          >
-            <div>
-              <p
-                className="
-                  text-xs
-                  font-black
-                  uppercase
-                  tracking-[0.16em]
-                  text-rose-500
-                "
-              >
-                Build Your Emergency Plan
-              </p>
-
-              <h2
-                className="
-                  mt-2
-                  text-2xl
-                  font-black
-                  text-slate-950
-
-                  dark:text-white
-                "
-              >
-                Tell NAVTA how close your exam is.
-              </h2>
-
-              <p
-                className="
-                  mt-2
-                  text-sm
-                  leading-6
-                  text-slate-500
-
-                  dark:text-slate-400
-                "
-              >
-                NAVTA will analyse your real NAVTA TEST history
-                and build your Fix First, Quick Revision and Strong lists.
-              </p>
-            </div>
-
-            <div
-              className="
-                mt-7
-                space-y-7
-              "
-            >
-              <ChoiceGroup
-                title="Preparing for"
-                options={EXAM_OPTIONS}
-                value={exam}
-                onChange={setExam}
-              />
-
-              <ChoiceGroup
-                title="Exam in"
-                options={EXAM_WINDOWS}
-                value={examWindow}
-                onChange={setExamWindow}
-              />
-
-              <ChoiceGroup
-                title="Available study time today"
-                options={STUDY_TIME_OPTIONS}
-                value={studyTime}
-                onChange={setStudyTime}
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={createPlan}
-              disabled={creatingPlan || loadingPlan}
-              className="
-                mt-8
-                inline-flex
-                w-full
-                items-center
-                justify-center
-                gap-2
-                rounded-2xl
-                bg-rose-600
-                px-5
-                py-3.5
-                text-sm
-                font-black
-                text-white
-                shadow-sm
-                transition-colors
-                hover:bg-rose-700
-                sm:w-auto
-
-                dark:bg-rose-500
-                dark:hover:bg-rose-400
-              "
-            >
-              <Sparkles className="h-4 w-4" />
-              {creatingPlan ? 'Building Plan...' : 'Build My Panic Plan'}
-            </button>
-          </section>
+          <PlanBuilder
+            exam={exam}
+            setExam={setExam}
+            examWindow={
+              examWindow
+            }
+            setExamWindow={
+              setExamWindow
+            }
+            studyTime={
+              studyTime
+            }
+            setStudyTime={
+              setStudyTime
+            }
+            creatingPlan={
+              creatingPlan
+            }
+            createPlan={
+              createPlan
+            }
+          />
         ) : (
-          <div
-            className="
-              mt-6
-              grid
-              gap-6
-              xl:grid-cols-[0.78fr_1.22fr]
-            "
-          >
+          <>
+            {/* =================================
+                PLAN SUMMARY
+            ================================= */}
+
             <section
               className="
-                space-y-5
-              "
-            >
-              <div
-                className="
-                  rounded-[24px]
-                  border
-                  border-slate-200
-                  bg-white/90
-                  p-5
-                  shadow-sm
-
-                  dark:border-slate-800
-                  dark:bg-slate-950/70
-                "
-              >
-                <div
-                  className="
-                    flex
-                    flex-wrap
-                    items-center
-                    justify-between
-                    gap-3
-                  "
-                >
-                  <div>
-                    <p
-                      className="
-                        text-[10px]
-                        font-black
-                        uppercase
-                        tracking-[0.16em]
-                        text-slate-500
-                      "
-                    >
-                      Current Panic Plan
-                    </p>
-
-                    <h2
-                      className="
-                        mt-1
-                        text-xl
-                        font-black
-                        text-slate-950
-
-                        dark:text-white
-                      "
-                    >
-                      {session?.exam || exam} • {selectedWindow.label}
-                    </h2>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={resetPlan}
-                    disabled={resettingPlan}
-                    className="
-                      inline-flex
-                      items-center
-                      gap-2
-                      rounded-xl
-                      border
-                      border-slate-200
-                      bg-white
-                      px-3
-                      py-2
-                      text-xs
-                      font-bold
-                      text-slate-600
-                      transition-colors
-                      hover:bg-slate-50
-
-                      dark:border-slate-700
-                      dark:bg-slate-900
-                      dark:text-slate-300
-                      dark:hover:bg-slate-800
-                    "
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    {resettingPlan ? 'Resetting...' : 'Change Plan'}
-                  </button>
-                </div>
-
-                <div
-                  className="
-                    mt-4
-                    grid
-                    grid-cols-2
-                    gap-3
-                  "
-                >
-                  <SummaryMetric
-                    icon={Clock3}
-                    label="Time Today"
-                    value={selectedStudyTime.label}
-                  />
-
-                  <SummaryMetric
-                    icon={Zap}
-                    label="Practice Set"
-                    value={`${practiceCount} Questions`}
-                  />
-                </div>
-              </div>
-
-              <PrioritySection
-                title="🔴 Fix First"
-                subtitle="These chapters need attention before the exam."
-                items={fixFirst}
-                activeChapterId={activeChapterId}
-                onSelect={changeActiveChapter}
-                tone="rose"
-              />
-
-              <PrioritySection
-                title="🟡 Quick Revision"
-                subtitle="Review these after Fix First."
-                items={quickRevision}
-                activeChapterId={activeChapterId}
-                onSelect={changeActiveChapter}
-                tone="amber"
-              />
-
-              <PrioritySection
-                title="🟢 Already Strong"
-                subtitle="Do not spend too much time here."
-                items={strong}
-                activeChapterId={activeChapterId}
-                onSelect={changeActiveChapter}
-                tone="emerald"
-              />
-            </section>
-
-            {activeChapter ? (
-            <section
-              className="
-                rounded-[26px]
+                mt-6
+                rounded-[24px]
                 border
                 border-slate-200
-                bg-white/90
+                bg-white
                 p-5
-                shadow-md
-                sm:p-7
+                shadow-sm
 
                 dark:border-slate-800
-                dark:bg-slate-950/70
+                dark:bg-slate-950
               "
             >
               <div
                 className="
                   flex
-                  flex-col
+                  flex-wrap
+                  items-center
+                  justify-between
                   gap-4
-                  sm:flex-row
-                  sm:items-center
-                  sm:justify-between
                 "
               >
                 <div>
                   <p
                     className="
-                      text-[10px]
+                      text-xs
                       font-black
                       uppercase
-                      tracking-[0.16em]
+                      tracking-wider
                       text-rose-500
                     "
                   >
-                    Fix Session
+                    Current Plan
                   </p>
 
                   <h2
                     className="
                       mt-1
+                      text-xl
+                      font-black
+                      text-slate-950
+
+                      dark:text-white
+                    "
+                  >
+                    {session.exam}
+                    {' • '}
+                    {
+                      selectedWindow.label
+                    }
+                  </h2>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={
+                    resetPlan
+                  }
+                  disabled={
+                    resettingPlan
+                  }
+                  className="
+                    inline-flex
+                    items-center
+                    gap-2
+                    rounded-xl
+                    border
+                    border-slate-200
+                    px-4
+                    py-2
+                    text-xs
+                    font-black
+                    text-slate-600
+
+                    dark:border-slate-700
+                    dark:text-slate-300
+                  "
+                >
+                  <RotateCcw
+                    className="h-4 w-4"
+                  />
+
+                  {resettingPlan
+                    ? 'Resetting...'
+                    : 'Change Plan'}
+                </button>
+              </div>
+
+              <div
+                className="
+                  mt-4
+                  grid
+                  gap-3
+                  sm:grid-cols-3
+                "
+              >
+                <SummaryMetric
+                  icon={Clock3}
+                  label="Time Today"
+                  value={
+                    selectedStudyTime.label
+                  }
+                />
+
+                <SummaryMetric
+                  icon={Zap}
+                  label="Practice"
+                  value={`${practiceCount} Questions`}
+                />
+
+                <SummaryMetric
+                  icon={Target}
+                  label="Fix Target"
+                  value="70%+"
+                />
+              </div>
+            </section>
+
+            {chapters.length === 0 ? (
+              <EmptyHistory />
+            ) : (
+              <div
+                className="
+                  mt-6
+                  grid
+                  gap-6
+                  xl:grid-cols-[0.8fr_1.2fr]
+                "
+              >
+                {/* =============================
+                    CHAPTER LIST
+                ============================= */}
+
+                <div
+                  className="
+                    space-y-5
+                  "
+                >
+                  <PrioritySection
+                    title="🔴 Fix First"
+                    subtitle="Your weakest chapters."
+                    items={fixFirst}
+                    activeChapterId={
+                      chapterId(
+                        activeChapter
+                      )
+                    }
+                    onSelect={
+                      setActiveChapterId
+                    }
+                  />
+
+                  <PrioritySection
+                    title="🟡 Quick Revision"
+                    subtitle="Review after your weakest chapters."
+                    items={
+                      quickRevision
+                    }
+                    activeChapterId={
+                      chapterId(
+                        activeChapter
+                      )
+                    }
+                    onSelect={
+                      setActiveChapterId
+                    }
+                  />
+
+                  <PrioritySection
+                    title="🟢 Strong"
+                    subtitle="Already performing well."
+                    items={strong}
+                    activeChapterId={
+                      chapterId(
+                        activeChapter
+                      )
+                    }
+                    onSelect={
+                      setActiveChapterId
+                    }
+                  />
+                </div>
+
+                {/* =============================
+                    WORKFLOW
+                ============================= */}
+
+                {activeChapter && (
+                  <section
+                    className="
+                      rounded-[26px]
+                      border
+                      border-slate-200
+                      bg-white
+                      p-5
+                      shadow-md
+                      sm:p-7
+
+                      dark:border-slate-800
+                      dark:bg-slate-950
+                    "
+                  >
+                    <div
+                      className="
+                        flex
+                        flex-wrap
+                        items-start
+                        justify-between
+                        gap-4
+                      "
+                    >
+                      <div>
+                        <p
+                          className="
+                            text-xs
+                            font-black
+                            uppercase
+                            tracking-wider
+                            text-rose-500
+                          "
+                        >
+                          Fix Session
+                        </p>
+
+                        <h2
+                          className="
+                            mt-1
+                            text-2xl
+                            font-black
+                            text-slate-950
+
+                            dark:text-white
+                          "
+                        >
+                          {
+                            activeChapter.chapter
+                          }
+                        </h2>
+
+                        <p
+                          className="
+                            mt-1
+                            text-sm
+                            text-slate-500
+
+                            dark:text-slate-400
+                          "
+                        >
+                          {
+                            activeChapter.subject
+                          }
+                          {' • '}
+                          Recent accuracy{' '}
+                          {
+                            activeChapter.accuracy
+                          }
+                          %
+                        </p>
+                      </div>
+
+                      <div
+                        className="
+                          rounded-2xl
+                          bg-rose-50
+                          px-5
+                          py-3
+                          text-center
+
+                          dark:bg-rose-500/10
+                        "
+                      >
+                        <p
+                          className="
+                            text-[10px]
+                            font-black
+                            uppercase
+                            text-rose-500
+                          "
+                        >
+                          Target
+                        </p>
+
+                        <p
+                          className="
+                            text-2xl
+                            font-black
+                            text-slate-950
+
+                            dark:text-white
+                          "
+                        >
+                          70%+
+                        </p>
+                      </div>
+                    </div>
+
+                    <div
+                      className="
+                        mt-7
+                        space-y-4
+                      "
+                    >
+                      {/* STEP 1 */}
+
+                      <WorkflowStep
+                        number="01"
+                        icon={BookOpen}
+                        title="Revise Study Notes"
+                        completed={
+                          progress.revised
+                        }
+                      >
+                        <div
+                          className="
+                            flex
+                            flex-col
+                            gap-3
+                            sm:flex-row
+                          "
+                        >
+                          <Link
+                            to="/notes"
+                            state={{
+                              panicMode: true,
+
+                              exam:
+                                session.exam,
+
+                              subject:
+                                activeChapter.subject,
+
+                              chapter:
+                                activeChapter.chapter,
+
+                              panicChapterId:
+                                activeChapter._id
+                            }}
+                            className="
+                              inline-flex
+                              items-center
+                              justify-center
+                              gap-2
+                              rounded-xl
+                              bg-sky-600
+                              px-4
+                              py-3
+                              text-xs
+                              font-black
+                              text-white
+                              hover:bg-sky-700
+                            "
+                          >
+                            <BookOpen
+                              className="h-4 w-4"
+                            />
+
+                            Open Study Notes
+                          </Link>
+
+                          <button
+                            type="button"
+                            disabled={
+                              updatingProgress ||
+                              progress.revised
+                            }
+                            onClick={
+                              markRevised
+                            }
+                            className="
+                              inline-flex
+                              items-center
+                              justify-center
+                              gap-2
+                              rounded-xl
+                              border
+                              border-slate-200
+                              px-4
+                              py-3
+                              text-xs
+                              font-black
+                              text-slate-700
+                              disabled:opacity-50
+
+                              dark:border-slate-700
+                              dark:text-slate-200
+                            "
+                          >
+                            <CheckCircle2
+                              className="h-4 w-4"
+                            />
+
+                            {progress.revised
+                              ? 'Revised'
+                              : 'I Revised This'}
+                          </button>
+                        </div>
+                      </WorkflowStep>
+
+                      {/* STEP 2 */}
+
+                      <WorkflowStep
+                        number="02"
+                        icon={
+                          BrainCircuit
+                        }
+                        title="Targeted Practice"
+                        completed={
+                          progress.practised
+                        }
+                        locked={
+                          !progress.revised
+                        }
+                      >
+                        <button
+                          type="button"
+                          disabled={
+                            !progress.revised ||
+                            loadingPractice
+                          }
+                          onClick={
+                            startPractice
+                          }
+                          className="
+                            inline-flex
+                            items-center
+                            justify-center
+                            gap-2
+                            rounded-xl
+                            bg-violet-600
+                            px-4
+                            py-3
+                            text-xs
+                            font-black
+                            text-white
+                            hover:bg-violet-700
+                            disabled:cursor-not-allowed
+                            disabled:opacity-50
+                          "
+                        >
+                          {loadingPractice ? (
+                            <Loader2
+                              className="
+                                h-4
+                                w-4
+                                animate-spin
+                              "
+                            />
+                          ) : (
+                            <BrainCircuit
+                              className="h-4 w-4"
+                            />
+                          )}
+
+                          {progress.practised
+                            ? 'Practice Again'
+                            : `Start ${practiceCount} Questions`}
+                        </button>
+                      </WorkflowStep>
+
+                      {/* STEP 3 */}
+
+                      <WorkflowStep
+                        number="03"
+                        icon={Target}
+                        title="Fix Test"
+                        completed={
+                          progress.fixTestPassed
+                        }
+                        locked={
+                          !progress.practised
+                        }
+                      >
+                        {progress.fixTestPassed ? (
+                          <div
+                            className="
+                              rounded-xl
+                              bg-emerald-50
+                              p-4
+                              text-sm
+                              font-bold
+                              text-emerald-700
+
+                              dark:bg-emerald-500/10
+                              dark:text-emerald-300
+                            "
+                          >
+                            <CheckCircle2
+                              className="
+                                mr-2
+                                inline
+                                h-4
+                                w-4
+                              "
+                            />
+
+                            Weakness fixed at{' '}
+                            {
+                              activeChapter.fixTestScore
+                            }
+                            %.
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            className="
+                              inline-flex
+                              items-center
+                              gap-2
+                              rounded-xl
+                              bg-slate-200
+                              px-4
+                              py-3
+                              text-xs
+                              font-black
+                              text-slate-500
+
+                              dark:bg-slate-800
+                              dark:text-slate-400
+                            "
+                          >
+                            <Lock
+                              className="h-4 w-4"
+                            />
+
+                            {progress.practised
+                              ? 'Secure Fix Test Coming Next'
+                              : 'Complete Practice First'}
+                          </button>
+                        )}
+                      </WorkflowStep>
+                    </div>
+                  </section>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ====================================
+            TARGETED PRACTICE PANEL
+        ==================================== */}
+
+        {practice && (
+          <div
+            className="
+              fixed
+              inset-0
+              z-50
+              overflow-y-auto
+              bg-slate-950/70
+              p-3
+              backdrop-blur-sm
+              sm:p-6
+            "
+          >
+            <div
+              className="
+                mx-auto
+                my-4
+                max-w-4xl
+                rounded-[28px]
+                bg-white
+                p-5
+                shadow-2xl
+                sm:p-8
+
+                dark:bg-slate-950
+              "
+            >
+              <div
+                className="
+                  flex
+                  items-start
+                  justify-between
+                  gap-4
+                "
+              >
+                <div>
+                  <p
+                    className="
+                      text-xs
+                      font-black
+                      uppercase
+                      tracking-wider
+                      text-violet-500
+                    "
+                  >
+                    🚨 Panic Targeted Practice
+                  </p>
+
+                  <h2
+                    className="
+                      mt-2
                       text-2xl
                       font-black
                       text-slate-950
@@ -882,7 +1755,7 @@ export default function PanicModePage() {
                       dark:text-white
                     "
                   >
-                    {activeChapter.chapter}
+                    {practice.chapter}
                   </h2>
 
                   <p
@@ -890,108 +1763,504 @@ export default function PanicModePage() {
                       mt-1
                       text-sm
                       text-slate-500
-
-                      dark:text-slate-400
                     "
                   >
-                    {activeChapter.subject} • Recent accuracy{' '}
-                    {activeChapter.accuracy}%
+                    {practice.subject}
+                    {' • '}
+                    {practice.exam}
+                    {' • '}
+                    {
+                      practiceQuestions.length
+                    }{' '}
+                    Questions
                   </p>
                 </div>
 
-                <div
+                <button
+                  type="button"
+                  onClick={
+                    closePractice
+                  }
                   className="
-                    rounded-2xl
-                    bg-rose-50
-                    px-4
-                    py-3
-                    text-center
+                    rounded-xl
+                    border
+                    border-slate-200
+                    p-2
 
-                    dark:bg-rose-500/10
+                    dark:border-slate-700
                   "
                 >
-                  <p
-                    className="
-                      text-[10px]
-                      font-black
-                      uppercase
-                      tracking-wider
-                      text-rose-500
-                    "
-                  >
-                    Fix Target
-                  </p>
+                  <X
+                    className="h-5 w-5"
+                  />
+                </button>
+              </div>
 
-                  <p
-                    className="
-                      mt-1
-                      text-2xl
-                      font-black
-                      text-slate-950
+              {/* PROGRESS */}
 
-                      dark:text-white
-                    "
-                  >
-                    70%+
-                  </p>
-                </div>
+              <div
+                className="
+                  mt-6
+                  flex
+                  items-center
+                  justify-between
+                  gap-3
+                "
+              >
+                <p
+                  className="
+                    text-sm
+                    font-bold
+                    text-slate-600
+
+                    dark:text-slate-300
+                  "
+                >
+                  Question{' '}
+                  {practiceIndex + 1}
+                  {' / '}
+                  {
+                    practiceQuestions.length
+                  }
+                </p>
+
+                <p
+                  className="
+                    text-sm
+                    font-black
+                    text-violet-600
+                  "
+                >
+                  {answeredQuestionCount}
+                  {' '}
+                  answered
+                </p>
               </div>
 
               <div
                 className="
-                  mt-7
-                  space-y-4
+                  mt-3
+                  h-2
+                  overflow-hidden
+                  rounded-full
+                  bg-slate-100
+
+                  dark:bg-slate-800
                 "
               >
-                <WorkflowStep
-                  number="01"
-                  icon={BookOpen}
-                  title="Revise Study Notes"
-                  description={`Read the important notes for ${activeChapter.chapter} before attempting questions.`}
-                  completed={progress.revised}
+                <div
+                  className="
+                    h-full
+                    rounded-full
+                    bg-violet-600
+                    transition-all
+                  "
+                  style={{
+                    width: `${
+                      practiceQuestions.length
+                        ? (
+                            answeredQuestionCount /
+                            practiceQuestions.length
+                          ) * 100
+                        : 0
+                    }%`
+                  }}
+                />
+              </div>
+
+              {/* QUESTION */}
+
+              {currentPracticeQuestion && (
+                <div
+                  className="
+                    mt-7
+                    rounded-[24px]
+                    border
+                    border-slate-200
+                    p-5
+                    sm:p-6
+
+                    dark:border-slate-800
+                  "
                 >
                   <div
                     className="
                       flex
+                      flex-wrap
+                      gap-2
+                    "
+                  >
+                    <span
+                      className="
+                        rounded-full
+                        bg-violet-50
+                        px-3
+                        py-1
+                        text-xs
+                        font-black
+                        text-violet-600
+
+                        dark:bg-violet-500/10
+                      "
+                    >
+                      {
+                        currentPracticeQuestion.difficulty
+                      }
+                    </span>
+
+                    <span
+                      className="
+                        rounded-full
+                        bg-slate-100
+                        px-3
+                        py-1
+                        text-xs
+                        font-bold
+                        text-slate-500
+
+                        dark:bg-slate-800
+                      "
+                    >
+                      {
+                        currentPracticeQuestion.chapter
+                      }
+                    </span>
+                  </div>
+
+                  <h3
+                    className="
+                      mt-5
+                      text-lg
+                      font-black
+                      leading-8
+                      text-slate-950
+                      sm:text-xl
+
+                      dark:text-white
+                    "
+                  >
+                    {
+                      currentPracticeQuestion.question
+                    }
+                  </h3>
+
+                  <div
+                    className="
+                      mt-6
+                      space-y-3
+                    "
+                  >
+                    {(
+                      currentPracticeQuestion.options ||
+                      []
+                    ).map(
+                      (
+                        option,
+                        optionIndex
+                      ) => {
+                        const selected =
+                          selectedAnswers[
+                            currentQuestionId
+                          ] ===
+                          optionIndex;
+
+                        const correct =
+                          currentFeedback &&
+                          Number(
+                            currentFeedback.correctAnswer
+                          ) ===
+                            optionIndex;
+
+                        const wrongSelected =
+                          currentFeedback &&
+                          selected &&
+                          !currentFeedback.isCorrect;
+
+                        return (
+                          <button
+                            key={
+                              optionIndex
+                            }
+                            type="button"
+                            disabled={
+                              Boolean(
+                                currentFeedback
+                              )
+                            }
+                            onClick={() =>
+                              selectPracticeAnswer(
+                                optionIndex
+                              )
+                            }
+                            className={`
+                              flex
+                              w-full
+                              items-center
+                              gap-3
+                              rounded-2xl
+                              border
+                              p-4
+                              text-left
+                              text-sm
+                              font-bold
+                              transition
+
+                              ${
+                                correct
+                                  ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                  : wrongSelected
+                                    ? 'border-rose-500 bg-rose-50 text-rose-800 dark:bg-rose-500/10 dark:text-rose-300'
+                                    : selected
+                                      ? 'border-violet-500 bg-violet-50 text-violet-800 dark:bg-violet-500/10 dark:text-violet-300'
+                                      : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900'
+                              }
+                            `}
+                          >
+                            <span
+                              className="
+                                flex
+                                h-8
+                                w-8
+                                shrink-0
+                                items-center
+                                justify-center
+                                rounded-full
+                                border
+                                text-xs
+                                font-black
+                              "
+                            >
+                              {String.fromCharCode(
+                                65 +
+                                  optionIndex
+                              )}
+                            </span>
+
+                            <span>
+                              {getOptionText(
+                                option
+                              )}
+                            </span>
+
+                            {correct && (
+                              <Check
+                                className="
+                                  ml-auto
+                                  h-5
+                                  w-5
+                                "
+                              />
+                            )}
+
+                            {wrongSelected && (
+                              <X
+                                className="
+                                  ml-auto
+                                  h-5
+                                  w-5
+                                "
+                              />
+                            )}
+                          </button>
+                        );
+                      }
+                    )}
+                  </div>
+
+                  {/* FEEDBACK */}
+
+                  {currentFeedback && (
+                    <div
+                      className={`
+                        mt-6
+                        rounded-2xl
+                        border
+                        p-5
+
+                        ${
+                          currentFeedback.isCorrect
+                            ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'
+                            : 'border-rose-200 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10'
+                        }
+                      `}
+                    >
+                      <div
+                        className="
+                          flex
+                          items-center
+                          gap-2
+                        "
+                      >
+                        {currentFeedback.isCorrect ? (
+                          <CheckCircle2
+                            className="
+                              h-5
+                              w-5
+                              text-emerald-600
+                            "
+                          />
+                        ) : (
+                          <XCircle
+                            className="
+                              h-5
+                              w-5
+                              text-rose-600
+                            "
+                          />
+                        )}
+
+                        <p
+                          className="
+                            font-black
+                            text-slate-950
+
+                            dark:text-white
+                          "
+                        >
+                          {currentFeedback.isCorrect
+                            ? 'Correct!'
+                            : 'Not quite.'}
+                        </p>
+                      </div>
+
+                      {!currentFeedback.isCorrect && (
+                        <p
+                          className="
+                            mt-3
+                            text-sm
+                            font-bold
+                            text-slate-700
+
+                            dark:text-slate-300
+                          "
+                        >
+                          Correct answer:{' '}
+                          {String.fromCharCode(
+                            65 +
+                              Number(
+                                currentFeedback.correctAnswer
+                              )
+                          )}
+                        </p>
+                      )}
+
+                      {currentFeedback.explanation && (
+                        <div
+                          className="
+                            mt-4
+                            rounded-xl
+                            bg-white/70
+                            p-4
+
+                            dark:bg-slate-950/50
+                          "
+                        >
+                          <p
+                            className="
+                              text-xs
+                              font-black
+                              uppercase
+                              tracking-wider
+                              text-slate-500
+                            "
+                          >
+                            Key Explanation
+                          </p>
+
+                          <p
+                            className="
+                              mt-2
+                              text-sm
+                              leading-6
+                              text-slate-700
+
+                              dark:text-slate-300
+                            "
+                          >
+                            {
+                              currentFeedback.explanation
+                            }
+                          </p>
+                        </div>
+                      )}
+
+                      {!currentFeedback.isCorrect && (
+                        <Link
+                          to="/notes"
+                          state={{
+                            panicMode: true,
+
+                            exam:
+                              session?.exam,
+
+                            subject:
+                              activeChapter?.subject,
+
+                            chapter:
+                              activeChapter?.chapter,
+
+                            panicChapterId:
+                              activeChapter?._id
+                          }}
+                          className="
+                            mt-4
+                            inline-flex
+                            items-center
+                            gap-2
+                            text-sm
+                            font-black
+                            text-sky-600
+                          "
+                        >
+                          <BookOpen
+                            className="h-4 w-4"
+                          />
+
+                          Quickly Review Note
+                        </Link>
+                      )}
+                    </div>
+                  )}
+
+                  {practiceMessage && (
+                    <p
+                      className="
+                        mt-4
+                        text-sm
+                        font-bold
+                        text-amber-600
+                      "
+                    >
+                      {practiceMessage}
+                    </p>
+                  )}
+
+                  {/* ACTIONS */}
+
+                  <div
+                    className="
+                      mt-6
+                      flex
                       flex-col
                       gap-3
                       sm:flex-row
+                      sm:items-center
+                      sm:justify-between
                     "
                   >
-                    <Link
-                      to="/notes"
-                      state={{
-                        panicMode: true,
-                        subject: activeChapter.subject,
-                        chapter: activeChapter.chapter
-                      }}
-                      className="
-                        inline-flex
-                        items-center
-                        justify-center
-                        gap-2
-                        rounded-xl
-                        bg-sky-600
-                        px-4
-                        py-3
-                        text-xs
-                        font-black
-                        text-white
-                        transition-colors
-                        hover:bg-sky-700
-                      "
-                    >
-                      <BookOpen className="h-4 w-4" />
-                      Open Study Notes
-                    </Link>
-
                     <button
                       type="button"
-                      disabled={updatingProgress || progress.revised}
+                      disabled={
+                        practiceIndex === 0
+                      }
                       onClick={() =>
-                        updateProgress({
-                          revised: true
-                        })
+                        setPracticeIndex(
+                          (previous) =>
+                            Math.max(
+                              0,
+                              previous - 1
+                            )
+                        )
                       }
                       className="
                         inline-flex
@@ -1001,303 +2270,573 @@ export default function PanicModePage() {
                         rounded-xl
                         border
                         border-slate-200
-                        bg-white
                         px-4
                         py-3
-                        text-xs
+                        text-sm
                         font-black
-                        text-slate-700
-                        transition-colors
-                        hover:bg-slate-50
+                        disabled:opacity-40
 
                         dark:border-slate-700
-                        dark:bg-slate-900
-                        dark:text-slate-200
-                        dark:hover:bg-slate-800
                       "
                     >
-                      <CheckCircle2 className="h-4 w-4" />
-                      I Revised This
+                      <ChevronLeft
+                        className="h-4 w-4"
+                      />
+
+                      Previous
                     </button>
-                  </div>
-                </WorkflowStep>
 
-                <WorkflowStep
-                  number="02"
-                  icon={BrainCircuit}
-                  title="Targeted Practice"
-                  description={`Practise ${practiceCount} questions from ${activeChapter.chapter}.`}
-                  completed={progress.practised}
-                  locked={!progress.revised}
-                >
-                  <div
-                    className="
-                      flex
-                      flex-col
-                      gap-3
-                      sm:flex-row
-                    "
-                  >
-                    <Link
-                      to="/navta-test"
-                      state={{
-                        panicMode: true,
-                        mode: 'practice',
-                        subject: activeChapter.subject,
-                        chapter: activeChapter.chapter,
-                        totalQuestions: practiceCount
-                      }}
-                      onClick={(event) => {
-                        if (!progress.revised) {
-                          event.preventDefault();
+                    {!currentFeedback ? (
+                      <button
+                        type="button"
+                        onClick={
+                          checkPracticeAnswer
                         }
-                      }}
-                      className={`
-                        inline-flex
-                        items-center
-                        justify-center
-                        gap-2
-                        rounded-xl
-                        px-4
-                        py-3
-                        text-xs
-                        font-black
-                        text-white
-                        transition-colors
-
-                        ${
-                          progress.revised
-                            ? 'bg-violet-600 hover:bg-violet-700'
-                            : 'cursor-not-allowed bg-slate-300 dark:bg-slate-700'
+                        disabled={
+                          checkingAnswer ||
+                          selectedAnswers[
+                            currentQuestionId
+                          ] ===
+                            undefined
                         }
-                      `}
-                    >
-                      <BrainCircuit className="h-4 w-4" />
-                      Start Targeted Practice
-                    </Link>
-
-                    <button
-                      type="button"
-                      disabled={
-                        !progress.revised ||
-                        updatingProgress ||
-                        progress.practised
-                      }
-                      onClick={() =>
-                        updateProgress({
-                          practised: true
-                        })
-                      }
-                      className={`
-                        inline-flex
-                        items-center
-                        justify-center
-                        gap-2
-                        rounded-xl
-                        border
-                        px-4
-                        py-3
-                        text-xs
-                        font-black
-                        transition-colors
-
-                        ${
-                          progress.revised
-                            ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
-                            : 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-800 dark:bg-slate-900/50'
-                        }
-                      `}
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Practice Complete
-                    </button>
-                  </div>
-                </WorkflowStep>
-
-                <WorkflowStep
-                  number="03"
-                  icon={Target}
-                  title="Fix Test"
-                  description="Take a short verification test. Score 70% or more to mark the chapter fixed."
-                  completed={progress.fixTestPassed}
-                  locked={!progress.practised}
-                >
-                  <div
-                    className="
-                      flex
-                      flex-col
-                      gap-3
-                      sm:flex-row
-                    "
-                  >
-                    <Link
-                      to="/navta-test"
-                      state={{
-                        panicMode: true,
-                        mode: 'fix-test',
-                        subject: activeChapter.subject,
-                        chapter: activeChapter.chapter,
-                        totalQuestions: 10,
-                        targetPercentage: 70
-                      }}
-                      onClick={(event) => {
-                        if (!progress.practised) {
-                          event.preventDefault();
-                        }
-                      }}
-                      className={`
-                        inline-flex
-                        items-center
-                        justify-center
-                        gap-2
-                        rounded-xl
-                        px-4
-                        py-3
-                        text-xs
-                        font-black
-                        text-white
-                        transition-colors
-
-                        ${
-                          progress.practised
-                            ? 'bg-emerald-600 hover:bg-emerald-700'
-                            : 'cursor-not-allowed bg-slate-300 dark:bg-slate-700'
-                        }
-                      `}
-                    >
-                      <Target className="h-4 w-4" />
-                      Start Fix Test
-                    </Link>
-
-                    <button
-                      type="button"
-                      disabled
-                      title="The real Fix Test result will update this automatically."
-                      className={`
-                        inline-flex
-                        items-center
-                        justify-center
-                        gap-2
-                        rounded-xl
-                        border
-                        px-4
-                        py-3
-                        text-xs
-                        font-black
-                        transition-colors
-
-                        ${
-                          progress.practised
-                            ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
-                            : 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-800 dark:bg-slate-900/50'
-                        }
-                      `}
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Fix Test decides this automatically
-                    </button>
-                  </div>
-                </WorkflowStep>
-              </div>
-
-              {progress.fixTestPassed && (
-                <div
-                  className="
-                    mt-6
-                    rounded-[22px]
-                    border
-                    border-emerald-200
-                    bg-emerald-50
-                    p-5
-
-                    dark:border-emerald-500/20
-                    dark:bg-emerald-500/10
-                  "
-                >
-                  <div
-                    className="
-                      flex
-                      items-start
-                      gap-3
-                    "
-                  >
-                    <div
-                      className="
-                        flex
-                        h-10
-                        w-10
-                        shrink-0
-                        items-center
-                        justify-center
-                        rounded-xl
-                        bg-emerald-500
-                        text-white
-                      "
-                    >
-                      <CheckCircle2 className="h-5 w-5" />
-                    </div>
-
-                    <div>
-                      <p
                         className="
+                          inline-flex
+                          items-center
+                          justify-center
+                          gap-2
+                          rounded-xl
+                          bg-violet-600
+                          px-5
+                          py-3
                           text-sm
                           font-black
-                          text-emerald-800
-
-                          dark:text-emerald-300
+                          text-white
+                          disabled:opacity-40
                         "
                       >
-                        Weakness Fixed
-                      </p>
+                        {checkingAnswer && (
+                          <Loader2
+                            className="
+                              h-4
+                              w-4
+                              animate-spin
+                            "
+                          />
+                        )}
 
-                      <p
+                        Check Answer
+                      </button>
+                    ) : practiceIndex <
+                      practiceQuestions.length -
+                        1 ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPracticeIndex(
+                            (
+                              previous
+                            ) =>
+                              Math.min(
+                                practiceQuestions.length -
+                                  1,
+
+                                previous +
+                                  1
+                              )
+                          )
+                        }
                         className="
-                          mt-1
-                          text-xs
-                          leading-5
-                          text-emerald-700
-
-                          dark:text-emerald-400
+                          inline-flex
+                          items-center
+                          justify-center
+                          gap-2
+                          rounded-xl
+                          bg-violet-600
+                          px-5
+                          py-3
+                          text-sm
+                          font-black
+                          text-white
                         "
                       >
-                        NAVTA saved this chapter as fixed after the
-                        Fix Test reached the required 70% score.
-                      </p>
-                    </div>
+                        Next Question
+
+                        <ChevronRight
+                          className="h-4 w-4"
+                        />
+                      </button>
+                    ) : allPracticeAnswered ? (
+                      <button
+                        type="button"
+                        onClick={
+                          completePractice
+                        }
+                        disabled={
+                          completingPractice
+                        }
+                        className="
+                          inline-flex
+                          items-center
+                          justify-center
+                          gap-2
+                          rounded-xl
+                          bg-emerald-600
+                          px-5
+                          py-3
+                          text-sm
+                          font-black
+                          text-white
+                          disabled:opacity-50
+                        "
+                      >
+                        {completingPractice ? (
+                          <Loader2
+                            className="
+                              h-4
+                              w-4
+                              animate-spin
+                            "
+                          />
+                        ) : (
+                          <CheckCircle2
+                            className="h-4 w-4"
+                          />
+                        )}
+
+                        Complete Practice
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               )}
 
-              <div
-                className="
-                  mt-6
-                  rounded-[22px]
-                  border
-                  border-amber-200
-                  bg-amber-50/80
-                  p-5
+              {/* RESULT */}
 
-                  dark:border-amber-500/20
-                  dark:bg-amber-500/10
-                "
+              {progress.practised &&
+                allPracticeAnswered && (
+                  <div
+                    className="
+                      mt-6
+                      rounded-2xl
+                      border
+                      border-emerald-200
+                      bg-emerald-50
+                      p-5
+
+                      dark:border-emerald-500/20
+                      dark:bg-emerald-500/10
+                    "
+                  >
+                    <p
+                      className="
+                        text-lg
+                        font-black
+                        text-emerald-800
+
+                        dark:text-emerald-300
+                      "
+                    >
+                      Practice Complete
+                    </p>
+
+                    <p
+                      className="
+                        mt-2
+                        text-sm
+                        text-emerald-700
+
+                        dark:text-emerald-400
+                      "
+                    >
+                      {
+                        practiceCorrectCount
+                      }
+                      /
+                      {
+                        practiceQuestions.length
+                      }{' '}
+                      correct •{' '}
+                      {
+                        practicePercentage
+                      }
+                      %
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={
+                        closePractice
+                      }
+                      className="
+                        mt-4
+                        inline-flex
+                        items-center
+                        gap-2
+                        rounded-xl
+                        bg-emerald-600
+                        px-4
+                        py-3
+                        text-sm
+                        font-black
+                        text-white
+                      "
+                    >
+                      Return to Panic Plan
+
+                      <ArrowRight
+                        className="h-4 w-4"
+                      />
+                    </button>
+                  </div>
+                )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// PLAN BUILDER
+// ============================================
+
+function PlanBuilder({
+  exam,
+  setExam,
+  examWindow,
+  setExamWindow,
+  studyTime,
+  setStudyTime,
+  creatingPlan,
+  createPlan
+}) {
+  return (
+    <section
+      className="
+        mt-6
+        rounded-[26px]
+        border
+        border-slate-200
+        bg-white
+        p-5
+        shadow-md
+        sm:p-7
+
+        dark:border-slate-800
+        dark:bg-slate-950
+      "
+    >
+      <p
+        className="
+          text-xs
+          font-black
+          uppercase
+          tracking-wider
+          text-rose-500
+        "
+      >
+        Build Emergency Plan
+      </p>
+
+      <h2
+        className="
+          mt-2
+          text-2xl
+          font-black
+          text-slate-950
+
+          dark:text-white
+        "
+      >
+        Tell NAVTA how close
+        your exam is.
+      </h2>
+
+      <div
+        className="
+          mt-7
+          space-y-7
+        "
+      >
+        <ChoiceGroup
+          title="Preparing for"
+          options={
+            EXAM_OPTIONS
+          }
+          value={exam}
+          onChange={setExam}
+        />
+
+        <ChoiceGroup
+          title="Exam in"
+          options={
+            EXAM_WINDOWS
+          }
+          value={examWindow}
+          onChange={
+            setExamWindow
+          }
+        />
+
+        <ChoiceGroup
+          title="Available study time today"
+          options={
+            STUDY_TIME_OPTIONS
+          }
+          value={studyTime}
+          onChange={
+            setStudyTime
+          }
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={createPlan}
+        disabled={
+          creatingPlan
+        }
+        className="
+          mt-8
+          inline-flex
+          items-center
+          justify-center
+          gap-2
+          rounded-2xl
+          bg-rose-600
+          px-6
+          py-3.5
+          text-sm
+          font-black
+          text-white
+          hover:bg-rose-700
+          disabled:opacity-50
+        "
+      >
+        {creatingPlan ? (
+          <Loader2
+            className="
+              h-4
+              w-4
+              animate-spin
+            "
+          />
+        ) : (
+          <Sparkles
+            className="h-4 w-4"
+          />
+        )}
+
+        {creatingPlan
+          ? 'Building Plan...'
+          : 'Build My Panic Plan'}
+      </button>
+    </section>
+  );
+}
+
+// ============================================
+// CHOICE GROUP
+// ============================================
+
+function ChoiceGroup({
+  title,
+  options,
+  value,
+  onChange
+}) {
+  return (
+    <div>
+      <h3
+        className="
+          mb-3
+          text-sm
+          font-black
+          text-slate-800
+
+          dark:text-slate-200
+        "
+      >
+        {title}
+      </h3>
+
+      <div
+        className="
+          grid
+          gap-3
+          sm:grid-cols-2
+          lg:grid-cols-4
+        "
+      >
+        {options.map(
+          (option) => {
+            const selected =
+              value ===
+              option.id;
+
+            return (
+              <button
+                key={
+                  option.id
+                }
+                type="button"
+                onClick={() =>
+                  onChange(
+                    option.id
+                  )
+                }
+                className={`
+                  rounded-2xl
+                  border
+                  p-4
+                  text-left
+                  transition
+
+                  ${
+                    selected
+                      ? 'border-rose-500 bg-rose-50 dark:bg-rose-500/10'
+                      : 'border-slate-200 hover:border-slate-300 dark:border-slate-700'
+                  }
+                `}
               >
-                <div
+                <p
                   className="
-                    flex
-                    items-start
-                    gap-3
+                    font-black
+                    text-slate-950
+
+                    dark:text-white
                   "
                 >
-                  <TimerReset
-                    className="
-                      mt-0.5
-                      h-5
-                      w-5
-                      shrink-0
-                      text-amber-600
-                    "
-                  />
+                  {
+                    option.label
+                  }
+                </p>
 
+                {option.description && (
+                  <p
+                    className="
+                      mt-1
+                      text-xs
+                      text-slate-500
+                    "
+                  >
+                    {
+                      option.description
+                    }
+                  </p>
+                )}
+              </button>
+            );
+          }
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// PRIORITY SECTION
+// ============================================
+
+function PrioritySection({
+  title,
+  subtitle,
+  items,
+  activeChapterId,
+  onSelect
+}) {
+  return (
+    <section
+      className="
+        rounded-[24px]
+        border
+        border-slate-200
+        bg-white
+        p-5
+
+        dark:border-slate-800
+        dark:bg-slate-950
+      "
+    >
+      <h3
+        className="
+          font-black
+          text-slate-950
+
+          dark:text-white
+        "
+      >
+        {title}
+      </h3>
+
+      <p
+        className="
+          mt-1
+          text-xs
+          text-slate-500
+        "
+      >
+        {subtitle}
+      </p>
+
+      <div
+        className="
+          mt-4
+          space-y-2
+        "
+      >
+        {items.length === 0 ? (
+          <p
+            className="
+              rounded-xl
+              bg-slate-50
+              p-3
+              text-xs
+              text-slate-500
+
+              dark:bg-slate-900
+            "
+          >
+            No chapters here.
+          </p>
+        ) : (
+          items.map(
+            (chapter) => {
+              const id =
+                chapterId(
+                  chapter
+                );
+
+              const active =
+                id ===
+                activeChapterId;
+
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() =>
+                    onSelect(id)
+                  }
+                  className={`
+                    flex
+                    w-full
+                    items-center
+                    justify-between
+                    gap-3
+                    rounded-xl
+                    border
+                    p-3
+                    text-left
+
+                    ${
+                      active
+                        ? 'border-rose-400 bg-rose-50 dark:bg-rose-500/10'
+                        : 'border-slate-200 dark:border-slate-800'
+                    }
+                  `}
+                >
                   <div>
                     <p
                       className="
@@ -1308,110 +2847,177 @@ export default function PanicModePage() {
                         dark:text-white
                       "
                     >
-                      Panic Rule
+                      {
+                        chapter.chapter
+                      }
                     </p>
 
                     <p
                       className="
                         mt-1
                         text-xs
-                        leading-5
-                        text-slate-600
-
-                        dark:text-slate-400
+                        text-slate-500
                       "
                     >
-                      Do not spend time on strong chapters while your
-                      Fix First list still has unresolved weaknesses.
+                      {
+                        chapter.subject
+                      }
                     </p>
                   </div>
-                </div>
-              </div>
-            </section>
-            ) : (
-              <section
-                className="
-                  rounded-[26px]
-                  border
-                  border-slate-200
-                  bg-white/90
-                  p-8
-                  text-center
-                  shadow-sm
 
-                  dark:border-slate-800
-                  dark:bg-slate-950/70
+                  <span
+                    className="
+                      text-sm
+                      font-black
+                      text-rose-600
+                    "
+                  >
+                    {
+                      chapter.accuracy
+                    }
+                    %
+                  </span>
+                </button>
+              );
+            }
+          )
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ============================================
+// WORKFLOW STEP
+// ============================================
+
+function WorkflowStep({
+  number,
+  icon: Icon,
+  title,
+  completed = false,
+  locked = false,
+  children
+}) {
+  return (
+    <div
+      className={`
+        rounded-2xl
+        border
+        p-5
+
+        ${
+          completed
+            ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-500/5'
+            : 'border-slate-200 dark:border-slate-800'
+        }
+      `}
+    >
+      <div
+        className="
+          flex
+          items-start
+          gap-4
+        "
+      >
+        <div
+          className="
+            flex
+            h-10
+            w-10
+            shrink-0
+            items-center
+            justify-center
+            rounded-xl
+            bg-slate-100
+
+            dark:bg-slate-900
+          "
+        >
+          {locked ? (
+            <Lock
+              className="
+                h-5
+                w-5
+                text-slate-400
+              "
+            />
+          ) : completed ? (
+            <CheckCircle2
+              className="
+                h-5
+                w-5
+                text-emerald-600
+              "
+            />
+          ) : (
+            <Icon
+              className="
+                h-5
+                w-5
+                text-rose-500
+              "
+            />
+          )}
+        </div>
+
+        <div
+          className="min-w-0 flex-1"
+        >
+          <p
+            className="
+              text-[10px]
+              font-black
+              uppercase
+              tracking-wider
+              text-slate-400
+            "
+          >
+            Step {number}
+          </p>
+
+          <h3
+            className="
+              mt-1
+              font-black
+              text-slate-950
+
+              dark:text-white
+            "
+          >
+            {title}
+          </h3>
+
+          <div
+            className="
+              mt-4
+            "
+          >
+            {locked ? (
+              <p
+                className="
+                  text-sm
+                  font-bold
+                  text-slate-400
                 "
               >
-                <BrainCircuit
-                  className="
-                    mx-auto
-                    h-10
-                    w-10
-                    text-rose-500
-                  "
-                />
-
-                <h2
-                  className="
-                    mt-4
-                    text-xl
-                    font-black
-                    text-slate-950
-
-                    dark:text-white
-                  "
-                >
-                  Complete NAVTA TESTs to unlock your chapter analysis
-                </h2>
-
-                <p
-                  className="
-                    mx-auto
-                    mt-2
-                    max-w-xl
-                    text-sm
-                    leading-6
-                    text-slate-500
-
-                    dark:text-slate-400
-                  "
-                >
-                  Your Panic Mode plan is active, but NAVTA does not
-                  yet have enough chapter-level test history for this
-                  exam. Complete NAVTA TESTs and return here.
-                </p>
-
-                <Link
-                  to="/navta-test"
-                  className="
-                    mt-5
-                    inline-flex
-                    items-center
-                    justify-center
-                    gap-2
-                    rounded-xl
-                    bg-rose-600
-                    px-4
-                    py-3
-                    text-xs
-                    font-black
-                    text-white
-                    transition-colors
-                    hover:bg-rose-700
-                  "
-                >
-                  Go to NAVTA TEST
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </section>
+                Complete the
+                previous step
+                first.
+              </p>
+            ) : (
+              children
             )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
 }
+
+// ============================================
+// SMALL COMPONENTS
+// ============================================
 
 function HeroMetric({
   icon: Icon,
@@ -1423,14 +3029,13 @@ function HeroMetric({
       className="
         rounded-2xl
         border
-        border-white/80
-        bg-white/75
+        border-white/70
+        bg-white/70
         p-3
         text-center
-        shadow-sm
 
-        dark:border-white/5
-        dark:bg-white/[0.04]
+        dark:border-white/10
+        dark:bg-white/5
       "
     >
       <Icon
@@ -1445,7 +3050,19 @@ function HeroMetric({
       <p
         className="
           mt-2
-          text-sm
+          text-[9px]
+          font-black
+          uppercase
+          text-slate-400
+        "
+      >
+        {label}
+      </p>
+
+      <p
+        className="
+          mt-1
+          text-xs
           font-black
           text-slate-950
 
@@ -1454,105 +3071,6 @@ function HeroMetric({
       >
         {value}
       </p>
-
-      <p
-        className="
-          mt-0.5
-          text-[9px]
-          font-black
-          uppercase
-          tracking-wider
-          text-slate-500
-        "
-      >
-        {label}
-      </p>
-    </div>
-  );
-}
-
-function ChoiceGroup({
-  title,
-  options,
-  value,
-  onChange
-}) {
-  return (
-    <div>
-      <p
-        className="
-          mb-3
-          text-sm
-          font-black
-          text-slate-900
-
-          dark:text-white
-        "
-      >
-        {title}
-      </p>
-
-      <div
-        className="
-          grid
-          gap-3
-          sm:grid-cols-2
-          lg:grid-cols-4
-        "
-      >
-        {options.map((option) => {
-          const selected = value === option.id;
-
-          return (
-            <button
-              key={option.id}
-              type="button"
-              onClick={() => onChange(option.id)}
-              className={`
-                rounded-2xl
-                border
-                p-4
-                text-left
-                transition-colors
-
-                ${
-                  selected
-                    ? 'border-rose-400 bg-rose-50 ring-2 ring-rose-500/10 dark:border-rose-500/50 dark:bg-rose-500/10'
-                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:bg-slate-900'
-                }
-              `}
-            >
-              <p
-                className={`
-                  text-sm
-                  font-black
-
-                  ${
-                    selected
-                      ? 'text-rose-600 dark:text-rose-300'
-                      : 'text-slate-900 dark:text-white'
-                  }
-                `}
-              >
-                {option.label}
-              </p>
-
-              {option.description && (
-                <p
-                  className="
-                    mt-1
-                    text-[10px]
-                    leading-4
-                    text-slate-500
-                  "
-                >
-                  {option.description}
-                </p>
-              )}
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -1565,364 +3083,175 @@ function SummaryMetric({
   return (
     <div
       className="
+        flex
+        items-center
+        gap-3
         rounded-2xl
-        border
-        border-slate-200
-        bg-slate-50/70
+        bg-slate-50
         p-4
 
-        dark:border-slate-800
-        dark:bg-slate-900/60
+        dark:bg-slate-900
       "
     >
       <Icon
         className="
-          h-4
-          w-4
+          h-5
+          w-5
+          text-rose-500
+        "
+      />
+
+      <div>
+        <p
+          className="
+            text-[10px]
+            font-black
+            uppercase
+            text-slate-400
+          "
+        >
+          {label}
+        </p>
+
+        <p
+          className="
+            mt-1
+            text-sm
+            font-black
+            text-slate-950
+
+            dark:text-white
+          "
+        >
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function LoadingCard({
+  text
+}) {
+  return (
+    <div
+      className="
+        mt-6
+        rounded-[24px]
+        border
+        border-slate-200
+        bg-white
+        p-10
+        text-center
+
+        dark:border-slate-800
+        dark:bg-slate-950
+      "
+    >
+      <Loader2
+        className="
+          mx-auto
+          h-7
+          w-7
+          animate-spin
           text-rose-500
         "
       />
 
       <p
         className="
-          mt-3
+          mt-4
           text-sm
           font-black
-          text-slate-950
+          text-slate-600
 
-          dark:text-white
+          dark:text-slate-300
         "
       >
-        {value}
-      </p>
-
-      <p
-        className="
-          mt-1
-          text-[9px]
-          font-black
-          uppercase
-          tracking-wider
-          text-slate-500
-        "
-      >
-        {label}
+        {text}
       </p>
     </div>
   );
 }
 
-function PrioritySection({
-  title,
-  subtitle,
-  items,
-  activeChapterId,
-  onSelect,
-  tone
-}) {
-  const toneClasses = {
-    rose: {
-      badge:
-        'bg-rose-100 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300',
-      active:
-        'border-rose-400 bg-rose-50 dark:border-rose-500/40 dark:bg-rose-500/10'
-    },
-    amber: {
-      badge:
-        'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300',
-      active:
-        'border-amber-400 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10'
-    },
-    emerald: {
-      badge:
-        'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300',
-      active:
-        'border-emerald-400 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-500/10'
-    }
-  };
-
-  const classes = toneClasses[tone] || toneClasses.rose;
-
+function EmptyHistory() {
   return (
-    <div
+    <section
       className="
+        mt-6
         rounded-[24px]
         border
         border-slate-200
-        bg-white/90
-        p-5
-        shadow-sm
+        bg-white
+        p-8
+        text-center
 
         dark:border-slate-800
-        dark:bg-slate-950/70
+        dark:bg-slate-950
       "
     >
-      <h3
+      <Flame
         className="
-          text-base
+          mx-auto
+          h-9
+          w-9
+          text-rose-500
+        "
+      />
+
+      <h2
+        className="
+          mt-4
+          text-xl
           font-black
           text-slate-950
 
           dark:text-white
         "
       >
-        {title}
-      </h3>
+        Complete NAVTA TESTs
+        first
+      </h2>
 
       <p
         className="
-          mt-1
-          text-xs
-          leading-5
+          mx-auto
+          mt-2
+          max-w-xl
+          text-sm
+          leading-6
           text-slate-500
         "
       >
-        {subtitle}
+        NAVTA needs
+        chapter-level test
+        history before it can
+        identify your weak
+        chapters.
       </p>
 
-      <div
+      <Link
+        to="/navta-test"
         className="
-          mt-4
-          space-y-2
+          mt-5
+          inline-flex
+          items-center
+          gap-2
+          rounded-xl
+          bg-rose-600
+          px-5
+          py-3
+          text-sm
+          font-black
+          text-white
         "
       >
-        {items.map((item) => {
-          const active =
-            String(item._id || item.id) === String(activeChapterId);
+        Take NAVTA TEST
 
-          return (
-            <button
-              key={item._id || item.id}
-              type="button"
-              onClick={() => onSelect(item._id || item.id)}
-              className={`
-                flex
-                w-full
-                items-center
-                justify-between
-                gap-3
-                rounded-2xl
-                border
-                p-3
-                text-left
-                transition-colors
-
-                ${
-                  active
-                    ? classes.active
-                    : 'border-slate-200 bg-slate-50/60 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:bg-slate-900/70'
-                }
-              `}
-            >
-              <div
-                className="
-                  min-w-0
-                "
-              >
-                <p
-                  className="
-                    truncate
-                    text-xs
-                    font-black
-                    text-slate-900
-
-                    dark:text-white
-                  "
-                >
-                  {item.chapter}
-                </p>
-
-                <p
-                  className="
-                    mt-1
-                    text-[10px]
-                    text-slate-500
-                  "
-                >
-                  {item.subject}
-                </p>
-              </div>
-
-              <div
-                className={`
-                  shrink-0
-                  rounded-xl
-                  px-2.5
-                  py-1.5
-                  text-[10px]
-                  font-black
-
-                  ${classes.badge}
-                `}
-              >
-                {item.accuracy}%
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function WorkflowStep({
-  number,
-  icon: Icon,
-  title,
-  description,
-  completed,
-  locked = false,
-  children
-}) {
-  return (
-    <div
-      className={`
-        rounded-[22px]
-        border
-        p-5
-
-        ${
-          completed
-            ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-500/20 dark:bg-emerald-500/5'
-            : locked
-              ? 'border-slate-200 bg-slate-50/70 opacity-70 dark:border-slate-800 dark:bg-slate-900/40'
-              : 'border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/40'
-        }
-      `}
-    >
-      <div
-        className="
-          flex
-          items-start
-          gap-4
-        "
-      >
-        <div
-          className={`
-            flex
-            h-11
-            w-11
-            shrink-0
-            items-center
-            justify-center
-            rounded-2xl
-
-            ${
-              completed
-                ? 'bg-emerald-500 text-white'
-                : 'bg-slate-900 text-white dark:bg-white dark:text-slate-950'
-            }
-          `}
-        >
-          {completed ? (
-            <CheckCircle2 className="h-5 w-5" />
-          ) : (
-            <Icon className="h-5 w-5" />
-          )}
-        </div>
-
-        <div
-          className="
-            min-w-0
-            flex-1
-          "
-        >
-          <div
-            className="
-              flex
-              flex-wrap
-              items-center
-              gap-2
-            "
-          >
-            <span
-              className="
-                text-[10px]
-                font-black
-                uppercase
-                tracking-[0.16em]
-                text-slate-400
-              "
-            >
-              Step {number}
-            </span>
-
-            {locked && (
-              <span
-                className="
-                  rounded-full
-                  bg-slate-200
-                  px-2
-                  py-1
-                  text-[9px]
-                  font-black
-                  uppercase
-                  text-slate-500
-
-                  dark:bg-slate-800
-                  dark:text-slate-400
-                "
-              >
-                Locked
-              </span>
-            )}
-
-            {completed && (
-              <span
-                className="
-                  rounded-full
-                  bg-emerald-100
-                  px-2
-                  py-1
-                  text-[9px]
-                  font-black
-                  uppercase
-                  text-emerald-700
-
-                  dark:bg-emerald-500/10
-                  dark:text-emerald-300
-                "
-              >
-                Complete
-              </span>
-            )}
-          </div>
-
-          <h3
-            className="
-              mt-1
-              text-base
-              font-black
-              text-slate-950
-
-              dark:text-white
-            "
-          >
-            {title}
-          </h3>
-
-          <p
-            className="
-              mt-1
-              text-xs
-              leading-5
-              text-slate-500
-
-              dark:text-slate-400
-            "
-          >
-            {description}
-          </p>
-
-          <div
-            className="
-              mt-4
-            "
-          >
-            {children}
-          </div>
-        </div>
-      </div>
-    </div>
+        <ArrowRight
+          className="h-4 w-4"
+        />
+      </Link>
+    </section>
   );
 }
