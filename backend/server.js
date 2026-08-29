@@ -27,6 +27,14 @@ const mistakeNotebookRoutes = require(
 );
 
 // ============================================
+// PANIC MODE ROUTES
+// ============================================
+
+const panicModeRoutes = require(
+  "./routes/panicModeRoutes"
+);
+
+// ============================================
 // CONNECT DATABASE
 // ============================================
 
@@ -193,6 +201,24 @@ app.use(
 );
 
 // ============================================
+// PANIC MODE
+// ============================================
+//
+// NAVTA Panic Mode API
+//
+// This route handles the student's
+// emergency exam-preparation plan.
+//
+// Base endpoint:
+// /api/panic-mode
+//
+
+app.use(
+  "/api/panic-mode",
+  panicModeRoutes
+);
+
+// ============================================
 // API 404 HANDLER
 // IMPORTANT:
 // Prevent unknown API requests from returning
@@ -217,9 +243,27 @@ const frontendPath = path.join(
   "dist"
 );
 
-app.use(express.static(frontendPath));
+app.use(
+  express.static(frontendPath)
+);
 
-// React Router fallback
+// ============================================
+// REACT ROUTER FALLBACK
+// ============================================
+//
+// Any route that is not an API route will
+// return React's index.html.
+//
+// This allows routes such as:
+//
+// /dashboard
+// /navta-test
+// /mistake-notebook
+// /panic-mode
+//
+// to work after refreshing the browser.
+//
+
 app.get(/.*/, (req, res) => {
   res.sendFile(
     path.join(
@@ -234,55 +278,121 @@ app.get(/.*/, (req, res) => {
 // ============================================
 
 app.use((err, req, res, next) => {
-  console.error("NAVTA SERVER ERROR:");
+  console.error("");
+  console.error(
+    "================================"
+  );
+  console.error(
+    "NAVTA SERVER ERROR"
+  );
+  console.error(
+    "================================"
+  );
   console.error(err);
+  console.error("");
 
-  res.status(err.statusCode || 500).json({
-    success: false,
-    message:
-      err.message ||
-      "Internal Server Error",
-  });
+  // CORS errors
+  if (
+    err &&
+    typeof err.message === "string" &&
+    err.message.startsWith(
+      "CORS blocked request from:"
+    )
+  ) {
+    return res.status(403).json({
+      success: false,
+      message: err.message,
+    });
+  }
+
+  res
+    .status(
+      err.statusCode ||
+      err.status ||
+      500
+    )
+    .json({
+      success: false,
+
+      message:
+        err.message ||
+        "Internal Server Error",
+    });
 });
 
 // ============================================
 // START SERVER
 // ============================================
 
-const PORT = process.env.PORT || 5000;
+const PORT =
+  process.env.PORT || 5000;
 
-const server = app.listen(PORT, () => {
-  console.log("");
-  console.log("================================");
-  console.log("🚀 NAVTA Backend Started");
-  console.log("================================");
+const server = app.listen(
+  PORT,
+  () => {
+    console.log("");
+    console.log(
+      "================================"
+    );
+    console.log(
+      "🚀 NAVTA Backend Started"
+    );
+    console.log(
+      "================================"
+    );
 
-  console.log(
-    `Environment: ${
-      process.env.NODE_ENV ||
-      "development"
-    }`
-  );
+    console.log(
+      `Environment: ${
+        process.env.NODE_ENV ||
+        "development"
+      }`
+    );
 
-  console.log(
-    `Port: ${PORT}`
-  );
+    console.log(
+      `Port: ${PORT}`
+    );
 
-  console.log(
-    `API: http://localhost:${PORT}/api`
-  );
+    console.log(
+      `API: http://localhost:${PORT}/api`
+    );
 
-  console.log(
-    `Navta TEST API: http://localhost:${PORT}/api/navta-test`
-  );
+    console.log(
+      `Health: http://localhost:${PORT}/api/health`
+    );
 
-  console.log(
-    `Mistake Notebook API: http://localhost:${PORT}/api/mistake-notebook`
-  );
+    console.log(
+      `Navta TEST API: http://localhost:${PORT}/api/navta-test`
+    );
 
-  console.log("================================");
-  console.log("");
-});
+    console.log(
+      `Mistake Notebook API: http://localhost:${PORT}/api/mistake-notebook`
+    );
+
+    console.log(
+      `Panic Mode API: http://localhost:${PORT}/api/panic-mode`
+    );
+
+    console.log(
+      "================================"
+    );
+    console.log("");
+  }
+);
+
+// ============================================
+// SERVER ERROR
+// ============================================
+
+server.on(
+  "error",
+  (err) => {
+    console.error(
+      "NAVTA server failed to start:"
+    );
+
+    console.error(err);
+  }
+);
 
 // ============================================
 // UNHANDLED PROMISE REJECTIONS
@@ -291,11 +401,13 @@ const server = app.listen(PORT, () => {
 process.on(
   "unhandledRejection",
   (err) => {
+    console.error("");
     console.error(
       "Unhandled Promise Rejection:"
     );
 
     console.error(err);
+    console.error("");
   }
 );
 
@@ -306,10 +418,12 @@ process.on(
 process.on(
   "uncaughtException",
   (err) => {
+    console.error("");
     console.error(
       "Uncaught Exception:"
     );
 
     console.error(err);
+    console.error("");
   }
 );
