@@ -1,54 +1,78 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const PanicSession = require(
-  '../models/PanicSession'
+  "../models/PanicSession"
 );
 
 const Result = require(
-  '../models/Result'
+  "../models/Result"
 );
 
-/*
-|--------------------------------------------------------------------------
-| Configuration
-|--------------------------------------------------------------------------
-*/
+const NavtaQuestion = require(
+  "../models/NavtaQuestion"
+);
+
+// ============================================
+// CONFIGURATION
+// ============================================
 
 const VALID_EXAMS = [
-  'NEET',
-  'JEE',
-  'Boards'
+  "NEET",
+  "JEE",
+  "Boards",
 ];
 
 const EXAM_WINDOWS = {
   tomorrow: 1,
-  '3-days': 3,
-  '7-days': 7,
-  '14-days': 14
+  "3-days": 3,
+  "7-days": 7,
+  "14-days": 14,
 };
 
 const STUDY_TIME_OPTIONS = [
   60,
   120,
   240,
-  360
+  360,
 ];
 
-/*
-|--------------------------------------------------------------------------
-| Helpers
-|--------------------------------------------------------------------------
-*/
+const VALID_DIFFICULTIES = [
+  "Easy",
+  "Medium",
+  "Hard",
+];
+
+const VALID_QUESTION_TYPES = [
+  "mcq",
+];
+
+// ============================================
+// HELPERS
+// ============================================
 
 const normaliseString = (value) => {
   if (
     value === null ||
     value === undefined
   ) {
-    return '';
+    return "";
   }
 
   return String(value).trim();
+};
+
+const normaliseSubject = (subject) => {
+  const value =
+    normaliseString(subject);
+
+  if (
+    value.toLowerCase() ===
+    "mathematics"
+  ) {
+    return "Maths";
+  }
+
+  return value;
 };
 
 const clampPercentage = (value) => {
@@ -74,30 +98,30 @@ const getChapterStatus = (
     clampPercentage(accuracy);
 
   if (percentage < 60) {
-    return 'fix-first';
+    return "fix-first";
   }
 
   if (percentage < 80) {
-    return 'quick-revision';
+    return "quick-revision";
   }
 
-  return 'strong';
+  return "strong";
 };
 
 const getPracticeQuestionCount = (
   examWindow
 ) => {
   switch (examWindow) {
-    case 'tomorrow':
+    case "tomorrow":
       return 5;
 
-    case '3-days':
+    case "3-days":
       return 10;
 
-    case '7-days':
+    case "7-days":
       return 15;
 
-    case '14-days':
+    case "14-days":
       return 20;
 
     default:
@@ -116,22 +140,49 @@ const buildChapterKey = (
   ).toLowerCase()}`;
 };
 
-/*
-|--------------------------------------------------------------------------
-| Extract chapter information from a NAVTA result
-|--------------------------------------------------------------------------
-|
-| NAVTA has had multiple Result formats during development.
-| This helper intentionally supports both:
-|
-| chapter: "Rotational Motion"
-|
-| and
-|
-| chapters: ["Rotational Motion", ...]
-|
-|--------------------------------------------------------------------------
-*/
+const escapeRegex = (value) => {
+  return normaliseString(value)
+    .replace(
+      /[.*+?^${}()|[\]\\]/g,
+      "\\$&"
+    );
+};
+
+const exactCaseInsensitive = (
+  value
+) => {
+  return new RegExp(
+    `^${escapeRegex(value)}$`,
+    "i"
+  );
+};
+
+const shuffleArray = (items) => {
+  const copy = [...items];
+
+  for (
+    let index =
+      copy.length - 1;
+    index > 0;
+    index -= 1
+  ) {
+    const randomIndex =
+      Math.floor(
+        Math.random() *
+          (index + 1)
+      );
+
+    [
+      copy[index],
+      copy[randomIndex],
+    ] = [
+      copy[randomIndex],
+      copy[index],
+    ];
+  }
+
+  return copy;
+};
 
 const getResultChapters = (
   result
@@ -139,15 +190,21 @@ const getResultChapters = (
   const chapters = [];
 
   if (
-    Array.isArray(result.chapters)
+    Array.isArray(
+      result.chapters
+    )
   ) {
     result.chapters.forEach(
       (chapter) => {
         const value =
-          normaliseString(chapter);
+          normaliseString(
+            chapter
+          );
 
         if (value) {
-          chapters.push(value);
+          chapters.push(
+            value
+          );
         }
       }
     );
@@ -172,17 +229,13 @@ const getResultChapters = (
   return chapters;
 };
 
-/*
-|--------------------------------------------------------------------------
-| Calculate percentage from Result
-|--------------------------------------------------------------------------
-*/
-
 const getResultPercentage = (
   result
 ) => {
   const directPercentage =
-    Number(result.percentage);
+    Number(
+      result.percentage
+    );
 
   if (
     Number.isFinite(
@@ -235,12 +288,6 @@ const getResultPercentage = (
   return 0;
 };
 
-/*
-|--------------------------------------------------------------------------
-| Get total question count
-|--------------------------------------------------------------------------
-*/
-
 const getResultQuestionCount = (
   result
 ) => {
@@ -267,56 +314,234 @@ const getResultQuestionCount = (
   return 1;
 };
 
-/*
-|--------------------------------------------------------------------------
-| Analyse student NAVTA history
-|--------------------------------------------------------------------------
-*/
+const buildQuestionFilter = ({
+  subject,
+  exam,
+  chapter,
+  classLevel,
+}) => {
+  const filter = {
+    subject:
+      exactCaseInsensitive(
+        normaliseSubject(
+          subject
+        )
+      ),
+
+    exam:
+      exactCaseInsensitive(
+        exam
+      ),
+
+    chapter:
+      exactCaseInsensitive(
+        chapter
+      ),
+
+    questionType:
+      "mcq",
+
+    isActive:
+      true,
+  };
+
+  if (
+    normaliseString(
+      classLevel
+    )
+  ) {
+    filter.classLevel =
+      exactCaseInsensitive(
+        classLevel
+      );
+  }
+
+  return filter;
+};
+
+const sanitisePracticeQuestion = (
+  question
+) => {
+  return {
+    _id:
+      question._id,
+
+    question:
+      question.question,
+
+    questionType:
+      question.questionType,
+
+    options:
+      Array.isArray(
+        question.options
+      )
+        ? question.options
+        : [],
+
+    difficulty:
+      question.difficulty,
+
+    subject:
+      question.subject,
+
+    exam:
+      question.exam,
+
+    classLevel:
+      question.classLevel,
+
+    chapter:
+      question.chapter,
+  };
+};
+
+const formatSession = (
+  session
+) => {
+  if (!session) {
+    return null;
+  }
+
+  const source =
+    typeof session.toObject ===
+    "function"
+      ? session.toObject()
+      : session;
+
+  const chapters =
+    Array.isArray(
+      source.chapters
+    )
+      ? source.chapters
+      : [];
+
+  return {
+    ...source,
+
+    practiceQuestionCount:
+      getPracticeQuestionCount(
+        source.examWindow
+      ),
+
+    fixFirst:
+      chapters.filter(
+        (chapter) =>
+          chapter.status ===
+            "fix-first" &&
+          !chapter.fixTestPassed
+      ),
+
+    quickRevision:
+      chapters.filter(
+        (chapter) =>
+          chapter.status ===
+          "quick-revision"
+      ),
+
+    strong:
+      chapters.filter(
+        (chapter) =>
+          chapter.status ===
+            "strong" ||
+          chapter.status ===
+            "fixed"
+      ),
+
+    fixed:
+      chapters.filter(
+        (chapter) =>
+          chapter.status ===
+            "fixed" ||
+          chapter.fixTestPassed
+      ),
+  };
+};
+
+const getActiveSessionChapter =
+  async (
+    userId,
+    chapterId
+  ) => {
+    if (
+      !mongoose.Types.ObjectId.isValid(
+        chapterId
+      )
+    ) {
+      return {
+        error: {
+          status: 400,
+          message:
+            "Invalid chapter ID.",
+        },
+      };
+    }
+
+    const session =
+      await PanicSession.findOne({
+        user: userId,
+        active: true,
+        "chapters._id":
+          chapterId,
+      });
+
+    if (!session) {
+      return {
+        error: {
+          status: 404,
+          message:
+            "Panic Mode chapter not found.",
+        },
+      };
+    }
+
+    const chapter =
+      session.chapters.id(
+        chapterId
+      );
+
+    if (!chapter) {
+      return {
+        error: {
+          status: 404,
+          message:
+            "Chapter not found.",
+        },
+      };
+    }
+
+    return {
+      session,
+      chapter,
+    };
+  };
+
+// ============================================
+// ANALYSE STUDENT PERFORMANCE
+// ============================================
 
 const analyseStudentPerformance =
   async (
     userId,
     exam
   ) => {
-    /*
-    |--------------------------------------------------------------------------
-    | Get NAVTA results
-    |--------------------------------------------------------------------------
-    */
-
-    const query = {
-      user: userId
-    };
-
-    /*
-    |--------------------------------------------------------------------------
-    | Only include NAVTA test types
-    |--------------------------------------------------------------------------
-    */
-
-    query.testType = {
-      $in: [
-        'standard',
-        'boss',
-        'revenge'
-      ]
-    };
-
     const results =
-      await Result.find(
-        query
-      )
+      await Result.find({
+        user: userId,
+
+        testType: {
+          $in: [
+            "standard",
+            "boss",
+            "revenge",
+          ],
+        },
+      })
         .sort({
-          createdAt: -1
+          createdAt: -1,
         })
         .limit(200)
         .lean();
-
-    /*
-    |--------------------------------------------------------------------------
-    | Filter exam
-    |--------------------------------------------------------------------------
-    */
 
     const relevantResults =
       results.filter(
@@ -325,11 +550,6 @@ const analyseStudentPerformance =
             normaliseString(
               result.exam
             );
-
-          /*
-          | Older results may not contain exam.
-          | We do not throw them away automatically.
-          */
 
           if (!resultExam) {
             return true;
@@ -348,7 +568,7 @@ const analyseStudentPerformance =
     relevantResults.forEach(
       (result) => {
         const subject =
-          normaliseString(
+          normaliseSubject(
             result.subject
           );
 
@@ -374,15 +594,6 @@ const analyseStudentPerformance =
             result
           );
 
-        /*
-        |--------------------------------------------------------------------------
-        | Boss/Revenge can contain multiple chapters.
-        |
-        | Without per-question chapter data in the result snapshot,
-        | distribute the result weight across its chapters.
-        |--------------------------------------------------------------------------
-        */
-
         const questionWeight =
           Math.max(
             1,
@@ -399,29 +610,26 @@ const analyseStudentPerformance =
               );
 
             if (
-              !chapterMap.has(key)
+              !chapterMap.has(
+                key
+              )
             ) {
               chapterMap.set(
                 key,
                 {
                   subject,
                   chapter,
-
                   weightedScore: 0,
-
                   totalWeight: 0,
-
                   attempts: 0,
-
-                  latestAttempt:
-                    result.createdAt ||
-                    new Date()
                 }
               );
             }
 
             const entry =
-              chapterMap.get(key);
+              chapterMap.get(
+                key
+              );
 
             entry.weightedScore +=
               percentage *
@@ -435,12 +643,6 @@ const analyseStudentPerformance =
         );
       }
     );
-
-    /*
-    |--------------------------------------------------------------------------
-    | Convert to Panic Mode chapters
-    |--------------------------------------------------------------------------
-    */
 
     const chapters =
       Array.from(
@@ -491,16 +693,10 @@ const analyseStudentPerformance =
               false,
 
             fixTestScore:
-              null
+              null,
           };
         }
       );
-
-    /*
-    |--------------------------------------------------------------------------
-    | Weakest chapters first
-    |--------------------------------------------------------------------------
-    */
 
     chapters.sort(
       (a, b) => {
@@ -524,80 +720,10 @@ const analyseStudentPerformance =
     return chapters;
   };
 
-/*
-|--------------------------------------------------------------------------
-| Format session for frontend
-|--------------------------------------------------------------------------
-*/
-
-const formatSession = (
-  session
-) => {
-  if (!session) {
-    return null;
-  }
-
-  const source =
-    typeof session.toObject ===
-    'function'
-      ? session.toObject()
-      : session;
-
-  const chapters =
-    Array.isArray(
-      source.chapters
-    )
-      ? source.chapters
-      : [];
-
-  return {
-    ...source,
-
-    practiceQuestionCount:
-      getPracticeQuestionCount(
-        source.examWindow
-      ),
-
-    fixFirst:
-      chapters.filter(
-        (chapter) =>
-          chapter.status ===
-          'fix-first'
-      ),
-
-    quickRevision:
-      chapters.filter(
-        (chapter) =>
-          chapter.status ===
-          'quick-revision'
-      ),
-
-    strong:
-      chapters.filter(
-        (chapter) =>
-          chapter.status ===
-          'strong'
-      ),
-
-    fixed:
-      chapters.filter(
-        (chapter) =>
-          chapter.status ===
-            'fixed' ||
-          chapter.fixTestPassed
-      )
-  };
-};
-
-/*
-|--------------------------------------------------------------------------
-| CREATE PANIC PLAN
-|--------------------------------------------------------------------------
-|
-| POST /api/panic-mode/plan
-|
-|--------------------------------------------------------------------------
-*/
+// ============================================
+// CREATE PANIC PLAN
+// POST /api/panic-mode/plan
+// ============================================
 
 exports.createPanicPlan =
   async (req, res) => {
@@ -608,14 +734,8 @@ exports.createPanicPlan =
       const {
         exam,
         examWindow,
-        studyTimeMinutes
+        studyTimeMinutes,
       } = req.body;
-
-      /*
-      |--------------------------------------------------------------------------
-      | Validation
-      |--------------------------------------------------------------------------
-      */
 
       if (
         !VALID_EXAMS.includes(
@@ -627,7 +747,7 @@ exports.createPanicPlan =
           .json({
             success: false,
             message:
-              'Please select NEET, JEE or Boards.'
+              "Please select NEET, JEE or Boards.",
           });
       }
 
@@ -641,7 +761,7 @@ exports.createPanicPlan =
           .json({
             success: false,
             message:
-              'Invalid exam window.'
+              "Invalid exam window.",
           });
       }
 
@@ -660,15 +780,9 @@ exports.createPanicPlan =
           .json({
             success: false,
             message:
-              'Invalid study time.'
+              "Invalid study time.",
           });
       }
-
-      /*
-      |--------------------------------------------------------------------------
-      | Analyse real NAVTA TEST history
-      |--------------------------------------------------------------------------
-      */
 
       const chapters =
         await analyseStudentPerformance(
@@ -676,29 +790,17 @@ exports.createPanicPlan =
           exam
         );
 
-      /*
-      |--------------------------------------------------------------------------
-      | Close previous active plan
-      |--------------------------------------------------------------------------
-      */
-
       await PanicSession.updateMany(
         {
           user: userId,
-          active: true
+          active: true,
         },
         {
           $set: {
-            active: false
-          }
+            active: false,
+          },
         }
       );
-
-      /*
-      |--------------------------------------------------------------------------
-      | Create plan
-      |--------------------------------------------------------------------------
-      */
 
       const session =
         await PanicSession.create({
@@ -720,7 +822,7 @@ exports.createPanicPlan =
 
           active: true,
 
-          completed: false
+          completed: false,
         });
 
       return res
@@ -730,19 +832,19 @@ exports.createPanicPlan =
 
           message:
             chapters.length > 0
-              ? 'Your Panic Mode plan is ready.'
-              : 'Panic Mode plan created, but more NAVTA TEST data is needed to identify weak chapters.',
+              ? "Your Panic Mode plan is ready."
+              : "Panic Mode plan created, but more NAVTA TEST data is needed to identify weak chapters.",
 
           data: {
             session:
               formatSession(
                 session
-              )
-          }
+              ),
+          },
         });
     } catch (error) {
       console.error(
-        'Create Panic Plan Error:',
+        "CREATE PANIC PLAN ERROR:",
         error
       );
 
@@ -751,30 +853,28 @@ exports.createPanicPlan =
         .json({
           success: false,
           message:
-            'Unable to create Panic Mode plan.'
+            "Unable to create Panic Mode plan.",
         });
     }
   };
 
-/*
-|--------------------------------------------------------------------------
-| GET ACTIVE PANIC PLAN
-|--------------------------------------------------------------------------
-|
-| GET /api/panic-mode/plan
-|
-|--------------------------------------------------------------------------
-*/
+// ============================================
+// GET ACTIVE PANIC PLAN
+// GET /api/panic-mode/plan
+// ============================================
 
 exports.getActivePanicPlan =
   async (req, res) => {
     try {
       const session =
         await PanicSession.findOne({
-          user: req.user.id,
-          active: true
+          user:
+            req.user.id,
+
+          active:
+            true,
         }).sort({
-          createdAt: -1
+          createdAt: -1,
         });
 
       return res
@@ -786,12 +886,12 @@ exports.getActivePanicPlan =
             session:
               formatSession(
                 session
-              )
-          }
+              ),
+          },
         });
     } catch (error) {
       console.error(
-        'Get Panic Plan Error:',
+        "GET PANIC PLAN ERROR:",
         error
       );
 
@@ -800,112 +900,83 @@ exports.getActivePanicPlan =
         .json({
           success: false,
           message:
-            'Unable to load Panic Mode plan.'
+            "Unable to load Panic Mode plan.",
         });
     }
   };
 
-/*
-|--------------------------------------------------------------------------
-| UPDATE CHAPTER PROGRESS
-|--------------------------------------------------------------------------
-|
-| PATCH /api/panic-mode/chapters/:chapterId
-|
-|--------------------------------------------------------------------------
-*/
+// ============================================
+// UPDATE CHAPTER PROGRESS
+// PATCH /api/panic-mode/chapters/:chapterId
+// ============================================
 
 exports.updateChapterProgress =
   async (req, res) => {
     try {
       const {
-        chapterId
+        chapterId,
       } = req.params;
 
-      if (
-        !mongoose.Types.ObjectId.isValid(
-          chapterId
-        )
-      ) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message:
-              'Invalid chapter ID.'
-          });
-      }
-
-      const session =
-        await PanicSession.findOne({
-          user: req.user.id,
-          active: true,
-          'chapters._id':
-            chapterId
-        });
-
-      if (!session) {
-        return res
-          .status(404)
-          .json({
-            success: false,
-            message:
-              'Panic Mode chapter not found.'
-          });
-      }
-
-      const chapter =
-        session.chapters.id(
+      const lookup =
+        await getActiveSessionChapter(
+          req.user.id,
           chapterId
         );
 
-      if (!chapter) {
+      if (lookup.error) {
         return res
-          .status(404)
+          .status(
+            lookup.error.status
+          )
           .json({
             success: false,
             message:
-              'Chapter not found.'
+              lookup.error
+                .message,
           });
       }
 
       const {
+        session,
+        chapter,
+      } = lookup;
+
+      const {
         revised,
-        practised
+        practised,
       } = req.body;
 
       if (
         typeof revised ===
-        'boolean'
+        "boolean"
       ) {
         chapter.revised =
           revised;
       }
 
+      // Keep backwards compatibility, but do not
+      // allow the frontend to fake practice completion.
       if (
         typeof practised ===
-        'boolean'
+          "boolean" &&
+        practised === false
       ) {
-        /*
-        | Practice should only be completed
-        | after revision.
-        */
-
-        if (
-          practised &&
-          !chapter.revised
-        ) {
-          return res
-            .status(400)
-            .json({
-              success: false,
-              message:
-                'Revise the Study Notes before completing targeted practice.'
-            });
-        }
-
         chapter.practised =
-          practised;
+          false;
+      }
+
+      if (
+        practised === true &&
+        !chapter.practised
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "Complete the targeted practice questions before marking practice complete.",
+          });
       }
 
       await session.save();
@@ -916,7 +987,7 @@ exports.updateChapterProgress =
           success: true,
 
           message:
-            'Panic Mode progress updated.',
+            "Panic Mode progress updated.",
 
           data: {
             chapter,
@@ -924,12 +995,12 @@ exports.updateChapterProgress =
             session:
               formatSession(
                 session
-              )
-          }
+              ),
+          },
         });
     } catch (error) {
       console.error(
-        'Update Panic Progress Error:',
+        "UPDATE PANIC PROGRESS ERROR:",
         error
       );
 
@@ -938,35 +1009,280 @@ exports.updateChapterProgress =
         .json({
           success: false,
           message:
-            'Unable to update Panic Mode progress.'
+            "Unable to update Panic Mode progress.",
         });
     }
   };
 
-/*
-|--------------------------------------------------------------------------
-| SAVE FIX TEST RESULT
-|--------------------------------------------------------------------------
-|
-| POST /api/panic-mode/chapters/:chapterId/fix-test
-|
-|--------------------------------------------------------------------------
-*/
+// ============================================
 
-exports.saveFixTestResult =
+// GENERATE TARGETED PRACTICE
+// POST /api/panic-mode/chapters/:chapterId/practice
+// ============================================
+
+exports.generateTargetedPractice =
   async (req, res) => {
     try {
       const {
-        chapterId
+        chapterId,
+      } = req.params;
+
+      const lookup =
+        await getActiveSessionChapter(
+          req.user.id,
+          chapterId
+        );
+
+      if (lookup.error) {
+        return res
+          .status(
+            lookup.error.status
+          )
+          .json({
+            success: false,
+            message:
+              lookup.error
+                .message,
+          });
+      }
+
+      const {
+        session,
+        chapter,
+      } = lookup;
+
+      if (!chapter.revised) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "Revise the Study Notes before starting targeted practice.",
+          });
+      }
+
+      const requestedClassLevel =
+        normaliseString(
+          req.body?.classLevel
+        );
+
+      const requiredCount =
+        getPracticeQuestionCount(
+          session.examWindow
+        );
+
+      const filter =
+        buildQuestionFilter({
+          subject:
+            chapter.subject,
+
+          exam:
+            session.exam,
+
+          chapter:
+            chapter.chapter,
+
+          classLevel:
+            requestedClassLevel,
+        });
+
+      const availableQuestions =
+        await NavtaQuestion.find(
+          filter
+        )
+          .select(
+            "_id question questionType options difficulty subject exam classLevel chapter"
+          )
+          .lean();
+
+      if (
+        availableQuestions.length ===
+        0
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "No active MCQ questions are available for this Panic Mode chapter yet.",
+
+            data: {
+              required:
+                requiredCount,
+
+              available:
+                0,
+
+              subject:
+                chapter.subject,
+
+              exam:
+                session.exam,
+
+              chapter:
+                chapter.chapter,
+            },
+          });
+      }
+
+      const actualCount =
+        Math.min(
+          requiredCount,
+          availableQuestions.length
+        );
+
+      const selected =
+        shuffleArray(
+          availableQuestions
+        ).slice(
+          0,
+          actualCount
+        );
+
+      const difficultyCounts =
+        VALID_DIFFICULTIES.reduce(
+          (
+            accumulator,
+            difficulty
+          ) => {
+            accumulator[
+              difficulty
+            ] = selected.filter(
+              (question) =>
+                question.difficulty ===
+                difficulty
+            ).length;
+
+            return accumulator;
+          },
+          {}
+        );
+
+      return res
+        .status(200)
+        .json({
+          success: true,
+
+          message:
+            availableQuestions.length <
+            requiredCount
+              ? `Only ${availableQuestions.length} active questions are currently available, so NAVTA created the largest possible practice set.`
+              : "Targeted practice is ready.",
+
+          data: {
+            practice: {
+              mode:
+                "panic-practice",
+
+              panicSessionId:
+                session._id,
+
+              panicChapterId:
+                chapter._id,
+
+              subject:
+                chapter.subject,
+
+              exam:
+                session.exam,
+
+              chapter:
+                chapter.chapter,
+
+              classLevel:
+                requestedClassLevel ||
+                selected[0]
+                  ?.classLevel ||
+                "",
+
+              requiredQuestionCount:
+                requiredCount,
+
+              totalQuestions:
+                selected.length,
+
+              difficultyCounts,
+
+              questions:
+                selected.map(
+                  sanitisePracticeQuestion
+                ),
+            },
+          },
+        });
+    } catch (error) {
+      console.error(
+        "GENERATE PANIC PRACTICE ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+
+          message:
+            "Unable to generate targeted practice.",
+        });
+    }
+  };
+
+// ============================================
+// CHECK ONE PRACTICE ANSWER
+// POST /api/panic-mode/chapters/:chapterId/practice/check
+// ============================================
+
+exports.checkPracticeAnswer =
+  async (req, res) => {
+    try {
+      const {
+        chapterId,
       } = req.params;
 
       const {
-        percentage
+        questionId,
+        selectedOption,
       } = req.body;
+
+      const lookup =
+        await getActiveSessionChapter(
+          req.user.id,
+          chapterId
+        );
+
+      if (lookup.error) {
+        return res
+          .status(
+            lookup.error.status
+          )
+          .json({
+            success: false,
+            message:
+              lookup.error
+                .message,
+          });
+      }
+
+      const {
+        session,
+        chapter,
+      } = lookup;
+
+      if (!chapter.revised) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message:
+              "Revise the Study Notes before practice.",
+          });
+      }
 
       if (
         !mongoose.Types.ObjectId.isValid(
-          chapterId
+          questionId
         )
       ) {
         return res
@@ -974,12 +1290,367 @@ exports.saveFixTestResult =
           .json({
             success: false,
             message:
-              'Invalid chapter ID.'
+              "Invalid question ID.",
           });
       }
 
+      const question =
+        await NavtaQuestion.findOne({
+          _id:
+            questionId,
+
+          ...buildQuestionFilter({
+            subject:
+              chapter.subject,
+
+            exam:
+              session.exam,
+
+            chapter:
+              chapter.chapter,
+          }),
+        }).lean();
+
+      if (!question) {
+        return res
+          .status(404)
+          .json({
+            success: false,
+            message:
+              "Practice question not found for this Panic Mode chapter.",
+          });
+      }
+
+      const answer =
+        selectedOption ===
+          null ||
+        selectedOption ===
+          undefined
+          ? null
+          : Number(
+              selectedOption
+            );
+
+      if (
+        answer === null ||
+        !Number.isInteger(
+          answer
+        )
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message:
+              "Please select an answer.",
+          });
+      }
+
+      const correctAnswer =
+        Number(
+          question.correctAnswer
+        );
+
+      const isCorrect =
+        answer ===
+        correctAnswer;
+
+      return res
+        .status(200)
+        .json({
+          success: true,
+
+          data: {
+            questionId:
+              question._id,
+
+            selectedOption:
+              answer,
+
+            isCorrect,
+
+            correctAnswer:
+              question.correctAnswer,
+
+            explanation:
+              question.explanation ||
+              "",
+
+            difficulty:
+              question.difficulty,
+
+            chapter:
+              question.chapter,
+          },
+        });
+    } catch (error) {
+      console.error(
+        "CHECK PANIC PRACTICE ANSWER ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+          message:
+            "Unable to check the practice answer.",
+        });
+    }
+  };
+
+// ============================================
+// COMPLETE TARGETED PRACTICE
+// POST /api/panic-mode/chapters/:chapterId/practice/complete
+// ============================================
+
+exports.completeTargetedPractice =
+  async (req, res) => {
+    try {
+      const {
+        chapterId,
+      } = req.params;
+
+      const {
+        questionIds = [],
+      } = req.body;
+
+      const lookup =
+        await getActiveSessionChapter(
+          req.user.id,
+          chapterId
+        );
+
+      if (lookup.error) {
+        return res
+          .status(
+            lookup.error.status
+          )
+          .json({
+            success: false,
+            message:
+              lookup.error
+                .message,
+          });
+      }
+
+      const {
+        session,
+        chapter,
+      } = lookup;
+
+      if (!chapter.revised) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message:
+              "Revise the Study Notes before completing targeted practice.",
+          });
+      }
+
+      const uniqueIds =
+        [
+          ...new Set(
+            (
+              Array.isArray(
+                questionIds
+              )
+                ? questionIds
+                : []
+            )
+              .map((id) =>
+                normaliseString(
+                  id
+                )
+              )
+              .filter(
+                (id) =>
+                  mongoose.Types.ObjectId.isValid(
+                    id
+                  )
+              )
+          ),
+        ];
+
+      if (
+        uniqueIds.length ===
+        0
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message:
+              "Completed practice question IDs are required.",
+          });
+      }
+
+      const validQuestionCount =
+        await NavtaQuestion.countDocuments({
+          _id: {
+            $in:
+              uniqueIds,
+          },
+
+          ...buildQuestionFilter({
+            subject:
+              chapter.subject,
+
+            exam:
+              session.exam,
+
+            chapter:
+              chapter.chapter,
+          }),
+        });
+
+      if (
+        validQuestionCount !==
+        uniqueIds.length
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "One or more submitted questions do not belong to this targeted practice chapter.",
+          });
+      }
+
+      const intendedCount =
+        getPracticeQuestionCount(
+          session.examWindow
+        );
+
+      const availableCount =
+        await NavtaQuestion.countDocuments(
+          buildQuestionFilter({
+            subject:
+              chapter.subject,
+
+            exam:
+              session.exam,
+
+            chapter:
+              chapter.chapter,
+          })
+        );
+
+      const minimumRequired =
+        Math.min(
+          intendedCount,
+          availableCount
+        );
+
+      if (
+        uniqueIds.length <
+        minimumRequired
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              `Complete all ${minimumRequired} targeted practice questions before unlocking the Fix Test.`,
+
+            data: {
+              required:
+                minimumRequired,
+
+              completed:
+                uniqueIds.length,
+            },
+          });
+      }
+
+      chapter.practised =
+        true;
+
+      await session.save();
+
+      return res
+        .status(200)
+        .json({
+          success: true,
+
+          message:
+            "Targeted practice completed. Fix Test unlocked.",
+
+          data: {
+            completedQuestions:
+              uniqueIds.length,
+
+            chapter,
+
+            session:
+              formatSession(
+                session
+              ),
+          },
+        });
+    } catch (error) {
+      console.error(
+        "COMPLETE PANIC PRACTICE ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+          message:
+            "Unable to complete targeted practice.",
+        });
+    }
+  };
+
+// ============================================
+// SAVE FIX TEST RESULT
+// POST /api/panic-mode/chapters/:chapterId/fix-test
+// ============================================
+
+exports.saveFixTestResult =
+  async (req, res) => {
+    try {
+      const {
+        chapterId,
+      } = req.params;
+
+      const {
+        percentage,
+      } = req.body;
+
+      const lookup =
+        await getActiveSessionChapter(
+          req.user.id,
+          chapterId
+        );
+
+      if (lookup.error) {
+        return res
+          .status(
+            lookup.error.status
+          )
+          .json({
+            success: false,
+            message:
+              lookup.error
+                .message,
+          });
+      }
+
+      const {
+        session,
+        chapter,
+      } = lookup;
+
       const score =
-        Number(percentage);
+        Number(
+          percentage
+        );
 
       if (
         !Number.isFinite(score) ||
@@ -991,32 +1662,9 @@ exports.saveFixTestResult =
           .json({
             success: false,
             message:
-              'A valid Fix Test percentage is required.'
+              "A valid Fix Test percentage is required.",
           });
       }
-
-      const session =
-        await PanicSession.findOne({
-          user: req.user.id,
-          active: true,
-          'chapters._id':
-            chapterId
-        });
-
-      if (!session) {
-        return res
-          .status(404)
-          .json({
-            success: false,
-            message:
-              'Panic Mode chapter not found.'
-          });
-      }
-
-      const chapter =
-        session.chapters.id(
-          chapterId
-        );
 
       if (
         !chapter.practised
@@ -1026,7 +1674,7 @@ exports.saveFixTestResult =
           .json({
             success: false,
             message:
-              'Complete targeted practice before taking the Fix Test.'
+              "Complete targeted practice before taking the Fix Test.",
           });
       }
 
@@ -1034,37 +1682,33 @@ exports.saveFixTestResult =
         score >= 70;
 
       chapter.fixTestScore =
-        Math.round(score);
+        Math.round(
+          score
+        );
 
       chapter.fixTestPassed =
         passed;
 
       if (passed) {
         chapter.status =
-          'fixed';
+          "fixed";
 
         chapter.fixedAt =
           new Date();
       } else {
         chapter.status =
-          'fix-first';
+          "fix-first";
 
         chapter.fixedAt =
           null;
       }
-
-      /*
-      |--------------------------------------------------------------------------
-      | Check whether all Fix First chapters are fixed
-      |--------------------------------------------------------------------------
-      */
 
       const unresolved =
         session.chapters.filter(
           (item) => {
             return (
               item.status ===
-                'fix-first' &&
+                "fix-first" &&
               !item.fixTestPassed
             );
           }
@@ -1087,29 +1731,33 @@ exports.saveFixTestResult =
         .json({
           success: true,
 
-          message: passed
-            ? 'Weakness fixed. Great work!'
-            : 'You improved, but this chapter still needs work.',
+          message:
+            passed
+              ? "Weakness fixed. Great work!"
+              : "You improved, but this chapter still needs work.",
 
           data: {
             passed,
 
-            targetPercentage: 70,
+            targetPercentage:
+              70,
 
             percentage:
-              Math.round(score),
+              Math.round(
+                score
+              ),
 
             chapter,
 
             session:
               formatSession(
                 session
-              )
-          }
+              ),
+          },
         });
     } catch (error) {
       console.error(
-        'Save Fix Test Error:',
+        "SAVE PANIC FIX TEST ERROR:",
         error
       );
 
@@ -1118,33 +1766,32 @@ exports.saveFixTestResult =
         .json({
           success: false,
           message:
-            'Unable to save Fix Test result.'
+            "Unable to save Fix Test result.",
         });
     }
   };
 
-/*
-|--------------------------------------------------------------------------
-| DELETE / RESET ACTIVE PANIC PLAN
-|--------------------------------------------------------------------------
-|
-| DELETE /api/panic-mode/plan
-|
-|--------------------------------------------------------------------------
-*/
+// ============================================
+// RESET ACTIVE PANIC PLAN
+// DELETE /api/panic-mode/plan
+// ============================================
 
 exports.resetPanicPlan =
   async (req, res) => {
     try {
       await PanicSession.updateMany(
         {
-          user: req.user.id,
-          active: true
+          user:
+            req.user.id,
+
+          active:
+            true,
         },
         {
           $set: {
-            active: false
-          }
+            active:
+              false,
+          },
         }
       );
 
@@ -1152,12 +1799,13 @@ exports.resetPanicPlan =
         .status(200)
         .json({
           success: true,
+
           message:
-            'Panic Mode plan reset.'
+            "Panic Mode plan reset.",
         });
     } catch (error) {
       console.error(
-        'Reset Panic Plan Error:',
+        "RESET PANIC PLAN ERROR:",
         error
       );
 
@@ -1166,7 +1814,7 @@ exports.resetPanicPlan =
         .json({
           success: false,
           message:
-            'Unable to reset Panic Mode plan.'
+            "Unable to reset Panic Mode plan.",
         });
     }
   };
