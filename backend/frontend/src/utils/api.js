@@ -980,3 +980,41 @@ export const adminAPI = {
 };
 
 export default api;
+
+// ============================================
+// PANIC MODE API
+// ============================================
+
+export const panicModeAPI = {
+  getPlan: async () => {
+    const response = await api.get('/panic-mode/plan');
+    return response.data;
+  },
+
+  createPlan: async (data) => {
+    const response = await api.post('/panic-mode/plan', data);
+    return response.data;
+  },
+
+  updateChapterProgress: async (chapterId, data) => {
+    const response = await api.patch(
+      `/panic-mode/chapters/${chapterId}`,
+      data
+    );
+    return response.data;
+  },
+
+  saveFixTestResult: async (chapterId, percentage) => {
+    const response = await api.post(
+      `/panic-mode/chapters/${chapterId}/fix-test`,
+      { percentage }
+    );
+    return response.data;
+  },
+
+  resetPlan: async () => {
+    const response = await api.delete('/panic-mode/plan');
+    return response.data;
+  },
+};
+
