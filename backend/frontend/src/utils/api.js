@@ -154,80 +154,24 @@ const mockAPI = {
       const user = db.users.find(u => u.email === data.email && u.password === data.password);
       if (!user) throw new Error('Invalid credentials');
 
-      // Update streaks
-      if (user.role === 'student' && db.streaks[user.id]) {
-        const streak = db.streaks[user.id];
-        const today = new Date();
-        const lastActive = new Date(streak.lastActiveDate);
-        const diffTime = Math.abs(today - lastActive);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        if (diffDays === 1) {
-          streak.currentStreak += 1;
-          if (streak.currentStreak > streak.longestStreak) {
-            streak.longestStreak = streak.currentStreak;
-          }
-          streak.lastActiveDate = today.toISOString();
-        } else if (diffDays > 1) {
-          streak.currentStreak = 1;
-          streak.lastActiveDate = today.toISOString();
-        }
-        db.streaks[user.id] = streak;
-        saveMockDB(db);
-      }
-
       return {
         success: true,
         token: 'mock_jwt_token_' + user.id,
-        user: { id: user.id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified }
+        user: { id: user.id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified, isProfileComplete: user.isProfileComplete }
       };
     },
 
-    me: async () => {
+    getMe: async () => {
       const token = localStorage.getItem('token');
       if (!token || !token.startsWith('mock_jwt_token_')) throw new Error('Not authorized');
       const userId = token.replace('mock_jwt_token_', '');
-      
       const db = getMockDB();
       const user = db.users.find(u => u.id === userId);
       if (!user) throw new Error('User not found');
-
-      let profile = null;
-      let streak = null;
-
-      if (user.role === 'student') {
-        profile = db.students[userId] || null;
-        streak = db.streaks[userId] || null;
-      } else if (user.role === 'teacher') {
-        profile = db.teachers[userId] || null;
-      }
-
-      return {
-        success: true,
-        user: { id: user.id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified },
-        profile,
-        streak
-      };
-    },
-
-    verifyEmail: async () => {
-      const token = localStorage.getItem('token');
-      const userId = token.replace('mock_jwt_token_', '');
-      const db = getMockDB();
-      const user = db.users.find(u => u.id === userId);
-      if (user) {
-        user.isVerified = true;
-        saveMockDB(db);
-      }
-      return { success: true, message: 'Email verified' };
-    },
-
-    forgotPassword: async () => {
-      return { success: true, message: 'Reset link sent' };
+      return { success: true, user: { id: user.id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified, isProfileComplete: user.isProfileComplete } };
     },
 
     googleLogin: async (credential) => {
-      // In mock mode, simulate a Google user
       const db = getMockDB();
       const mockGoogleEmail = 'google.user@gmail.com';
       const mockGoogleName = 'Google User';
@@ -244,7 +188,9 @@ const mockAPI = {
           isVerified: true,
           googleId: 'mock_google_id'
         };
+
         db.users.push(user);
+
         db.students[user.id] = {
           user: user.id,
           coins: 100,
@@ -254,12 +200,14 @@ const mockAPI = {
           badges: [{ name: 'Welcome Aboard', icon: 'award', earnedAt: new Date().toISOString() }],
           rewardsRedeemed: []
         };
+
         db.streaks[user.id] = {
           user: user.id,
           currentStreak: 1,
           longestStreak: 1,
           lastActiveDate: new Date().toISOString()
         };
+
         saveMockDB(db);
       }
 
@@ -269,13 +217,15 @@ const mockAPI = {
         user: { id: user.id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified, isProfileComplete: user.isProfileComplete }
       };
     },
+
     completeProfile: async (data) => {
       const token = localStorage.getItem('token');
       if (!token || !token.startsWith('mock_jwt_token_')) throw new Error('Not authorized');
+
       const userId = token.replace('mock_jwt_token_', '');
-      
       const db = getMockDB();
       const user = db.users.find(u => u.id === userId);
+
       if (!user) throw new Error('User not found');
 
       if (data.role) user.role = data.role;
@@ -283,17 +233,34 @@ const mockAPI = {
       if (data.department) user.department = data.department;
       if (data.schoolName) user.schoolName = data.schoolName;
       if (data.address) user.address = data.address;
+
       user.isProfileComplete = true;
 
-      // Ensure profile exists for the selected role
       if (user.role === 'student' && !db.students[userId]) {
-        db.students[userId] = { user: userId, coins: 0, xp: 0, level: 1, stream: data.stream || 'General', badges: [], rewardsRedeemed: [] };
+        db.students[userId] = {
+          user: userId,
+          coins: 0,
+          xp: 0,
+          level: 1,
+          stream: data.stream || 'General',
+          badges: [],
+          rewardsRedeemed: []
+        };
       } else if (user.role === 'teacher' && !db.teachers[userId]) {
-        db.teachers[userId] = { user: userId, qualification: 'Qualified Educator', bio: '', subjects: [] };
+        db.teachers[userId] = {
+          user: userId,
+          qualification: 'Qualified Educator',
+          bio: '',
+          subjects: []
+        };
       }
 
       saveMockDB(db);
-      return { success: true, user: { ...user } };
+
+      return {
+        success: true,
+        user: { ...user }
+      };
     }
   },
 
@@ -303,38 +270,52 @@ const mockAPI = {
       const db = getMockDB();
       return { success: true, data: db.subjects };
     },
+
     getChapters: async (subjectId) => {
       const db = getMockDB();
       const chapters = db.chapters.filter(c => c.subject === subjectId);
       return { success: true, data: chapters };
     },
+
     getNotes: async (chapterId) => {
       const db = getMockDB();
       const notes = db.notes.filter(n => n.chapter === chapterId);
       return { success: true, data: notes };
     },
+
     getPYQs: async (subjectId) => {
       const db = getMockDB();
       const pyqs = db.pyqs.filter(p => p.subject === subjectId);
       return { success: true, data: pyqs };
     },
+
     getTests: async (subjectId, chapterId = null) => {
       const db = getMockDB();
       let tests = db.tests.filter(t => t.subject === subjectId);
+
       if (chapterId) {
         tests = tests.filter(t => t.chapter && t.chapter._id === chapterId);
       }
+
       return { success: true, data: tests };
     },
+
     getTestDetail: async (testId) => {
       const db = getMockDB();
       const test = db.tests.find(t => t._id === testId);
+
       if (!test) throw new Error('Test not found');
-      // Populate full questions
-      const questionsList = test.questions.map(qid => db.questions.find(q => q._id === qid));
+
+      const questionsList = test.questions.map(qid =>
+        db.questions.find(q => q._id === qid)
+      );
+
       return {
         success: true,
-        data: { ...test, questions: questionsList }
+        data: {
+          ...test,
+          questions: questionsList
+        }
       };
     }
   },
@@ -347,9 +328,11 @@ const mockAPI = {
       const db = getMockDB();
 
       const test = db.tests.find(t => t._id === testId);
+
       if (!test) throw new Error('Test not found');
 
       let correctCount = 0;
+
       const gradedAnswers = test.questions.map((qid) => {
         const q = db.questions.find(ques => ques._id === qid);
         const submitted = data.answers.find(a => a.questionId === qid);
@@ -406,7 +389,6 @@ const mockAPI = {
         student.coins += coinsEarned;
         student.level = Math.floor(student.xp / 500) + 1;
 
-        // Check for achievements
         const resultsCount = db.results.filter(r => r.user === userId).length;
         const currentStreak = db.streaks[userId] ? db.streaks[userId].currentStreak : 0;
         const currentBadges = student.badges.map(b => b.name);
@@ -414,12 +396,18 @@ const mockAPI = {
         db.achievements.forEach(ach => {
           if (!currentBadges.includes(ach.name)) {
             let meets = false;
+
             if (ach.requirementType === 'xp' && student.xp >= ach.requirementValue) meets = true;
             if (ach.requirementType === 'streak' && currentStreak >= ach.requirementValue) meets = true;
             if (ach.requirementType === 'test_count' && resultsCount >= ach.requirementValue) meets = true;
 
             if (meets) {
-              student.badges.push({ name: ach.name, icon: ach.icon, earnedAt: new Date().toISOString() });
+              student.badges.push({
+                name: ach.name,
+                icon: ach.icon,
+                earnedAt: new Date().toISOString()
+              });
+
               student.xp += 100;
               student.coins += 50;
             }
@@ -449,17 +437,25 @@ const mockAPI = {
       const userId = token.replace('mock_jwt_token_', '');
       const db = getMockDB();
       const results = db.results.filter(r => r.user === userId);
-      return { success: true, data: results };
+
+      return {
+        success: true,
+        data: results
+      };
     },
 
     getResultDetail: async (resultId) => {
       const db = getMockDB();
       const res = db.results.find(r => r._id === resultId);
+
       if (!res) throw new Error('Result not found');
-      // Hydrate test detail
+
       const test = db.tests.find(t => t._id === res.test._id);
-      const questionsList = test.questions.map(qid => db.questions.find(q => q._id === qid));
-      
+
+      const questionsList = test.questions.map(qid =>
+        db.questions.find(q => q._id === qid)
+      );
+
       return {
         success: true,
         data: {
@@ -481,64 +477,183 @@ const mockAPI = {
       const userResults = db.results.filter(r => r.user === userId);
 
       const subjectStats = {};
+
       userResults.forEach(r => {
         if (!r.test || !r.test.subject) return;
+
         const subName = r.test.subject.name;
 
         if (!subjectStats[subName]) {
-          subjectStats[subName] = { totalQuestions: 0, correctAnswers: 0, testCount: 0, passedCount: 0 };
+          subjectStats[subName] = {
+            totalQuestions: 0,
+            correctAnswers: 0,
+            testCount: 0,
+            passedCount: 0
+          };
         }
 
         subjectStats[subName].testCount += 1;
         subjectStats[subName].totalQuestions += r.totalQuestions;
         subjectStats[subName].correctAnswers += r.correctAnswers;
-        if (r.isPassed) subjectStats[subName].passedCount += 1;
+
+        if (r.isPassed) {
+          subjectStats[subName].passedCount += 1;
+        }
       });
 
       const parsedStats = Object.keys(subjectStats).map(name => {
         const stats = subjectStats[name];
-        const avgPercentage = stats.totalQuestions > 0 ? Math.round((stats.correctAnswers / stats.totalQuestions) * 100) : 0;
+
+        const avgPercentage =
+          stats.totalQuestions > 0
+            ? Math.round(
+                (stats.correctAnswers / stats.totalQuestions) * 100
+              )
+            : 0;
+
         return {
           subject: name,
           avgPercentage,
           testCount: stats.testCount,
           passedCount: stats.passedCount,
           failedCount: stats.testCount - stats.passedCount,
-          strength: avgPercentage >= 75 ? 'Strong' : avgPercentage >= 45 ? 'Average' : 'Needs Focus'
+          strength:
+            avgPercentage >= 75
+              ? 'Strong'
+              : avgPercentage >= 45
+                ? 'Average'
+                : 'Needs Focus'
         };
       });
 
-      const progression = userResults.map(r => ({
-        date: new Date(r.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        score: r.percentage
-      })).reverse();
+      const progression = userResults
+        .map(r => ({
+          date: new Date(r.createdAt).toLocaleDateString(
+            undefined,
+            {
+              month: 'short',
+              day: 'numeric'
+            }
+          ),
+          score: r.percentage
+        }))
+        .reverse();
 
-      const weakAreas = parsedStats.filter(s => s.strength === 'Needs Focus').map(s => s.subject);
-      const strongAreas = parsedStats.filter(s => s.strength === 'Strong').map(s => s.subject);
+      const weakAreas = parsedStats
+        .filter(s => s.strength === 'Needs Focus')
+        .map(s => s.subject);
+
+      const strongAreas = parsedStats
+        .filter(s => s.strength === 'Strong')
+        .map(s => s.subject);
+
       const suggestions = [];
 
       if (weakAreas.length > 0) {
         weakAreas.forEach(a => {
-          suggestions.push(`Spend an extra 30 minutes reading chapter notes for ${a}.`);
-          suggestions.push(`Attempt 5 more practice quizzes in ${a} to lift score levels.`);
+          suggestions.push(
+            `Spend an extra 30 minutes reading chapter notes for ${a}.`
+          );
         });
-      } else if (parsedStats.length === 0) {
-        suggestions.push("Complete your first chapter quiz to generate study suggestions.");
-      } else {
-        suggestions.push("Excellent work! Try taking Mock Tests under time constraints to improve speed.");
+      }
+
+          if (strongAreas.length > 0) {
+        suggestions.push(
+          `Great work in ${strongAreas.join(', ')}! Keep revising to maintain your performance.`
+        );
+      }
+
+      if (suggestions.length === 0) {
+        suggestions.push(
+          'Take more quizzes to unlock personalized suggestions.'
+        );
       }
 
       return {
         success: true,
-        subjectStats: parsedStats,
-        progression,
-        summary: { strong: strongAreas, weak: weakAreas, suggestions }
+        data: {
+          subjectStats: parsedStats,
+          progression,
+          weakAreas,
+          strongAreas,
+          suggestions
+        }
+      };
+    },
+
+    getProfile: async () => {
+      const token = localStorage.getItem('token');
+      const userId = token.replace('mock_jwt_token_', '');
+      const db = getMockDB();
+
+      const user = db.users.find(u => u.id === userId);
+      const student = db.students[userId];
+      const streak = db.streaks[userId];
+
+      return {
+        success: true,
+        data: {
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role
+          },
+          student,
+          streak
+        }
+      };
+    },
+
+    updateProfile: async (data) => {
+      const token = localStorage.getItem('token');
+      const userId = token.replace('mock_jwt_token_', '');
+      const db = getMockDB();
+
+      const userIndex = db.users.findIndex(u => u.id === userId);
+
+      if (userIndex !== -1) {
+        db.users[userIndex] = {
+          ...db.users[userIndex],
+          ...data
+        };
+      }
+
+      if (db.students[userId]) {
+        db.students[userId] = {
+          ...db.students[userId],
+          ...data
+        };
+      }
+
+      saveMockDB(db);
+
+      return {
+        success: true,
+        data: {
+          user: db.users[userIndex],
+          student: db.students[userId]
+        }
       };
     },
 
     getRewards: async () => {
+      const token = localStorage.getItem('token');
+      const userId = token.replace('mock_jwt_token_', '');
       const db = getMockDB();
-      return { success: true, data: db.rewards };
+
+      const student = db.students[userId];
+
+      return {
+        success: true,
+        data: {
+          rewards: db.rewards,
+          coins: student ? student.coins : 0,
+          redeemed: student
+            ? student.rewardsRedeemed
+            : []
+        }
+      };
     },
 
     redeemReward: async (rewardId) => {
@@ -546,475 +661,1431 @@ const mockAPI = {
       const userId = token.replace('mock_jwt_token_', '');
       const db = getMockDB();
 
-      const reward = db.rewards.find(r => r._id === rewardId);
-      if (!reward) throw new Error('Reward not found');
-
       const student = db.students[userId];
-      if (!student) throw new Error('Student profile not found');
+      const reward = db.rewards.find(
+        r => r._id === rewardId
+      );
+
+      if (!student) {
+        throw new Error(
+          'Student profile not found'
+        );
+      }
+
+      if (!reward) {
+        throw new Error(
+          'Reward not found'
+        );
+      }
 
       if (student.coins < reward.costCoins) {
-        throw new Error(`Insufficient coins. Costs ${reward.costCoins} but you have ${student.coins}.`);
+        throw new Error(
+          'Not enough coins'
+        );
       }
 
       student.coins -= reward.costCoins;
+
       student.rewardsRedeemed.push({
-        reward: reward._id,
+        reward: rewardId,
         redeemedAt: new Date().toISOString()
       });
 
-      if (reward.type === 'badge') {
-        student.badges.push({
-          name: reward.title,
-          icon: reward.badgeImage,
-          earnedAt: new Date().toISOString()
-        });
-      }
-
-      db.students[userId] = student;
       saveMockDB(db);
 
       return {
         success: true,
-        message: `Successfully redeemed '${reward.title}'!`,
-        coinsRemaining: student.coins,
-        badges: student.badges
+        data: {
+          reward,
+          coins: student.coins
+        }
+      };
+    },
+
+    getAchievements: async () => {
+      const token = localStorage.getItem('token');
+      const userId = token.replace('mock_jwt_token_', '');
+      const db = getMockDB();
+
+      const student = db.students[userId];
+
+      return {
+        success: true,
+        data: {
+          achievements: db.achievements,
+          earned: student
+            ? student.badges
+            : []
+        }
       };
     },
 
     getLeaderboard: async () => {
       const db = getMockDB();
-      const students = Object.values(db.students);
-      students.sort((a, b) => b.xp - a.xp);
 
-      const data = students.map((s, idx) => {
-        const u = db.users.find(user => user.id === s.user);
-        return {
-          rank: idx + 1,
-          name: u ? u.name : 'Unknown Student',
-          xp: s.xp,
-          level: s.level,
-          badgesCount: s.badges.length
-        };
-      });
+      const leaderboard = Object.values(
+        db.students
+      )
+        .map(student => {
+          const user = db.users.find(
+            u => u.id === student.user
+          );
 
-      return { success: true, data };
+          return {
+            user: {
+              id: user?.id,
+              name: user?.name || 'Student'
+            },
+            coins: student.coins || 0,
+            xp: student.xp || 0,
+            level: student.level || 1
+          };
+        })
+        .sort((a, b) => b.xp - a.xp);
+
+      return {
+        success: true,
+        data: leaderboard
+      };
     }
   },
 
   // Teacher Routes
   teacher: {
-    createChapter: async (data) => {
+    getProfile: async () => {
+      const token = localStorage.getItem('token');
+      const userId = token.replace('mock_jwt_token_', '');
       const db = getMockDB();
-      const newChapter = {
-        _id: 'c_' + Date.now(),
-        subject: data.subjectId,
-        chapterNumber: Number(data.chapterNumber),
-        title: data.title,
-        description: data.description
-      };
-      db.chapters.push(newChapter);
-      saveMockDB(db);
-      return { success: true, data: newChapter };
-    },
-    createNote: async (data) => {
-      const db = getMockDB();
-      const newNote = {
-        _id: 'n_' + Date.now(),
-        chapter: data.chapterId,
-        title: data.title,
-        content: data.content,
-        pdfUrl: data.pdfUrl || 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-        uploadedBy: { name: 'You (Instructor)' }
-      };
-      db.notes.push(newNote);
-      saveMockDB(db);
-      return { success: true, data: newNote };
-    },
-    createPYQ: async (data) => {
-      const db = getMockDB();
-      const newPYQ = {
-        _id: 'pyq_' + Date.now(),
-        subject: data.subjectId,
-        chapter: data.chapterId ? { _id: data.chapterId, title: 'Laws of Motion' } : null,
-        year: Number(data.year),
-        examName: data.examName,
-        title: data.title,
-        pdfUrl: data.pdfUrl || 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'
-      };
-      db.pyqs.push(newPYQ);
-      saveMockDB(db);
-      return { success: true, data: newPYQ };
-    },
-    createTest: async (data) => {
-      const db = getMockDB();
-      
-      // Create individual questions
-      const questionIds = [];
-      data.questions.forEach((q) => {
-        const newQ = {
-          _id: 'q_' + Math.random().toString(36).substr(2, 9),
-          subject: data.subjectId,
-          chapter: data.chapterId || null,
-          text: q.text,
-          options: q.options,
-          correctOption: Number(q.correctOption),
-          explanation: q.explanation || '',
-          difficulty: q.difficulty || 'medium'
-        };
-        db.questions.push(newQ);
-        questionIds.push(newQ._id);
-      });
 
-      // Create test
-      const newTest = {
-        _id: 't_' + Date.now(),
-        title: data.title,
-        description: data.description,
-        subject: data.subjectId,
-        chapter: data.chapterId ? { _id: data.chapterId, title: 'Chapter Material' } : null,
-        duration: Number(data.duration),
-        type: data.type || 'Quiz',
-        questions: questionIds,
-        totalMarks: data.totalMarks || (questionIds.length * 10),
-        passingScore: Number(data.passingScore) || 40
-      };
+      const user = db.users.find(
+        u => u.id === userId
+      );
 
-      db.tests.push(newTest);
-      saveMockDB(db);
-
-      return { success: true, data: newTest };
-    },
-    getStudentMetrics: async () => {
-      const db = getMockDB();
-      const studentProfiles = Object.values(db.students);
-      const totalSubmissions = db.results.length;
-      const passedCount = db.results.filter(r => r.isPassed).length;
-      const passPercentage = totalSubmissions > 0 ? Math.round((passedCount / totalSubmissions) * 100) : 0;
-
-      const studentsData = studentProfiles.map(s => {
-        const u = db.users.find(user => user.id === s.user);
-        return {
-          id: s.user,
-          name: u ? u.name : 'Unknown',
-          email: u ? u.email : 'N/A',
-          xp: s.xp,
-          level: s.level,
-          badgesCount: s.badges.length
-        };
-      });
-
-      const recentSubmissions = db.results.slice(-10).map(r => {
-        const u = db.users.find(user => user.id === r.user);
-        return {
-          id: r._id,
-          studentName: u ? u.name : 'Unknown',
-          testTitle: r.test ? r.test.title : 'Deleted Test',
-          testType: r.test ? r.test.type : 'N/A',
-          percentage: r.percentage,
-          isPassed: r.isPassed,
-          date: new Date(r.createdAt).toLocaleDateString()
-        };
-      });
+      const teacher = db.teachers[userId];
 
       return {
         success: true,
         data: {
-          studentsCount: studentsData.length,
-          totalSubmissions,
-          passPercentage,
-          students: studentsData,
-          recentSubmissions
+          user,
+          teacher
         }
+      };
+    },
+
+    updateProfile: async (data) => {
+      const token = localStorage.getItem('token');
+      const userId = token.replace('mock_jwt_token_', '');
+      const db = getMockDB();
+
+      if (!db.teachers[userId]) {
+        db.teachers[userId] = {
+          user: userId
+        };
+      }
+
+      db.teachers[userId] = {
+        ...db.teachers[userId],
+        ...data
+      };
+
+      saveMockDB(db);
+
+      return {
+        success: true,
+        data: db.teachers[userId]
+      };
+    },
+
+    createNote: async (data) => {
+      const token = localStorage.getItem('token');
+      const userId = token.replace('mock_jwt_token_', '');
+      const db = getMockDB();
+
+      const user = db.users.find(
+        u => u.id === userId
+      );
+
+      const note = {
+        _id: 'note_' + Date.now(),
+        ...data,
+        uploadedBy: {
+          name: user?.name || 'Teacher'
+        },
+        createdAt: new Date().toISOString()
+      };
+
+      db.notes.push(note);
+
+      saveMockDB(db);
+
+      return {
+        success: true,
+        data: note
+      };
+    },
+
+    createQuestion: async (data) => {
+      const db = getMockDB();
+
+      const question = {
+        _id: 'question_' + Date.now(),
+        ...data
+      };
+
+      db.questions.push(question);
+
+      saveMockDB(db);
+
+      return {
+        success: true,
+        data: question
+      };
+    },
+
+    createTest: async (data) => {
+      const db = getMockDB();
+
+      const test = {
+        _id: 'test_' + Date.now(),
+        ...data
+      };
+
+      db.tests.push(test);
+
+      saveMockDB(db);
+
+      return {
+        success: true,
+        data: test
+      };
+    },
+
+    getTests: async () => {
+      const db = getMockDB();
+
+      return {
+        success: true,
+        data: db.tests
+      };
+    },
+
+    getResults: async () => {
+      const db = getMockDB();
+
+      return {
+        success: true,
+        data: db.results
       };
     }
   },
 
   // Admin Routes
   admin: {
-    createUser: async (data) => {
+    getDashboard: async () => {
       const db = getMockDB();
-      const userExists = db.users.find(u => u.email === data.email);
-      if (userExists) throw new Error('User already exists');
-
-      const newUser = {
-        id: 'u_' + Date.now(),
-        name: data.name,
-        email: data.email,
-        password: data.password || 'password123',
-        role: data.role || 'student',
-        isVerified: true
-      };
-      db.users.push(newUser);
-
-      if (newUser.role === 'student') {
-        db.students[newUser.id] = { user: newUser.id, coins: 0, xp: 0, level: 1, badges: [], rewardsRedeemed: [] };
-      } else if (newUser.role === 'teacher') {
-        db.teachers[newUser.id] = { user: newUser.id, qualification: 'Qualified Educator', bio: '', subjects: [] };
-      }
-      saveMockDB(db);
-      return { success: true, data: newUser };
-    },
-    getUsers: async () => {
-      const db = getMockDB();
-      return { success: true, data: db.users };
-    },
-    updateUser: async (userId, data) => {
-      const db = getMockDB();
-      const idx = db.users.findIndex(u => u.id === userId);
-      if (idx === -1) throw new Error('User not found');
-      
-      const user = db.users[idx];
-      if (data.name) user.name = data.name;
-      if (data.isVerified !== undefined) user.isVerified = data.isVerified;
-
-      if (data.role && data.role !== user.role) {
-        user.role = data.role;
-        if (data.role === 'student' && !db.students[userId]) {
-          db.students[userId] = { user: userId, coins: 0, xp: 0, level: 1, badges: [], rewardsRedeemed: [] };
-        } else if (data.role === 'teacher' && !db.teachers[userId]) {
-          db.teachers[userId] = { user: userId, qualification: 'Qualified Educator', bio: '', subjects: [] };
-        }
-      }
-      db.users[idx] = user;
-      saveMockDB(db);
-      return { success: true, data: user };
-    },
-    updateStudentProfile: async (userId, data) => {
-      const db = getMockDB();
-      if (!db.students[userId]) throw new Error('Student profile not found');
-      
-      const student = db.students[userId];
-      if (data.coins !== undefined) student.coins = data.coins;
-      if (data.xp !== undefined) student.xp = data.xp;
-      if (data.level !== undefined) student.level = data.level;
-      if (data.stream !== undefined) student.stream = data.stream;
-      
-      db.students[userId] = student;
-      saveMockDB(db);
-      return { success: true, data: student };
-    },
-    deleteUser: async (userId) => {
-      const db = getMockDB();
-      db.users = db.users.filter(u => u.id !== userId);
-      delete db.students[userId];
-      delete db.teachers[userId];
-      saveMockDB(db);
-      return { success: true, message: 'User deleted' };
-    },
-    createSubject: async (data) => {
-      const db = getMockDB();
-      const newSubject = {
-        _id: 's_' + Date.now(),
-        name: data.name,
-        code: data.code,
-        description: data.description,
-        category: data.category || 'General'
-      };
-      db.subjects.push(newSubject);
-      saveMockDB(db);
-      return { success: true, data: newSubject };
-    },
-    deleteSubject: async (id) => {
-      const db = getMockDB();
-      db.subjects = db.subjects.filter(s => s._id !== id);
-      saveMockDB(db);
-      return { success: true };
-    },
-    deleteChapter: async (id) => {
-      const db = getMockDB();
-      db.chapters = db.chapters.filter(c => c._id !== id);
-      saveMockDB(db);
-      return { success: true };
-    },
-    deleteNote: async (id) => {
-      const db = getMockDB();
-      db.notes = db.notes.filter(n => n._id !== id);
-      saveMockDB(db);
-      return { success: true };
-    },
-    deletePYQ: async (id) => {
-      const db = getMockDB();
-      db.pyqs = db.pyqs.filter(p => p._id !== id);
-      saveMockDB(db);
-      return { success: true };
-    },
-    createReward: async (data) => {
-      const db = getMockDB();
-      const newReward = {
-        _id: 'rew_' + Date.now(),
-        title: data.title,
-        description: data.description,
-        costCoins: Number(data.costCoins),
-        badgeImage: data.badgeImage || 'star',
-        type: data.type || 'badge'
-      };
-      db.rewards.push(newReward);
-      saveMockDB(db);
-      return { success: true, data: newReward };
-    },
-    getDashboardStats: async () => {
-      const db = getMockDB();
-      const studentsCount = Object.keys(db.students).length;
-      const teachersCount = Object.keys(db.teachers).length;
-      const subjectsCount = db.subjects.length;
-      const resultsCount = db.results.length;
-      const rewardsCount = db.rewards.length;
-
-      const totalScorePercent = db.results.reduce((acc, curr) => acc + curr.percentage, 0);
-      const averageScore = resultsCount > 0 ? Math.round(totalScorePercent / resultsCount) : 0;
 
       return {
         success: true,
-        stats: { studentsCount, teachersCount, subjectsCount, resultsCount, rewardsCount, averageScore }
+        data: {
+          totalUsers: db.users.length,
+          totalStudents: Object.keys(
+            db.students
+          ).length,
+          totalTeachers: Object.keys(
+            db.teachers
+          ).length,
+          totalSubjects: db.subjects.length,
+          totalTests: db.tests.length,
+          totalResults: db.results.length
+        }
       };
     },
-    getQuestions: async () => {
+
+    getUsers: async () => {
       const db = getMockDB();
-      return { success: true, data: db.questions };
+
+      return {
+        success: true,
+        data: db.users
+      };
     },
-    createQuestion: async (data) => {
+
+    updateUser: async (userId, data) => {
       const db = getMockDB();
-      const newQuestion = {
-        _id: 'q_' + Date.now(),
+
+      const index = db.users.findIndex(
+        u => u.id === userId
+      );
+
+      if (index === -1) {
+        throw new Error(
+          'User not found'
+        );
+      }
+
+      db.users[index] = {
+        ...db.users[index],
         ...data
       };
-      db.questions.push(newQuestion);
+
       saveMockDB(db);
-      return { success: true, data: newQuestion };
+
+      return {
+        success: true,
+        data: db.users[index]
+      };
     },
-    deleteQuestion: async (id) => {
+
+    deleteUser: async (userId) => {
       const db = getMockDB();
-      db.questions = db.questions.filter(q => q._id !== id);
+
+      db.users = db.users.filter(
+        u => u.id !== userId
+      );
+
+      delete db.students[userId];
+      delete db.teachers[userId];
+      delete db.streaks[userId];
+
       saveMockDB(db);
-      return { success: true };
+
+      return {
+        success: true,
+        message: 'User deleted'
+      };
+    },
+
+    createSubject: async (data) => {
+      const db = getMockDB();
+
+      const subject = {
+        _id: 'subject_' + Date.now(),
+        ...data
+      };
+
+      db.subjects.push(subject);
+
+      saveMockDB(db);
+
+      return {
+        success: true,
+        data: subject
+      };
+    },
+
+    createChapter: async (data) => {
+      const db = getMockDB();
+
+      const chapter = {
+        _id: 'chapter_' + Date.now(),
+        ...data
+      };
+
+      db.chapters.push(chapter);
+
+      saveMockDB(db);
+
+      return {
+        success: true,
+        data: chapter
+      };
+    },
+
+    createReward: async (data) => {
+      const db = getMockDB();
+
+      const reward = {
+        _id: 'reward_' + Date.now(),
+        ...data
+      };
+
+      db.rewards.push(reward);
+
+      saveMockDB(db);
+
+      return {
+        success: true,
+        data: reward
+      };
+    },
+
+    getAllResults: async () => {
+      const db = getMockDB();
+
+      return {
+        success: true,
+        data: db.results
+      };
     }
   }
 };
 
-// HELPER WRAPPER TO DO REAL CALL OR FALLBACK ON ERROR
-const executeRequest = async (requestPromise, mockFallbackFn) => {
-  try {
-    const response = await requestPromise;
-    return response.data;
-  } catch (error) {
-    const message = error.response?.data?.message || '';
-    // If it's a network/connection error, OR a database buffering timeout from the backend, run mock fallback
-    if (!error.response || error.code === 'ERR_NETWORK' || message.includes('buffering timed out') || message.includes('MongoDB')) {
-      console.warn('Backend server or database not detected. Navta is running in Client-Side Stateful Mockup Mode!');
-      try {
-        const mockResult = await mockFallbackFn();
-        return mockResult;
-      } catch (mockError) {
-        return Promise.reject(mockError);
-      }
-    }
-    // Otherwise return standard Axios structured error message
-    throw new Error(message || 'Something went wrong');
-  }
-};
+// ============================================
+// AUTH API
+// ============================================
 
-// API EXPORTS
 export const authAPI = {
-  register: (data) => executeRequest(api.post('/auth/register', data), () => mockAPI.auth.register(data)),
-  login: (data) => executeRequest(api.post('/auth/login', data), () => mockAPI.auth.login(data)),
-  googleLogin: (credential) => executeRequest(api.post('/auth/google', { credential }), () => mockAPI.auth.googleLogin(credential)),
-  getMe: () => executeRequest(api.get('/auth/me'), () => mockAPI.auth.me()),
-  verifyEmail: () => executeRequest(api.post('/auth/verify-email'), () => mockAPI.auth.verifyEmail()),
-  forgotPassword: (email) => executeRequest(api.post('/auth/forgot-password', { email }), () => mockAPI.auth.forgotPassword()),
-  completeProfile: (data) => executeRequest(api.put('/auth/complete-profile', data), () => mockAPI.auth.completeProfile(data))
+  register: async (data) => {
+    try {
+      const response = await api.post(
+        '/auth/register',
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.auth.register(data);
+      }
+
+      throw error;
+    }
+  },
+
+  login: async (data) => {
+    try {
+      const response = await api.post(
+        '/auth/login',
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.auth.login(data);
+      }
+
+      throw error;
+    }
+  },
+
+  googleLogin: async (credential) => {
+    try {
+      const response = await api.post(
+        '/auth/google',
+        {
+          credential
+        }
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.auth.googleLogin(
+          credential
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  getMe: async () => {
+    try {
+      const response = await api.get(
+        '/auth/me'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.auth.getMe();
+      }
+
+      throw error;
+    }
+  },
+
+  completeProfile: async (data) => {
+    try {
+      const response = await api.put(
+        '/auth/complete-profile',
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.auth.completeProfile(
+          data
+        );
+      }
+
+      throw error;
+    }
+  }
 };
+
+// ============================================
+// CONTENT API
+// ============================================
 
 export const contentAPI = {
-  getSubjects: () => executeRequest(api.get('/content/subjects'), () => mockAPI.content.getSubjects()),
-  getChapters: (subjectId) => executeRequest(api.get(`/content/subjects/${subjectId}/chapters`), () => mockAPI.content.getChapters(subjectId)),
-  getNotes: (chapterId) => executeRequest(api.get(`/content/chapters/${chapterId}/notes`), () => mockAPI.content.getNotes(chapterId)),
-  getPYQs: (subjectId) => executeRequest(api.get(`/content/subjects/${subjectId}/pyqs`), () => mockAPI.content.getPYQs(subjectId)),
-  getTests: (subjectId, chapterId = null) => {
-    const url = `/content/subjects/${subjectId}/tests${chapterId ? `?chapterId=${chapterId}` : ''}`;
-    return executeRequest(api.get(url), () => mockAPI.content.getTests(subjectId, chapterId));
+  getSubjects: async () => {
+    try {
+      const response = await api.get(
+        '/content/subjects'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.content.getSubjects();
+      }
+
+      throw error;
+    }
   },
-  getTestDetail: (testId) => executeRequest(api.get(`/content/tests/${testId}`), () => mockAPI.content.getTestDetail(testId))
+
+  getChapters: async (subjectId) => {
+    try {
+      const response = await api.get(
+        `/content/subjects/${subjectId}/chapters`
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.content.getChapters(
+          subjectId
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  getNotes: async (chapterId) => {
+    try {
+      const response = await api.get(
+        `/content/chapters/${chapterId}/notes`
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.content.getNotes(
+          chapterId
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  getPYQs: async (subjectId) => {
+    try {
+      const response = await api.get(
+        `/content/subjects/${subjectId}/pyqs`
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.content.getPYQs(
+          subjectId
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  getTests: async (
+    subjectId,
+    chapterId = null
+  ) => {
+    try {
+      const params = {};
+
+      if (chapterId) {
+        params.chapterId =
+          chapterId;
+      }
+
+      const response = await api.get(
+        `/content/subjects/${subjectId}/tests`,
+        {
+          params
+        }
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.content.getTests(
+          subjectId,
+          chapterId
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  getTestDetail: async (testId) => {
+    try {
+      const response = await api.get(
+        `/content/tests/${testId}`
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.content.getTestDetail(
+          testId
+        );
+      }
+
+      throw error;
+    }
+  }
 };
+
+// ============================================
+// STUDENT API
+// ============================================
 
 export const studentAPI = {
-  submitTest: (testId, answers, timeTaken) => executeRequest(api.post(`/student/tests/${testId}/submit`, { answers, timeTaken }), () => mockAPI.student.submitTest(testId, { answers, timeTaken })),
-  getResults: () => executeRequest(api.get('/student/results'), () => mockAPI.student.getResults()),
-  getResultDetail: (resultId) => executeRequest(api.get(`/student/results/${resultId}`), () => mockAPI.student.getResultDetail(resultId)),
-  getAnalytics: () => executeRequest(api.get('/student/analytics'), () => mockAPI.student.getAnalytics()),
-  getRewards: () => executeRequest(api.get('/student/rewards'), () => mockAPI.student.getRewards()),
-  redeemReward: (rewardId) => executeRequest(api.post(`/student/rewards/${rewardId}/redeem`), () => mockAPI.student.redeemReward(rewardId)),
-  getLeaderboard: () => executeRequest(api.get('/student/leaderboard'), () => mockAPI.student.getLeaderboard())
+  submitTest: async (
+    testId,
+    data
+  ) => {
+    try {
+      const response = await api.post(
+        `/student/tests/${testId}/submit`,
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.student.submitTest(
+          testId,
+          data
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  getResults: async () => {
+    try {
+      const response = await api.get(
+        '/student/results'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.student.getResults();
+      }
+
+      throw error;
+    }
+  },
+
+  getResultDetail: async (resultId) => {
+    try {
+      const response = await api.get(
+        `/student/results/${resultId}`
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.student.getResultDetail(
+          resultId
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  getAnalytics: async () => {
+    try {
+      const response = await api.get(
+        '/student/analytics'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.student.getAnalytics();
+      }
+
+      throw error;
+    }
+  },
+
+  getProfile: async () => {
+    try {
+      const response = await api.get(
+        '/student/profile'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.student.getProfile();
+      }
+
+      throw error;
+    }
+  },
+
+  updateProfile: async (data) => {
+    try {
+      const response = await api.put(
+        '/student/profile',
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.student.updateProfile(
+          data
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  getRewards: async () => {
+    try {
+      const response = await api.get(
+        '/student/rewards'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.student.getRewards();
+      }
+
+      throw error;
+    }
+  },
+
+  redeemReward: async (rewardId) => {
+    try {
+      const response = await api.post(
+        `/student/rewards/${rewardId}/redeem`
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.student.redeemReward(
+          rewardId
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  getAchievements: async () => {
+    try {
+      const response = await api.get(
+        '/student/achievements'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.student.getAchievements();
+      }
+
+      throw error;
+    }
+  },
+
+  getLeaderboard: async () => {
+    try {
+      const response = await api.get(
+        '/student/leaderboard'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.student.getLeaderboard();
+      }
+
+      throw error;
+    }
+  }
 };
+
+// ============================================
+// TEACHER API
+// ============================================
 
 export const teacherAPI = {
-  createChapter: (data) => executeRequest(api.post('/teacher/chapters', data), () => mockAPI.teacher.createChapter(data)),
-  createNote: (data) => executeRequest(api.post('/teacher/notes', data), () => mockAPI.teacher.createNote(data)),
-  createPYQ: (data) => executeRequest(api.post('/teacher/pyqs', data), () => mockAPI.teacher.createPYQ(data)),
-  createTest: (data) => executeRequest(api.post('/teacher/tests', data), () => mockAPI.teacher.createTest(data)),
-  getStudentMetrics: () => executeRequest(api.get('/teacher/student-metrics'), () => mockAPI.teacher.getStudentMetrics()),
-  getQuestions: () => executeRequest(api.get('/teacher/questions'), () => mockAPI.admin.getQuestions()),
-  createQuestion: (data) => executeRequest(api.post('/teacher/questions', data), () => mockAPI.admin.createQuestion(data)),
-  deleteQuestion: (id) => executeRequest(api.delete(`/teacher/questions/${id}`), () => mockAPI.admin.deleteQuestion(id))
+  getProfile: async () => {
+    try {
+      const response = await api.get(
+        '/teacher/profile'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.teacher.getProfile();
+      }
+
+      throw error;
+    }
+  },
+
+  updateProfile: async (data) => {
+    try {
+      const response = await api.put(
+        '/teacher/profile',
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.teacher.updateProfile(
+          data
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  createNote: async (data) => {
+    try {
+      const response = await api.post(
+        '/teacher/notes',
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.teacher.createNote(
+          data
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  createQuestion: async (data) => {
+    try {
+      const response = await api.post(
+        '/teacher/questions',
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.teacher.createQuestion(
+          data
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  createTest: async (data) => {
+    try {
+      const response = await api.post(
+        '/teacher/tests',
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.teacher.createTest(
+          data
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  getTests: async () => {
+    try {
+      const response = await api.get(
+        '/teacher/tests'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.teacher.getTests();
+      }
+
+      throw error;
+    }
+  },
+
+  getResults: async () => {
+    try {
+      const response = await api.get(
+        '/teacher/results'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.teacher.getResults();
+      }
+
+      throw error;
+    }
+  }
 };
+
+// ============================================
+// ADMIN API
+// ============================================
 
 export const adminAPI = {
-  createUser: (data) => executeRequest(api.post('/admin/users', data), () => mockAPI.admin.createUser(data)),
-  getUsers: () => executeRequest(api.get('/admin/users'), () => mockAPI.admin.getUsers()),
-  updateUser: (userId, data) => executeRequest(api.put(`/admin/users/${userId}`, data), () => mockAPI.admin.updateUser(userId, data)),
-  updateStudentProfile: (userId, data) => executeRequest(api.put(`/admin/students/${userId}`, data), () => mockAPI.admin.updateStudentProfile(userId, data)),
-  deleteUser: (userId) => executeRequest(api.delete(`/admin/users/${userId}`), () => mockAPI.admin.deleteUser(userId)),
-  createSubject: (data) => executeRequest(api.post('/admin/subjects', data), () => mockAPI.admin.createSubject(data)),
-  deleteSubject: (id) => executeRequest(api.delete(`/admin/subjects/${id}`), () => mockAPI.admin.deleteSubject(id)),
-  deleteChapter: (id) => executeRequest(api.delete(`/admin/chapters/${id}`), () => mockAPI.admin.deleteChapter(id)),
-  deleteNote: (id) => executeRequest(api.delete(`/admin/notes/${id}`), () => mockAPI.admin.deleteNote(id)),
-  deletePYQ: (id) => executeRequest(api.delete(`/admin/pyqs/${id}`), () => mockAPI.admin.deletePYQ(id)),
-  createReward: (data) => executeRequest(api.post('/admin/rewards', data), () => mockAPI.admin.createReward(data)),
-  getDashboardStats: () => executeRequest(api.get('/admin/dashboard-stats'), () => mockAPI.admin.getDashboardStats()),
-  getQuestions: () => executeRequest(api.get('/admin/questions'), () => mockAPI.admin.getQuestions()),
-  createQuestion: (data) => executeRequest(api.post('/admin/questions', data), () => mockAPI.admin.createQuestion(data)),
-  deleteQuestion: (id) => executeRequest(api.delete(`/admin/questions/${id}`), () => mockAPI.admin.deleteQuestion(id)),
-  createNote: (data) => executeRequest(api.post('/teacher/notes', data), () => mockAPI.teacher.createNote(data)),
-  createChapter: (data) => executeRequest(api.post('/teacher/chapters', data), () => mockAPI.teacher.createChapter(data)),
-  createPYQ: (data) => executeRequest(api.post('/teacher/pyqs', data), () => mockAPI.teacher.createPYQ(data)),
-  createTest: (data) => executeRequest(api.post('/teacher/tests', data), () => mockAPI.teacher.createTest(data))
+  getDashboard: async () => {
+    try {
+      const response = await api.get(
+        '/admin/dashboard'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.admin.getDashboard();
+      }
+
+      throw error;
+    }
+  },
+
+  getUsers: async () => {
+    try {
+      const response = await api.get(
+        '/admin/users'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.admin.getUsers();
+      }
+
+      throw error;
+    }
+  },
+
+  updateUser: async (
+    userId,
+    data
+  ) => {
+    try {
+      const response = await api.put(
+        `/admin/users/${userId}`,
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.admin.updateUser(
+          userId,
+          data
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  deleteUser: async (userId) => {
+    try {
+      const response = await api.delete(
+        `/admin/users/${userId}`
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.admin.deleteUser(
+          userId
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  createSubject: async (data) => {
+    try {
+      const response = await api.post(
+        '/admin/subjects',
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.admin.createSubject(
+          data
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  createChapter: async (data) => {
+    try {
+      const response = await api.post(
+        '/admin/chapters',
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.admin.createChapter(
+          data
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  createReward: async (data) => {
+    try {
+      const response = await api.post(
+        '/admin/rewards',
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.admin.createReward(
+          data
+        );
+      }
+
+      throw error;
+    }
+  },
+
+  getAllResults: async () => {
+    try {
+      const response = await api.get(
+        '/admin/results'
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.admin.getAllResults();
+      }
+
+      throw error;
+    }
+  }
 };
 
-export default api;
+// ============================================
+// NAVTA TEST API
+// ============================================
+
+export const navtaTestAPI = {
+  getConfig: async () => {
+    const response = await api.get(
+      '/navta-test/config'
+    );
+
+    return response.data;
+  },
+
+  getChapters: async ({
+    subject,
+    exam,
+    classLevel
+  }) => {
+    const response = await api.get(
+      '/navta-test/chapters',
+      {
+        params: {
+          subject,
+          exam,
+          classLevel
+        }
+      }
+    );
+
+    return response.data;
+  },
+
+  getQuestionCount: async ({
+    subject,
+    exam,
+    classLevel,
+    chapter,
+    difficulty,
+    questionType
+  }) => {
+    const response = await api.get(
+      '/navta-test/question-count',
+      {
+        params: {
+          subject,
+          exam,
+          classLevel,
+          chapter,
+          difficulty,
+          questionType
+        }
+      }
+    );
+
+    return response.data;
+  },
+
+  getQuestions: async ({
+    subject,
+    exam,
+    classLevel,
+    chapter,
+    difficulty,
+    questionType,
+    limit
+  }) => {
+    const response = await api.get(
+      '/navta-test/questions',
+      {
+        params: {
+          subject,
+          exam,
+          classLevel,
+          chapter,
+          difficulty,
+          questionType,
+          limit
+        }
+      }
+    );
+
+    return response.data;
+  },
+
+  completeTest: async (data) => {
+    const response = await api.post(
+      '/navta-test/complete',
+      data
+    );
+
+    return response.data;
+  }
+};
+
+// ============================================
+// MISTAKE NOTEBOOK API
+// ============================================
+
+export const mistakeNotebookAPI = {
+  getMistakes: async (
+    params = {}
+  ) => {
+    const response = await api.get(
+      '/mistake-notebook',
+      {
+        params
+      }
+    );
+
+    return response.data;
+  },
+
+  getMistakeDetail: async (
+    mistakeId
+  ) => {
+    const response = await api.get(
+      `/mistake-notebook/${mistakeId}`
+    );
+
+    return response.data;
+  },
+
+  updateMistake: async (
+    mistakeId,
+    data
+  ) => {
+    const response = await api.patch(
+      `/mistake-notebook/${mistakeId}`,
+      data
+    );
+
+    return response.data;
+  },
+
+  deleteMistake: async (
+    mistakeId
+  ) => {
+    const response = await api.delete(
+      `/mistake-notebook/${mistakeId}`
+    );
+
+    return response.data;
+  }
+};
 
 // ============================================
 // PANIC MODE API
 // ============================================
 
 export const panicModeAPI = {
+  // ------------------------------------------
+  // GET CURRENT PANIC PLAN
+  // ------------------------------------------
+
   getPlan: async () => {
-    const response = await api.get('/panic-mode/plan');
+    const response = await api.get(
+      '/panic-mode/plan'
+    );
+
     return response.data;
   },
+
+  // ------------------------------------------
+  // CREATE PANIC PLAN
+  // ------------------------------------------
 
   createPlan: async (data) => {
-    const response = await api.post('/panic-mode/plan', data);
+    const response = await api.post(
+      '/panic-mode/plan',
+      data
+    );
+
     return response.data;
   },
 
-  updateChapterProgress: async (chapterId, data) => {
+  // ------------------------------------------
+  // UPDATE CHAPTER PROGRESS
+  // ------------------------------------------
+
+  updateChapterProgress: async (
+    chapterId,
+    data
+  ) => {
     const response = await api.patch(
       `/panic-mode/chapters/${chapterId}`,
       data
     );
+
     return response.data;
   },
 
-  saveFixTestResult: async (chapterId, percentage) => {
+  // ------------------------------------------
+  // GENERATE TARGETED PRACTICE
+  // ------------------------------------------
+
+  generatePractice: async (
+    chapterId,
+    data = {}
+  ) => {
+    const response = await api.post(
+      `/panic-mode/chapters/${chapterId}/practice`,
+      data
+    );
+
+    return response.data;
+  },
+
+  // ------------------------------------------
+  // CHECK TARGETED PRACTICE ANSWER
+  // ------------------------------------------
+
+  checkPracticeAnswer: async (
+    chapterId,
+    data
+  ) => {
+    const response = await api.post(
+      `/panic-mode/chapters/${chapterId}/practice/check`,
+      data
+    );
+
+    return response.data;
+  },
+
+  // ------------------------------------------
+  // COMPLETE TARGETED PRACTICE
+  // ------------------------------------------
+
+  completePractice: async (
+    chapterId,
+    questionIds
+  ) => {
+    const response = await api.post(
+      `/panic-mode/chapters/${chapterId}/practice/complete`,
+      {
+        questionIds
+      }
+    );
+
+    return response.data;
+  },
+
+  // ------------------------------------------
+  // SAVE FIX TEST RESULT
+  // ------------------------------------------
+
+  saveFixTestResult: async (
+    chapterId,
+    percentage
+  ) => {
     const response = await api.post(
       `/panic-mode/chapters/${chapterId}/fix-test`,
-      { percentage }
+      {
+        percentage
+      }
     );
+
     return response.data;
   },
+
+  // ------------------------------------------
+  // RESET PANIC PLAN
+  // ------------------------------------------
 
   resetPlan: async () => {
-    const response = await api.delete('/panic-mode/plan');
+    const response = await api.delete(
+      '/panic-mode/plan'
+    );
+
     return response.data;
-  },
+  }
 };
 
+// ============================================
+// DEFAULT AXIOS INSTANCE
+// ============================================
+
+export default api;
