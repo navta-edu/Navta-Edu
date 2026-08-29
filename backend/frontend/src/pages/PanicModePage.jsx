@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import {
   AlertTriangle,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 
 import { Link } from 'react-router-dom';
+import { panicModeAPI } from '../utils/api';
 
 const EXAM_OPTIONS = [
   {
@@ -81,44 +82,6 @@ const STUDY_TIME_OPTIONS = [
   }
 ];
 
-const DEMO_PRIORITY = [
-  {
-    id: 'rotational-motion',
-    subject: 'Physics',
-    chapter: 'Rotational Motion',
-    accuracy: 42,
-    status: 'fix-first'
-  },
-  {
-    id: 'chemical-bonding',
-    subject: 'Chemistry',
-    chapter: 'Chemical Bonding',
-    accuracy: 51,
-    status: 'fix-first'
-  },
-  {
-    id: 'thermodynamics',
-    subject: 'Physics',
-    chapter: 'Thermodynamics',
-    accuracy: 58,
-    status: 'fix-first'
-  },
-  {
-    id: 'gravitation',
-    subject: 'Physics',
-    chapter: 'Gravitation',
-    accuracy: 68,
-    status: 'quick-revision'
-  },
-  {
-    id: 'kinematics',
-    subject: 'Physics',
-    chapter: 'Kinematics',
-    accuracy: 88,
-    status: 'strong'
-  }
-];
-
 const PRACTICE_QUESTION_COUNT = {
   tomorrow: 5,
   '3-days': 10,
@@ -130,15 +93,16 @@ export default function PanicModePage() {
   const [exam, setExam] = useState('NEET');
   const [examWindow, setExamWindow] = useState('3-days');
   const [studyTime, setStudyTime] = useState('2-hours');
-  const [planCreated, setPlanCreated] = useState(false);
-  const [activeChapterId, setActiveChapterId] = useState(
-    DEMO_PRIORITY[0].id
-  );
-  const [progress, setProgress] = useState({
-    revised: false,
-    practised: false,
-    fixTestPassed: false
-  });
+
+  const [session, setSession] = useState(null);
+  const [activeChapterId, setActiveChapterId] = useState('');
+  const [loadingPlan, setLoadingPlan] = useState(true);
+  const [creatingPlan, setCreatingPlan] = useState(false);
+  const [updatingProgress, setUpdatingProgress] = useState(false);
+  const [resettingPlan, setResettingPlan] = useState(false);
+  const [error, setError] = useState('');
+
+  const planCreated = Boolean(session);
 
   const selectedWindow = useMemo(
     () =>
@@ -156,50 +120,255 @@ export default function PanicModePage() {
     [studyTime]
   );
 
+  const chapters = useMemo(
+    () => (Array.isArray(session?.chapters) ? session.chapters : []),
+    [session]
+  );
+
+  const fixFirst = useMemo(
+    () =>
+      chapters.filter(
+        (item) =>
+          item.status === 'fix-first' &&
+          !item.fixTestPassed
+      ),
+    [chapters]
+  );
+
+  const quickRevision = useMemo(
+    () =>
+      chapters.filter(
+        (item) => item.status === 'quick-revision'
+      ),
+    [chapters]
+  );
+
+  const strong = useMemo(
+    () =>
+      chapters.filter(
+        (item) =>
+          item.status === 'strong' ||
+          item.status === 'fixed' ||
+          item.fixTestPassed
+      ),
+    [chapters]
+  );
+
   const activeChapter = useMemo(
     () =>
-      DEMO_PRIORITY.find(
-        (item) => item.id === activeChapterId
-      ) || DEMO_PRIORITY[0],
-    [activeChapterId]
+      chapters.find(
+        (item) => String(item._id) === String(activeChapterId)
+      ) ||
+      fixFirst[0] ||
+      quickRevision[0] ||
+      strong[0] ||
+      null,
+    [
+      chapters,
+      activeChapterId,
+      fixFirst,
+      quickRevision,
+      strong
+    ]
   );
 
-  const fixFirst = DEMO_PRIORITY.filter(
-    (item) => item.status === 'fix-first'
-  );
-
-  const quickRevision = DEMO_PRIORITY.filter(
-    (item) => item.status === 'quick-revision'
-  );
-
-  const strong = DEMO_PRIORITY.filter(
-    (item) => item.status === 'strong'
-  );
+  const progress = {
+    revised: Boolean(activeChapter?.revised),
+    practised: Boolean(activeChapter?.practised),
+    fixTestPassed: Boolean(activeChapter?.fixTestPassed)
+  };
 
   const practiceCount =
-    PRACTICE_QUESTION_COUNT[examWindow] || 10;
+    Number(session?.practiceQuestionCount) ||
+    PRACTICE_QUESTION_COUNT[examWindow] ||
+    10;
 
-  const resetProgress = () => {
-    setProgress({
-      revised: false,
-      practised: false,
-      fixTestPassed: false
+  const getErrorMessage = (requestError, fallback) => {
+    return (
+      requestError?.response?.data?.message ||
+      requestError?.message ||
+      fallback
+    );
+  };
+
+  const syncSession = (nextSession) => {
+    setSession(nextSession || null);
+
+    const nextChapters = Array.isArray(nextSession?.chapters)
+      ? nextSession.chapters
+      : [];
+
+    if (nextChapters.length === 0) {
+      setActiveChapterId('');
+      return;
+    }
+
+    setActiveChapterId((currentId) => {
+      const stillExists = nextChapters.some(
+        (item) => String(item._id) === String(currentId)
+      );
+
+      if (stillExists) {
+        return currentId;
+      }
+
+      const preferred =
+        nextChapters.find(
+          (item) =>
+            item.status === 'fix-first' &&
+            !item.fixTestPassed
+        ) ||
+        nextChapters.find(
+          (item) => item.status === 'quick-revision'
+        ) ||
+        nextChapters[0];
+
+      return String(preferred?._id || '');
     });
   };
+
+  useEffect(() => {
+    let active = true;
+
+    const loadPlan = async () => {
+      setLoadingPlan(true);
+      setError('');
+
+      try {
+        const response = await panicModeAPI.getPlan();
+        const existingSession = response?.data?.session || null;
+
+        if (!active) {
+          return;
+        }
+
+        if (existingSession) {
+          setExam(existingSession.exam || 'NEET');
+          setExamWindow(existingSession.examWindow || '3-days');
+
+          const matchingStudyTime =
+            STUDY_TIME_OPTIONS.find(
+              (option) =>
+                Number(option.minutes) ===
+                Number(existingSession.studyTimeMinutes)
+            );
+
+          if (matchingStudyTime) {
+            setStudyTime(matchingStudyTime.id);
+          }
+
+          syncSession(existingSession);
+        }
+      } catch (requestError) {
+        if (active) {
+          setError(
+            getErrorMessage(
+              requestError,
+              'Unable to load your Panic Mode plan.'
+            )
+          );
+        }
+      } finally {
+        if (active) {
+          setLoadingPlan(false);
+        }
+      }
+    };
+
+    loadPlan();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const changeActiveChapter = (chapterId) => {
-    setActiveChapterId(chapterId);
-    resetProgress();
+    setActiveChapterId(String(chapterId));
+    setError('');
   };
 
-  const createPlan = () => {
-    setPlanCreated(true);
-    setActiveChapterId(DEMO_PRIORITY[0].id);
-    resetProgress();
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    });
+  const createPlan = async () => {
+    const selectedStudyOption =
+      STUDY_TIME_OPTIONS.find(
+        (option) => option.id === studyTime
+      ) || STUDY_TIME_OPTIONS[1];
+
+    setCreatingPlan(true);
+    setError('');
+
+    try {
+      const response = await panicModeAPI.createPlan({
+        exam,
+        examWindow,
+        studyTimeMinutes: selectedStudyOption.minutes
+      });
+
+      const nextSession = response?.data?.session || null;
+      syncSession(nextSession);
+
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    } catch (requestError) {
+      setError(
+        getErrorMessage(
+          requestError,
+          'Unable to build your Panic Mode plan.'
+        )
+      );
+    } finally {
+      setCreatingPlan(false);
+    }
+  };
+
+  const resetPlan = async () => {
+    setResettingPlan(true);
+    setError('');
+
+    try {
+      await panicModeAPI.resetPlan();
+
+      setSession(null);
+      setActiveChapterId('');
+    } catch (requestError) {
+      setError(
+        getErrorMessage(
+          requestError,
+          'Unable to reset your Panic Mode plan.'
+        )
+      );
+    } finally {
+      setResettingPlan(false);
+    }
+  };
+
+  const updateProgress = async (updates) => {
+    if (!activeChapter?._id) {
+      return;
+    }
+
+    setUpdatingProgress(true);
+    setError('');
+
+    try {
+      const response =
+        await panicModeAPI.updateChapterProgress(
+          activeChapter._id,
+          updates
+        );
+
+      syncSession(response?.data?.session || session);
+    } catch (requestError) {
+      setError(
+        getErrorMessage(
+          requestError,
+          'Unable to update Panic Mode progress.'
+        )
+      );
+    } finally {
+      setUpdatingProgress(false);
+    }
   };
 
   return (
@@ -354,7 +523,58 @@ export default function PanicModePage() {
           </div>
         </section>
 
-        {!planCreated ? (
+        {error && (
+          <div
+            className="
+              mt-6
+              rounded-2xl
+              border
+              border-rose-200
+              bg-rose-50
+              px-4
+              py-3
+              text-sm
+              font-bold
+              text-rose-700
+
+              dark:border-rose-500/20
+              dark:bg-rose-500/10
+              dark:text-rose-300
+            "
+          >
+            {error}
+          </div>
+        )}
+
+        {loadingPlan ? (
+          <section
+            className="
+              mt-6
+              rounded-[26px]
+              border
+              border-slate-200
+              bg-white/90
+              p-8
+              text-center
+              shadow-sm
+
+              dark:border-slate-800
+              dark:bg-slate-950/70
+            "
+          >
+            <p
+              className="
+                text-sm
+                font-black
+                text-slate-700
+
+                dark:text-slate-200
+              "
+            >
+              Loading your Panic Mode plan...
+            </p>
+          </section>
+        ) : !planCreated ? (
           <section
             className="
               mt-6
@@ -406,8 +626,8 @@ export default function PanicModePage() {
                   dark:text-slate-400
                 "
               >
-                Your final version will use your real NAVTA TEST
-                history to calculate Fix First chapters automatically.
+                NAVTA will analyse your real NAVTA TEST history
+                and build your Fix First, Quick Revision and Strong lists.
               </p>
             </div>
 
@@ -442,6 +662,7 @@ export default function PanicModePage() {
             <button
               type="button"
               onClick={createPlan}
+              disabled={creatingPlan || loadingPlan}
               className="
                 mt-8
                 inline-flex
@@ -466,7 +687,7 @@ export default function PanicModePage() {
               "
             >
               <Sparkles className="h-4 w-4" />
-              Build My Panic Plan
+              {creatingPlan ? 'Building Plan...' : 'Build My Panic Plan'}
             </button>
           </section>
         ) : (
@@ -528,16 +749,14 @@ export default function PanicModePage() {
                         dark:text-white
                       "
                     >
-                      {exam} • {selectedWindow.label}
+                      {session?.exam || exam} • {selectedWindow.label}
                     </h2>
                   </div>
 
                   <button
                     type="button"
-                    onClick={() => {
-                      setPlanCreated(false);
-                      resetProgress();
-                    }}
+                    onClick={resetPlan}
+                    disabled={resettingPlan}
                     className="
                       inline-flex
                       items-center
@@ -561,7 +780,7 @@ export default function PanicModePage() {
                     "
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
-                    Change Plan
+                    {resettingPlan ? 'Resetting...' : 'Change Plan'}
                   </button>
                 </div>
 
@@ -615,6 +834,7 @@ export default function PanicModePage() {
               />
             </section>
 
+            {activeChapter ? (
             <section
               className="
                 rounded-[26px]
@@ -767,11 +987,11 @@ export default function PanicModePage() {
 
                     <button
                       type="button"
+                      disabled={updatingProgress || progress.revised}
                       onClick={() =>
-                        setProgress((current) => ({
-                          ...current,
+                        updateProgress({
                           revised: true
-                        }))
+                        })
                       }
                       className="
                         inline-flex
@@ -858,12 +1078,15 @@ export default function PanicModePage() {
 
                     <button
                       type="button"
-                      disabled={!progress.revised}
+                      disabled={
+                        !progress.revised ||
+                        updatingProgress ||
+                        progress.practised
+                      }
                       onClick={() =>
-                        setProgress((current) => ({
-                          ...current,
+                        updateProgress({
                           practised: true
-                        }))
+                        })
                       }
                       className={`
                         inline-flex
@@ -948,13 +1171,8 @@ export default function PanicModePage() {
 
                     <button
                       type="button"
-                      disabled={!progress.practised}
-                      onClick={() =>
-                        setProgress((current) => ({
-                          ...current,
-                          fixTestPassed: true
-                        }))
-                      }
+                      disabled
+                      title="The real Fix Test result will update this automatically."
                       className={`
                         inline-flex
                         items-center
@@ -976,7 +1194,7 @@ export default function PanicModePage() {
                       `}
                     >
                       <CheckCircle2 className="h-4 w-4" />
-                      Mark Demo as Fixed
+                      Fix Test decides this automatically
                     </button>
                   </div>
                 </WorkflowStep>
@@ -1042,9 +1260,8 @@ export default function PanicModePage() {
                           dark:text-emerald-400
                         "
                       >
-                        This is the frontend workflow. The backend
-                        connection will later decide this automatically
-                        from the real Fix Test score.
+                        NAVTA saved this chapter as fixed after the
+                        Fix Test reached the required 70% score.
                       </p>
                     </div>
                   </div>
@@ -1111,6 +1328,84 @@ export default function PanicModePage() {
                 </div>
               </div>
             </section>
+            ) : (
+              <section
+                className="
+                  rounded-[26px]
+                  border
+                  border-slate-200
+                  bg-white/90
+                  p-8
+                  text-center
+                  shadow-sm
+
+                  dark:border-slate-800
+                  dark:bg-slate-950/70
+                "
+              >
+                <BrainCircuit
+                  className="
+                    mx-auto
+                    h-10
+                    w-10
+                    text-rose-500
+                  "
+                />
+
+                <h2
+                  className="
+                    mt-4
+                    text-xl
+                    font-black
+                    text-slate-950
+
+                    dark:text-white
+                  "
+                >
+                  Complete NAVTA TESTs to unlock your chapter analysis
+                </h2>
+
+                <p
+                  className="
+                    mx-auto
+                    mt-2
+                    max-w-xl
+                    text-sm
+                    leading-6
+                    text-slate-500
+
+                    dark:text-slate-400
+                  "
+                >
+                  Your Panic Mode plan is active, but NAVTA does not
+                  yet have enough chapter-level test history for this
+                  exam. Complete NAVTA TESTs and return here.
+                </p>
+
+                <Link
+                  to="/navta-test"
+                  className="
+                    mt-5
+                    inline-flex
+                    items-center
+                    justify-center
+                    gap-2
+                    rounded-xl
+                    bg-rose-600
+                    px-4
+                    py-3
+                    text-xs
+                    font-black
+                    text-white
+                    transition-colors
+                    hover:bg-rose-700
+                  "
+                >
+                  Go to NAVTA TEST
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </section>
+            )}
           </div>
         )}
       </div>
@@ -1393,13 +1688,13 @@ function PrioritySection({
       >
         {items.map((item) => {
           const active =
-            item.id === activeChapterId;
+            String(item._id || item.id) === String(activeChapterId);
 
           return (
             <button
-              key={item.id}
+              key={item._id || item.id}
               type="button"
-              onClick={() => onSelect(item.id)}
+              onClick={() => onSelect(item._id || item.id)}
               className={`
                 flex
                 w-full
