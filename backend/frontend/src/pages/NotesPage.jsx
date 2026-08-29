@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { contentAPI } from "../utils/api";
+import { Link, useLocation } from "react-router-dom";
 import Card from "../components/Card";
 import Button from "../components/Button";
 
@@ -230,6 +231,118 @@ const normalizeName = (name = "") => {
     .trim();
 };
 
+const normalizeExamName = (exam = "") => {
+  const value = String(exam || "").trim();
+
+  if (value === "JEE") {
+    return "JEE Mains";
+  }
+
+  return value;
+};
+
+const chapterNamesMatch = (left = "", right = "") => {
+  const clean = (value) =>
+    normalizeName(value)
+      .replace(/[^a-z0-9 ]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const a = clean(left);
+  const b = clean(right);
+
+  if (!a || !b) {
+    return false;
+  }
+
+  if (a === b || a.includes(b) || b.includes(a)) {
+    return true;
+  }
+
+  const stopWords = new Set([
+    "and",
+    "of",
+    "the",
+    "in",
+    "on",
+    "to",
+    "a",
+    "an",
+    "some",
+    "simple",
+  ]);
+
+  const aTokens = a
+    .split(" ")
+    .filter(
+      (token) =>
+        token.length > 2 &&
+        !stopWords.has(token)
+    );
+
+  const bTokens = b
+    .split(" ")
+    .filter(
+      (token) =>
+        token.length > 2 &&
+        !stopWords.has(token)
+    );
+
+  if (
+    aTokens.length === 0 ||
+    bTokens.length === 0
+  ) {
+    return false;
+  }
+
+  const smaller =
+    aTokens.length <= bTokens.length
+      ? aTokens
+      : bTokens;
+
+  const larger = new Set(
+    aTokens.length <= bTokens.length
+      ? bTokens
+      : aTokens
+  );
+
+  const overlap = smaller.filter(
+    (token) => larger.has(token)
+  ).length;
+
+  return overlap / smaller.length >= 0.6;
+};
+
+const findClassForChapter = (
+  subjectName,
+  chapterName
+) => {
+  const subjectData =
+    STUDY_CHAPTERS[subjectName];
+
+  if (!subjectData) {
+    return "";
+  }
+
+  for (const className of CLASSES) {
+    const list =
+      subjectData[className] || [];
+
+    if (
+      list.some((chapter) =>
+        chapterNamesMatch(
+          chapter,
+          chapterName
+        )
+      )
+    ) {
+      return className;
+    }
+  }
+
+  return "";
+};
+
 /*
 |--------------------------------------------------------------------------
 | COMPONENT
@@ -237,6 +350,30 @@ const normalizeName = (name = "") => {
 */
 
 export default function NotesPage() {
+  const location = useLocation();
+
+  const panicState =
+    location.state?.panicMode
+      ? location.state
+      : null;
+
+  const panicSubject =
+    panicState?.subject || "";
+
+  const panicChapter =
+    panicState?.chapter || "";
+
+  const panicExam =
+    normalizeExamName(
+      panicState?.exam || ""
+    );
+
+  const panicChapterId =
+    panicState?.panicChapterId || "";
+
+  const panicAutoOpenAttempted =
+    useRef(false);
+
   const [subjects, setSubjects] = useState([]);
 
   const [selectedSubject, setSelectedSubject] = useState(null);
@@ -276,6 +413,103 @@ export default function NotesPage() {
 
     fetchSubjects();
   }, []);
+
+  /*
+  |--------------------------------------------------------------------------
+  | PANIC MODE AUTO-OPEN
+  |--------------------------------------------------------------------------
+  */
+
+  useEffect(() => {
+    if (
+      !panicState ||
+      panicAutoOpenAttempted.current ||
+      subjects.length === 0
+    ) {
+      return;
+    }
+
+    const matchingSubject =
+      subjects.find((subject) => {
+        const backendName =
+          subject?.name || "";
+
+        const a =
+          normalizeName(
+            backendName
+          );
+
+        const b =
+          normalizeName(
+            panicSubject
+          );
+
+        if (a === b) {
+          return true;
+        }
+
+        return (
+          (a === "mathematics" &&
+            b === "maths") ||
+          (a === "maths" &&
+            b === "mathematics")
+        );
+      });
+
+    if (!matchingSubject) {
+      return;
+    }
+
+    const subjectName =
+      matchingSubject.name;
+
+    const inferredClass =
+      findClassForChapter(
+        subjectName,
+        panicChapter
+      );
+
+    const config =
+      SUBJECT_CONFIG[
+        subjectName
+      ];
+
+    let examForNotes =
+      panicExam;
+
+    if (
+      !examForNotes ||
+      !config?.exams?.includes(
+        examForNotes
+      )
+    ) {
+      examForNotes =
+        config?.exams?.[0] || "";
+    }
+
+    setSelectedSubject(
+      matchingSubject
+    );
+
+    setSelectedExam(
+      examForNotes
+    );
+
+    if (inferredClass) {
+      setSelectedClass(
+        inferredClass
+      );
+    }
+
+    panicAutoOpenAttempted.current =
+      true;
+  }, [
+    subjects,
+    panicState,
+    panicSubject,
+    panicChapter,
+    panicExam,
+  ]);
 
   /*
   |--------------------------------------------------------------------------
@@ -363,7 +597,21 @@ export default function NotesPage() {
         setChapters(finalChapters);
 
         if (finalChapters.length > 0) {
-          setSelectedChapter(finalChapters[0]._id);
+          const panicTarget =
+            panicState
+              ? finalChapters.find(
+                  (chapter) =>
+                    chapterNamesMatch(
+                      chapter.title,
+                      panicChapter
+                    )
+                )
+              : null;
+
+          setSelectedChapter(
+            panicTarget?._id ||
+              finalChapters[0]._id
+          );
         } else {
           setSelectedChapter("");
           setNotes([]);
@@ -380,7 +628,13 @@ export default function NotesPage() {
     };
 
     loadChapters();
-  }, [selectedSubject, selectedExam, selectedClass]);
+  }, [
+    selectedSubject,
+    selectedExam,
+    selectedClass,
+    panicState,
+    panicChapter,
+  ]);
 
   /*
   |--------------------------------------------------------------------------
@@ -676,6 +930,37 @@ export default function NotesPage() {
         </div>
 
       </div>
+
+      {panicState && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-4 dark:border-rose-500/20 dark:bg-rose-500/10">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-500">
+                🚨 Panic Mode Revision
+              </p>
+
+              <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white break-words">
+                {panicChapter
+                  ? `Revise: ${panicChapter}`
+                  : "Revise your selected weak chapter"}
+              </p>
+
+              <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                NAVTA opened the closest matching Study Notes chapter automatically.
+                Review the notes, then return to Panic Mode for targeted practice.
+              </p>
+            </div>
+
+            <Link
+              to="/panic-mode"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-xs font-black text-rose-600 transition-colors hover:bg-rose-50 dark:border-rose-500/20 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-slate-800"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Panic Mode
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* BREADCRUMB */}
 
@@ -1166,6 +1451,35 @@ export default function NotesPage() {
                       </div>
 
                     </div>
+
+                    {panicState && (
+                      <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800/40">
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+                          <p className="text-sm font-black text-slate-900 dark:text-white">
+                            Finished revising?
+                          </p>
+
+                          <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                            Return to Panic Mode, mark this chapter as revised,
+                            then start the targeted practice set.
+                          </p>
+
+                          <Link
+                            to="/panic-mode"
+                            state={{
+                              fromNotes: true,
+                              panicChapterId,
+                              subject: panicSubject,
+                              chapter: panicChapter,
+                            }}
+                            className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition-colors hover:bg-emerald-700"
+                          >
+                            Continue Panic Mode
+                            <ChevronRight className="h-4 w-4" />
+                          </Link>
+                        </div>
+                      </div>
+                    )}
 
                   </Card>
 
