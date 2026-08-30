@@ -1,18 +1,53 @@
 const mongoose = require('mongoose');
 
+// ============================================
+// PANIC CHAPTER SCHEMA
+// ============================================
+
 const panicChapterSchema = new mongoose.Schema(
   {
+    // ----------------------------------------
+    // SUBJECT
+    // ----------------------------------------
+
     subject: {
       type: String,
       required: true,
       trim: true
     },
 
+    // ----------------------------------------
+    // CLASS LEVEL
+    // ----------------------------------------
+    // Used to make sure Panic Mode loads
+    // questions/notes from the correct class.
+    //
+    // Example:
+    // Physics + Class 11 + Laws of Motion
+    // Physics + Class 12 + Current Electricity
+
+    classLevel: {
+      type: String,
+      enum: [
+        'Class 11',
+        'Class 12'
+      ],
+      default: undefined
+    },
+
+    // ----------------------------------------
+    // CHAPTER
+    // ----------------------------------------
+
     chapter: {
       type: String,
       required: true,
       trim: true
     },
+
+    // ----------------------------------------
+    // PERFORMANCE
+    // ----------------------------------------
 
     accuracy: {
       type: Number,
@@ -23,13 +58,19 @@ const panicChapterSchema = new mongoose.Schema(
 
     totalQuestions: {
       type: Number,
-      default: 0
+      default: 0,
+      min: 0
     },
 
     correctAnswers: {
       type: Number,
-      default: 0
+      default: 0,
+      min: 0
     },
+
+    // ----------------------------------------
+    // PANIC MODE STATUS
+    // ----------------------------------------
 
     status: {
       type: String,
@@ -42,15 +83,27 @@ const panicChapterSchema = new mongoose.Schema(
       default: 'fix-first'
     },
 
+    // ----------------------------------------
+    // STEP 1 — STUDY NOTES
+    // ----------------------------------------
+
     revised: {
       type: Boolean,
       default: false
     },
 
+    // ----------------------------------------
+    // STEP 2 — TARGETED PRACTICE
+    // ----------------------------------------
+
     practised: {
       type: Boolean,
       default: false
     },
+
+    // ----------------------------------------
+    // STEP 3 — FIX TEST
+    // ----------------------------------------
 
     fixTestPassed: {
       type: Boolean,
@@ -59,7 +112,9 @@ const panicChapterSchema = new mongoose.Schema(
 
     fixTestScore: {
       type: Number,
-      default: null
+      default: null,
+      min: 0,
+      max: 100
     },
 
     fixedAt: {
@@ -72,8 +127,16 @@ const panicChapterSchema = new mongoose.Schema(
   }
 );
 
+// ============================================
+// PANIC SESSION SCHEMA
+// ============================================
+
 const panicSessionSchema = new mongoose.Schema(
   {
+    // ----------------------------------------
+    // STUDENT
+    // ----------------------------------------
+
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -81,11 +144,23 @@ const panicSessionSchema = new mongoose.Schema(
       index: true
     },
 
+    // ----------------------------------------
+    // EXAM
+    // ----------------------------------------
+
     exam: {
       type: String,
-      enum: ['NEET', 'JEE', 'Boards'],
+      enum: [
+        'NEET',
+        'JEE',
+        'Boards'
+      ],
       required: true
     },
+
+    // ----------------------------------------
+    // EXAM WINDOW
+    // ----------------------------------------
 
     examWindow: {
       type: String,
@@ -98,11 +173,19 @@ const panicSessionSchema = new mongoose.Schema(
       required: true
     },
 
+    // ----------------------------------------
+    // DAYS UNTIL EXAM
+    // ----------------------------------------
+
     examDays: {
       type: Number,
       required: true,
       min: 1
     },
+
+    // ----------------------------------------
+    // AVAILABLE STUDY TIME
+    // ----------------------------------------
 
     studyTimeMinutes: {
       type: Number,
@@ -110,10 +193,18 @@ const panicSessionSchema = new mongoose.Schema(
       min: 1
     },
 
+    // ----------------------------------------
+    // PANIC MODE CHAPTERS
+    // ----------------------------------------
+
     chapters: {
       type: [panicChapterSchema],
       default: []
     },
+
+    // ----------------------------------------
+    // SESSION STATE
+    // ----------------------------------------
 
     active: {
       type: Boolean,
@@ -135,11 +226,30 @@ const panicSessionSchema = new mongoose.Schema(
   }
 );
 
+// ============================================
+// INDEXES
+// ============================================
+
+// Quickly find the student's current active
+// Panic Mode session.
+
 panicSessionSchema.index({
   user: 1,
   active: 1,
   createdAt: -1
 });
+
+// Helps when analysing sessions by exam.
+
+panicSessionSchema.index({
+  user: 1,
+  exam: 1,
+  createdAt: -1
+});
+
+// ============================================
+// MODEL
+// ============================================
 
 module.exports = mongoose.model(
   'PanicSession',
