@@ -1992,55 +1992,71 @@ exports.redeemReward = async (
 // @desc    Get gamification leaderboard
 // @route   GET /api/student/leaderboard
 // @access  Private
-exports.getLeaderboard = async (
-  req,
-  res
-) => {
+exports.getLeaderboard = async (req, res) => {
   try {
-    const students =
-      await Student.find()
-        .populate(
-          'user',
-          'name'
-        )
-        .sort('-xp')
-        .limit(10);
+    const students = await Student.find()
+      .populate(
+        'user',
+        'name'
+      )
+      .sort({
+        coins: -1,
+        xp: -1
+      })
+      .limit(10);
 
     const parsedLeaderboard =
       students.map(
-        (s, index) => ({
-          rank:
-            index + 1,
+        (student, index) => ({
+          rank: index + 1,
+
+          userId:
+            student.user?._id ||
+            student.user ||
+            null,
 
           name:
-            s.user
-              ? s.user.name
-              : 'Unknown Student',
+            student.user?.name ||
+            'Unknown Student',
+
+          coins:
+            Number(student.coins) ||
+            0,
 
           xp:
-            s.xp,
+            Number(student.xp) ||
+            0,
 
           level:
-            s.level,
+            Number(student.level) ||
+            1,
 
           badgesCount:
-            s.badges.length
+            Array.isArray(
+              student.badges
+            )
+              ? student.badges.length
+              : 0
         })
       );
 
     return res.status(200).json({
       success: true,
-
       count:
         parsedLeaderboard.length,
-
       data:
         parsedLeaderboard
     });
-  } catch (err) {
+  } catch (error) {
+    console.error(
+      'GET LEADERBOARD ERROR:',
+      error
+    );
+
     return res.status(500).json({
       success: false,
-      message: err.message
+      message:
+        'Unable to load leaderboard.'
     });
   }
 };
