@@ -3005,6 +3005,45 @@ exports.completeNavtaTest =
       }
 
       // ========================================
+      // CANONICAL RESULT CONTEXT
+      // ========================================
+      //
+      // The submitted questions above have already
+      // been validated against subject, exam and
+      // classLevel. Build the stored chapter context
+      // from those real database questions so Panic
+      // Mode receives trustworthy Class 11 / Class 12
+      // chapter history.
+      // ========================================
+
+      const verifiedChapters = [
+        ...new Set(
+          storedQuestions
+            .map((item) =>
+              String(
+                item.chapter || ""
+              ).trim()
+            )
+            .filter(Boolean)
+        ),
+      ];
+
+      const resultChapter =
+        testType === "standard"
+          ? verifiedChapters[0] ||
+            String(
+              chapter || ""
+            ).trim()
+          : undefined;
+
+      const resultChapters =
+        testType === "standard"
+          ? resultChapter
+            ? [resultChapter]
+            : []
+          : verifiedChapters;
+
+      // ========================================
       // GRADE TEST ON SERVER
       // ========================================
 
@@ -3248,17 +3287,16 @@ exports.completeNavtaTest =
             selectedDuration:
               numericDuration,
             testType,
-            subject,
-            exam,
-            classLevel,
+            subject:
+              String(subject).trim(),
+            exam:
+              String(exam).trim(),
+            classLevel:
+              String(classLevel).trim(),
             chapter:
-              testType === "standard"
-                ? String(chapter || "")
-                : "",
+              resultChapter,
             chapters:
-              testType === "standard"
-                ? [String(chapter || "")]
-                : cleanedChapters,
+              resultChapters,
             difficulty:
               testType === "standard"
                 ? String(difficulty || "")
