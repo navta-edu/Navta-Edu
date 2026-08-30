@@ -801,7 +801,11 @@ export default function PanicModePage() {
         const response =
           await panicModeAPI
             .generatePractice(
-              activeChapter._id
+              activeChapter._id,
+              {
+                classLevel:
+                  activeChapter.classLevel
+              }
             );
 
         const nextPractice =
@@ -1024,7 +1028,11 @@ export default function PanicModePage() {
         const response =
           await panicModeAPI
             .startFixTest(
-              activeChapter._id
+              activeChapter._id,
+              {
+                classLevel:
+                  activeChapter.classLevel
+              }
             );
 
         const nextFixTest =
@@ -1823,6 +1831,12 @@ export default function PanicModePage() {
                           {
                             activeChapter.subject
                           }
+                          {activeChapter.classLevel && (
+                            <>
+                              {' • '}
+                              {activeChapter.classLevel}
+                            </>
+                          )}
                           {' • '}
                           Recent accuracy{' '}
                           {
@@ -1902,6 +1916,9 @@ export default function PanicModePage() {
 
                               subject:
                                 activeChapter.subject,
+
+                              classLevel:
+                                activeChapter.classLevel,
 
                               chapter:
                                 activeChapter.chapter,
@@ -2209,6 +2226,12 @@ export default function PanicModePage() {
                     {practice.subject}
                     {' • '}
                     {practice.exam}
+                    {practice.classLevel && (
+                      <>
+                        {' • '}
+                        {practice.classLevel}
+                      </>
+                    )}
                     {' • '}
                     {
                       practiceQuestions.length
@@ -2234,2260 +2257,1821 @@ export default function PanicModePage() {
                   <X
                     className="h-5 w-5"
                   />
-                </button>
-              </div>
-
-              {/* PROGRESS */}
-
-              <div
-                className="
-                  mt-6
-                  flex
-                  items-center
-                  justify-between
-                  gap-3
-                "
-              >
-                <p
-                  className="
-                    text-sm
-                    font-bold
-                    text-slate-600
-
-                    dark:text-slate-300
-                  "
-                >
-                  Question{' '}
-                  {practiceIndex + 1}
-                  {' / '}
-                  {
-                    practiceQuestions.length
-                  }
-                </p>
-
-                <p
-                  className="
-                    text-sm
-                    font-black
-                    text-violet-600
-                  "
-                >
-                  {answeredQuestionCount}
-                  {' '}
-                  answered
-                </p>
-              </div>
-
-              <div
-                className="
-                  mt-3
-                  h-2
-                  overflow-hidden
-                  rounded-full
-                  bg-slate-100
-
-                  dark:bg-slate-800
-                "
-              >
-                <div
-                  className="
-                    h-full
-                    rounded-full
-                    bg-violet-600
-                    transition-all
-                  "
-                  style={{
-                    width: `${
-                      practiceQuestions.length
-                        ? (
-                            answeredQuestionCount /
-                            practiceQuestions.length
-                          ) * 100
-                        : 0
-                    }%`
-                  }}
-                />
-              </div>
-
-              {/* QUESTION */}
-
-              {currentPracticeQuestion && (
-                <div
-                  className="
-                    mt-7
-                    rounded-[24px]
-                    border
-                    border-slate-200
-                    p-5
-                    sm:p-6
-
-                    dark:border-slate-800
-                  "
-                >
-                  <div
-                    className="
-                      flex
-                      flex-wrap
-                      gap-2
-                    "
-                  >
-                    <span
-                      className="
-                        rounded-full
-                        bg-violet-50
-                        px-3
-                        py-1
-                        text-xs
-                        font-black
-                        text-violet-600
-
-                        dark:bg-violet-500/10
-                      "
-                    >
-                      {
-                        currentPracticeQuestion.difficulty
-                      }
-                    </span>
-
-                    <span
-                      className="
-                        rounded-full
-                        bg-slate-100
-                        px-3
-                        py-1
-                        text-xs
-                        font-bold
-                        text-slate-500
-
-                        dark:bg-slate-800
-                      "
-                    >
-                      {
-                        currentPracticeQuestion.chapter
-                      }
-                    </span>
-                  </div>
-
-                  <h3
-                    className="
-                      mt-5
-                      text-lg
-                      font-black
-                      leading-8
-                      text-slate-950
-                      sm:text-xl
-
-                      dark:text-white
-                    "
-                  >
-                    {
-                      currentPracticeQuestion.question
-                    }
-                  </h3>
-
-                  <div
-                    className="
-                      mt-6
-                      space-y-3
-                    "
-                  >
-                    {(
-                      currentPracticeQuestion.options ||
-                      []
-                    ).map(
-                      (
-                        option,
-                        optionIndex
-                      ) => {
-                        const selected =
-                          selectedAnswers[
-                            currentQuestionId
-                          ] ===
-                          optionIndex;
-
-                        const correct =
-                          currentFeedback &&
-                          Number(
-                            currentFeedback.correctAnswer
-                          ) ===
-                            optionIndex;
-
-                        const wrongSelected =
-                          currentFeedback &&
-                          selected &&
-                          !currentFeedback.isCorrect;
-
-                        return (
-                          <button
-                            key={
-                              optionIndex
-                            }
-                            type="button"
-                            disabled={
-                              Boolean(
-                                currentFeedback
-                              )
-                            }
-                            onClick={() =>
-                              selectPracticeAnswer(
-                                optionIndex
-                              )
-                            }
-                            className={`
-                              flex
-                              w-full
-                              items-center
-                              gap-3
-                              rounded-2xl
-                              border
-                              p-4
-                              text-left
-                              text-sm
-                              font-bold
-                              transition
-
-                              ${
-                                correct
-                                  ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300'
-                                  : wrongSelected
-                                    ? 'border-rose-500 bg-rose-50 text-rose-800 dark:bg-rose-500/10 dark:text-rose-300'
-                                    : selected
-                                      ? 'border-violet-500 bg-violet-50 text-violet-800 dark:bg-violet-500/10 dark:text-violet-300'
-                                      : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900'
-                              }
-                            `}
-                          >
-                            <span
-                              className="
-                                flex
-                                h-8
-                                w-8
-                                shrink-0
-                                items-center
-                                justify-center
-                                rounded-full
-                                border
-                                text-xs
-                                font-black
-                              "
-                            >
-                              {String.fromCharCode(
-                                65 +
-                                  optionIndex
-                              )}
-                            </span>
-
-                            <span>
-                              {getOptionText(
-                                option
-                              )}
-                            </span>
-
-                            {correct && (
-                              <Check
-                                className="
-                                  ml-auto
-                                  h-5
-                                  w-5
-                                "
-                              />
-                            )}
-
-                            {wrongSelected && (
-                              <X
-                                className="
-                                  ml-auto
-                                  h-5
-                                  w-5
-                                "
-                              />
-                            )}
-                          </button>
-                        );
-                      }
-                    )}
-                  </div>
-
-                  {/* FEEDBACK */}
-
-                  {currentFeedback && (
-                    <div
-                      className={`
-                        mt-6
-                        rounded-2xl
-                        border
-                        p-5
-
-                        ${
-                          currentFeedback.isCorrect
-                            ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'
-                            : 'border-rose-200 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10'
-                        }
-                      `}
-                    >
-                      <div
-                        className="
-                          flex
-                          items-center
-                          gap-2
-                        "
-                      >
-                        {currentFeedback.isCorrect ? (
-                          <CheckCircle2
-                            className="
-                              h-5
-                              w-5
-                              text-emerald-600
-                            "
-                          />
-                        ) : (
-                          <XCircle
-                            className="
-                              h-5
-                              w-5
-                              text-rose-600
-                            "
-                          />
-                        )}
-
-                        <p
-                          className="
-                            font-black
-                            text-slate-950
-
-                            dark:text-white
-                          "
-                        >
-                          {currentFeedback.isCorrect
-                            ? 'Correct!'
-                            : 'Not quite.'}
-                        </p>
-                      </div>
-
-                      {!currentFeedback.isCorrect && (
-                        <p
-                          className="
-                            mt-3
-                            text-sm
-                            font-bold
-                            text-slate-700
-
-                            dark:text-slate-300
-                          "
-                        >
-                          Correct answer:{' '}
-                          {String.fromCharCode(
-                            65 +
-                              Number(
-                                currentFeedback.correctAnswer
-                              )
-                          )}
-                        </p>
-                      )}
-
-                      {currentFeedback.explanation && (
-                        <div
-                          className="
-                            mt-4
-                            rounded-xl
-                            bg-white/70
-                            p-4
-
-                            dark:bg-slate-950/50
-                          "
-                        >
-                          <p
-                            className="
-                              text-xs
-                              font-black
-                              uppercase
-                              tracking-wider
-                              text-slate-500
-                            "
-                          >
-                            Key Explanation
-                          </p>
-
-                          <p
-                            className="
-                              mt-2
-                              text-sm
-                              leading-6
-                              text-slate-700
-
-                              dark:text-slate-300
-                            "
-                          >
-                            {
-                              currentFeedback.explanation
-                            }
-                          </p>
-                        </div>
-                      )}
-
-                      {!currentFeedback.isCorrect && (
-                        <Link
-                          to="/notes"
-                          state={{
-                            panicMode: true,
-
-                            exam:
-                              session?.exam,
-
-                            subject:
-                              activeChapter?.subject,
-
-                            chapter:
-                              activeChapter?.chapter,
-
-                            panicChapterId:
-                              activeChapter?._id
-                          }}
-                          className="
-                            mt-4
-                            inline-flex
-                            items-center
-                            gap-2
-                            text-sm
-                            font-black
-                            text-sky-600
-                          "
-                        >
-                          <BookOpen
-                            className="h-4 w-4"
-                          />
-
-                          Quickly Review Note
-                        </Link>
-                      )}
-                    </div>
-                  )}
-
-                  {practiceMessage && (
-                    <p
-                      className="
-                        mt-4
-                        text-sm
-                        font-bold
-                        text-amber-600
-                      "
-                    >
-                      {practiceMessage}
-                    </p>
-                  )}
-
-                  {/* ACTIONS */}
-
-                  <div
-                    className="
-                      mt-6
-                      flex
-                      flex-col
-                      gap-3
-                      sm:flex-row
-                      sm:items-center
-                      sm:justify-between
-                    "
-                  >
-                    <button
-                      type="button"
-                      disabled={
-                        practiceIndex === 0
-                      }
-                      onClick={() =>
-                        setPracticeIndex(
-                          (previous) =>
-                            Math.max(
-                              0,
-                              previous - 1
-                            )
-                        )
-                      }
-                      className="
-                        inline-flex
-                        items-center
-                        justify-center
-                        gap-2
-                        rounded-xl
-                        border
-                        border-slate-200
-                        px-4
-                        py-3
-                        text-sm
-                        font-black
-                        disabled:opacity-40
-
-                        dark:border-slate-700
-                      "
-                    >
-                      <ChevronLeft
-                        className="h-4 w-4"
-                      />
-
-                      Previous
-                    </button>
-
-                    {!currentFeedback ? (
-                      <button
-                        type="button"
-                        onClick={
-                          checkPracticeAnswer
-                        }
-                        disabled={
-                          checkingAnswer ||
-                          selectedAnswers[
-                            currentQuestionId
-                          ] ===
-                            undefined
-                        }
-                        className="
-                          inline-flex
-                          items-center
-                          justify-center
-                          gap-2
-                          rounded-xl
-                          bg-violet-600
-                          px-5
-                          py-3
-                          text-sm
-                          font-black
-                          text-white
-                          disabled:opacity-40
-                        "
-                      >
-                        {checkingAnswer && (
-                          <Loader2
-                            className="
-                              h-4
-                              w-4
-                              animate-spin
-                            "
-                          />
-                        )}
-
-                        Check Answer
-                      </button>
-                    ) : practiceIndex <
-                      practiceQuestions.length -
-                        1 ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPracticeIndex(
-                            (
-                              previous
-                            ) =>
-                              Math.min(
-                                practiceQuestions.length -
-                                  1,
-
-                                previous +
-                                  1
-                              )
-                          )
-                        }
-                        className="
-                          inline-flex
-                          items-center
-                          justify-center
-                          gap-2
-                          rounded-xl
-                          bg-violet-600
-                          px-5
-                          py-3
-                          text-sm
-                          font-black
-                          text-white
-                        "
-                      >
-                        Next Question
-
-                        <ChevronRight
-                          className="h-4 w-4"
-                        />
-                      </button>
-                    ) : allPracticeAnswered ? (
-                      <button
-                        type="button"
-                        onClick={
-                          completePractice
-                        }
-                        disabled={
-                          completingPractice
-                        }
-                        className="
-                          inline-flex
-                          items-center
-                          justify-center
-                          gap-2
-                          rounded-xl
-                          bg-emerald-600
-                          px-5
-                          py-3
-                          text-sm
-                          font-black
-                          text-white
-                          disabled:opacity-50
-                        "
-                      >
-                        {completingPractice ? (
-                          <Loader2
-                            className="
-                              h-4
-                              w-4
-                              animate-spin
-                            "
-                          />
-                        ) : (
-                          <CheckCircle2
-                            className="h-4 w-4"
-                          />
-                        )}
-
-                        Complete Practice
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              )}
-
-              {/* RESULT */}
-
-              {progress.practised &&
-                allPracticeAnswered && (
-                  <div
-                    className="
-                      mt-6
-                      rounded-2xl
-                      border
-                      border-emerald-200
-                      bg-emerald-50
-                      p-5
-
-                      dark:border-emerald-500/20
-                      dark:bg-emerald-500/10
-                    "
-                  >
-                    <p
-                      className="
-                        text-lg
-                        font-black
-                        text-emerald-800
-
-                        dark:text-emerald-300
-                      "
-                    >
-                      Practice Complete
-                    </p>
-
-                    <p
-                      className="
-                        mt-2
-                        text-sm
-                        text-emerald-700
-
-                        dark:text-emerald-400
-                      "
-                    >
-                      {
-                        practiceCorrectCount
-                      }
-                      /
-                      {
-                        practiceQuestions.length
-                      }{' '}
-                      correct •{' '}
-                      {
-                        practicePercentage
-                      }
-                      %
-                    </p>
-
-                    <button
-                      type="button"
-                      onClick={
-                        closePractice
-                      }
-                      className="
-                        mt-4
-                        inline-flex
-                        items-center
-                        gap-2
-                        rounded-xl
-                        bg-emerald-600
-                        px-4
-                        py-3
-                        text-sm
-                        font-black
-                        text-white
-                      "
-                    >
-                      Return to Panic Plan
-
-                      <ArrowRight
-                        className="h-4 w-4"
-                      />
-                    </button>
-                  </div>
-                )}
-            </div>
-          </div>
-        )}
-
-        {/* ====================================
-            SECURE FIX TEST PANEL
-        ==================================== */}
-
-        {fixTest && (
-          <div
-            className="
-              fixed
-              inset-0
-              z-[60]
-              overflow-y-auto
-              bg-slate-950/80
-              p-3
-              backdrop-blur-sm
-              sm:p-6
-            "
-          >
-            <div
-              className="
-                mx-auto
-                my-4
-                max-w-4xl
-                rounded-[28px]
-                bg-white
-                p-5
-                shadow-2xl
-                sm:p-8
-
-                dark:bg-slate-950
-              "
-            >
-              <div
-                className="
-                  flex
-                  flex-wrap
-                  items-start
-                  justify-between
-                  gap-4
-                "
-              >
-                <div>
-                  <p
-                    className="
-                      text-xs
-                      font-black
-                      uppercase
-                      tracking-wider
-                      text-rose-500
-                    "
-                  >
-                    🔒 Secure Panic Fix Test
-                  </p>
-
-                  <h2
-                    className="
-                      mt-2
-                      text-2xl
-                      font-black
-                      text-slate-950
-
-                      dark:text-white
-                    "
-                  >
-                    {fixTest.chapter ||
-                      activeChapter?.chapter}
-                  </h2>
-
-                  <p
-                    className="
-                      mt-1
-                      text-sm
-                      text-slate-500
-                    "
-                  >
-                    10 questions • 10 minutes •
-                    70% required
-                  </p>
-                </div>
-
-                <div
-                  className="
-                    flex
-                    items-center
-                    gap-3
-                  "
-                >
-                  {!fixTestResult && (
-                    <div
-                      className={`
-                        inline-flex
-                        items-center
-                        gap-2
-                        rounded-xl
-                        px-4
-                        py-2
-                        text-sm
-                        font-black
-
-                        ${
-                          fixTestSecondsLeft <= 60
-                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
-                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
-                        }
-                      `}
-                    >
-                      <Clock3
-                        className="h-4 w-4"
-                      />
-
-                      {String(
-                        fixTestMinutes
-                      ).padStart(2, '0')}
-                      :
-                      {String(
-                        fixTestSeconds
-                      ).padStart(2, '0')}
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={
-                      closeFixTest
-                    }
-                    className="
-                      rounded-xl
-                      border
-                      border-slate-200
-                      p-2
-
-                      dark:border-slate-700
-                    "
-                  >
-                    <X
-                      className="h-5 w-5"
-                    />
-                  </button>
-                </div>
-              </div>
-
-              {!fixTestResult ? (
-                <>
-                  <div
-                    className="
-                      mt-6
-                      flex
-                      items-center
-                      justify-between
-                      gap-3
-                    "
-                  >
-                    <p
-                      className="
-                        text-sm
-                        font-bold
-                        text-slate-600
-
-                        dark:text-slate-300
-                      "
-                    >
-                      Question{' '}
-                      {fixTestIndex + 1}
-                      {' / '}
-                      {fixTestQuestions.length}
-                    </p>
-
-                    <p
-                      className="
-                        text-sm
-                        font-black
-                        text-rose-600
-                      "
-                    >
-                      {fixTestAnsweredCount}{' '}
-                      answered
-                    </p>
-                  </div>
-
-                  <div
-                    className="
-                      mt-3
-                      h-2
-                      overflow-hidden
-                      rounded-full
-                      bg-slate-100
-
-                      dark:bg-slate-800
-                    "
-                  >
-                    <div
-                      className="
-                        h-full
-                        rounded-full
-                        bg-rose-600
-                        transition-all
-                      "
-                      style={{
-                        width: `${
-                          fixTestQuestions.length
-                            ? (
-                                fixTestAnsweredCount /
-                                fixTestQuestions.length
-                              ) * 100
-                            : 0
-                        }%`
-                      }}
-                    />
-                  </div>
-
-                  {currentFixQuestion && (
-                    <div
-                      className="
-                        mt-7
-                        rounded-[24px]
-                        border
-                        border-slate-200
-                        p-5
-                        sm:p-6
-
-                        dark:border-slate-800
-                      "
-                    >
-                      <div
-                        className="
-                          flex
-                          flex-wrap
-                          gap-2
-                        "
-                      >
-                        <span
-                          className="
-                            rounded-full
-                            bg-rose-50
-                            px-3
-                            py-1
-                            text-xs
-                            font-black
-                            text-rose-600
-
-                            dark:bg-rose-500/10
-                          "
-                        >
-                          {currentFixQuestion.difficulty}
-                        </span>
-
-                        <span
-                          className="
-                            rounded-full
-                            bg-slate-100
-                            px-3
-                            py-1
-                            text-xs
-                            font-bold
-                            text-slate-500
-
-                            dark:bg-slate-800
-                          "
-                        >
-                          {currentFixQuestion.chapter}
-                        </span>
-                      </div>
-
-                      <h3
-                        className="
-                          mt-5
-                          text-lg
-                          font-black
-                          leading-8
-                          text-slate-950
-                          sm:text-xl
-
-                          dark:text-white
-                        "
-                      >
-                        {currentFixQuestion.question}
-                      </h3>
-
-                      <div
-                        className="
-                          mt-6
-                          space-y-3
-                        "
-                      >
-                        {(
-                          currentFixQuestion.options ||
-                          []
-                        ).map(
-                          (
-                            option,
-                            optionIndex
-                          ) => {
-                            const selected =
-                              fixTestAnswers[
-                                currentFixQuestionId
-                              ] ===
-                              optionIndex;
-
-                            return (
-                              <button
-                                key={
-                                  optionIndex
-                                }
-                                type="button"
-                                onClick={() =>
-                                  selectFixTestAnswer(
-                                    optionIndex
-                                  )
-                                }
-                                className={`
-                                  flex
-                                  w-full
-                                  items-center
-                                  gap-3
-                                  rounded-2xl
-                                  border
-                                  p-4
-                                  text-left
-                                  text-sm
-                                  font-bold
-                                  transition
-
-                                  ${
-                                    selected
-                                      ? 'border-rose-500 bg-rose-50 text-rose-800 dark:bg-rose-500/10 dark:text-rose-300'
-                                      : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900'
-                                  }
-                                `}
-                              >
-                                <span
-                                  className="
-                                    flex
-                                    h-8
-                                    w-8
-                                    shrink-0
-                                    items-center
-                                    justify-center
-                                    rounded-full
-                                    border
-                                    text-xs
-                                    font-black
-                                  "
-                                >
-                                  {String.fromCharCode(
-                                    65 +
-                                    optionIndex
-                                  )}
-                                </span>
-
-                                <span>
-                                  {getOptionText(
-                                    option
-                                  )}
-                                </span>
-
-                                {selected && (
-                                  <Check
-                                    className="
-                                      ml-auto
-                                      h-5
-                                      w-5
-                                    "
-                                  />
-                                )}
-                              </button>
-                            );
-                          }
-                        )}
-                      </div>
-
-                      {fixTestMessage && (
-                        <p
-                          className="
-                            mt-4
-                            text-sm
-                            font-bold
-                            text-amber-600
-                          "
-                        >
-                          {fixTestMessage}
-                        </p>
-                      )}
-
-                      <div
-                        className="
-                          mt-6
-                          flex
-                          flex-col
-                          gap-3
-                          sm:flex-row
-                          sm:items-center
-                          sm:justify-between
-                        "
-                      >
-                        <button
-                          type="button"
-                          disabled={
-                            fixTestIndex === 0
-                          }
-                          onClick={() =>
-                            setFixTestIndex(
-                              (previous) =>
-                                Math.max(
-                                  0,
-                                  previous - 1
-                                )
-                            )
-                          }
-                          className="
-                            inline-flex
-                            items-center
-                            justify-center
-                            gap-2
-                            rounded-xl
-                            border
-                            border-slate-200
-                            px-4
-                            py-3
-                            text-sm
-                            font-black
-                            disabled:opacity-40
-
-                            dark:border-slate-700
-                          "
-                        >
-                          <ChevronLeft
-                            className="h-4 w-4"
-                          />
-
-                          Previous
-                        </button>
-
-                        {fixTestIndex <
-                        fixTestQuestions.length -
-                          1 ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setFixTestIndex(
-                                (previous) =>
-                                  Math.min(
-                                    fixTestQuestions.length -
-                                      1,
-                                    previous + 1
-                                  )
-                              )
-                            }
-                            className="
-                              inline-flex
-                              items-center
-                              justify-center
-                              gap-2
-                              rounded-xl
-                              bg-rose-600
-                              px-5
-                              py-3
-                              text-sm
-                              font-black
-                              text-white
-                            "
-                          >
-                            Next Question
-
-                            <ChevronRight
-                              className="h-4 w-4"
-                            />
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              submitFixTest(
-                                false
-                              )
-                            }
-                            disabled={
-                              submittingFixTest ||
-                              fixTestAnsweredCount <
-                                fixTestQuestions.length
-                            }
-                            className="
-                              inline-flex
-                              items-center
-                              justify-center
-                              gap-2
-                              rounded-xl
-                              bg-emerald-600
-                              px-5
-                              py-3
-                              text-sm
-                              font-black
-                              text-white
-                              disabled:cursor-not-allowed
-                              disabled:opacity-50
-                            "
-                          >
-                            {submittingFixTest ? (
-                              <Loader2
-                                className="
-                                  h-4
-                                  w-4
-                                  animate-spin
-                                "
-                              />
-                            ) : (
-                              <Target
-                                className="h-4 w-4"
-                              />
-                            )}
-
-                            Submit Fix Test
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div
-                  className="
-                    mt-7
-                    rounded-[24px]
-                    border
-                    border-slate-200
-                    p-6
-                    text-center
-
-                    dark:border-slate-800
-                  "
-                >
-                  {fixTestResult.passed ? (
-                    <CheckCircle2
-                      className="
-                        mx-auto
-                        h-12
-                        w-12
-                        text-emerald-500
-                      "
-                    />
-                  ) : (
-                    <XCircle
-                      className="
-                        mx-auto
-                        h-12
-                        w-12
-                        text-rose-500
-                      "
-                    />
-                  )}
-
-                  <p
-                    className="
-                      mt-4
-                      text-xs
-                      font-black
-                      uppercase
-                      tracking-wider
-                      text-slate-400
-                    "
-                  >
-                    Fix Test Result
-                  </p>
-
-                  <h3
-                    className="
-                      mt-2
-                      text-4xl
-                      font-black
-                      text-slate-950
-
-                      dark:text-white
-                    "
-                  >
-                    {Number(
-                      fixTestResult.percentage ||
-                      0
-                    )}
-                    %
-                  </h3>
-
-                  <p
-                    className={`
-                      mt-3
-                      text-base
-                      font-black
-
-                      ${
-                        fixTestResult.passed
-                          ? 'text-emerald-600'
-                          : 'text-rose-600'
-                      }
-                    `}
-                  >
-                    {fixTestResult.passed
-                      ? 'Weakness Fixed 🎯'
-                      : 'Needs More Work'}
-                  </p>
-
-                  <p
-                    className="
-                      mt-2
-                      text-sm
-                      text-slate-500
-                    "
-                  >
-                    {Number(
-                      fixTestResult.correctAnswers ||
-                      0
-                    )}
-                    /
-                    {Number(
-                      fixTestResult.totalQuestions ||
-                      fixTestQuestions.length
-                    )}{' '}
-                    correct. You need 70% or
-                    more to fix this chapter.
-                  </p>
-
-                  {Array.isArray(
-                    fixTestResult.review
-                  ) &&
-                    fixTestResult.review.length >
-                      0 && (
-                      <div
-                        className="
-                          mt-7
-                          space-y-4
-                          text-left
-                        "
-                      >
-                        {fixTestResult.review.map(
-                          (
-                            item,
-                            index
-                          ) => (
-                            <div
-                              key={
-                                item.questionId ||
-                                index
-                              }
-                              className={`
-                                rounded-2xl
-                                border
-                                p-4
-
-                                ${
-                                  item.isCorrect
-                                    ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'
-                                    : 'border-rose-200 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10'
-                                }
-                              `}
-                            >
-                              <p
-                                className="
-                                  text-sm
-                                  font-black
-                                  text-slate-950
-
-                                  dark:text-white
-                                "
-                              >
-                                {index + 1}.{' '}
-                                {item.question}
-                              </p>
-
-                              <p
-                                className="
-                                  mt-2
-                                  text-xs
-                                  font-bold
-                                  text-slate-600
-
-                                  dark:text-slate-300
-                                "
-                              >
-                                Your answer:{' '}
-                                {item.selectedOption ===
-                                null ||
-                                item.selectedOption ===
-                                  undefined
-                                  ? 'Not answered'
-                                  : String.fromCharCode(
-                                      65 +
-                                      Number(
-                                        item.selectedOption
-                                      )
-                                    )}
-                                {' • '}
-                                Correct:{' '}
-                                {String.fromCharCode(
-                                  65 +
-                                  Number(
-                                    item.correctAnswer
-                                  )
-                                )}
-                              </p>
-
-                              {item.explanation && (
-                                <p
-                                  className="
-                                    mt-3
-                                    text-sm
-                                    leading-6
-                                    text-slate-600
-
-                                    dark:text-slate-300
-                                  "
-                                >
-                                  {item.explanation}
-                                </p>
-                              )}
-                            </div>
-                          )
-                        )}
-                      </div>
-                    )}
-
-                  <div
-                    className="
-                      mt-7
-                      flex
-                      flex-col
-                      items-center
-                      justify-center
-                      gap-3
-                      sm:flex-row
-                    "
-                  >
-                    <button
-                      type="button"
-                      onClick={
-                        closeFixTest
-                      }
-                      className="
-                        inline-flex
-                        items-center
-                        gap-2
-                        rounded-xl
-                        bg-slate-900
-                        px-5
-                        py-3
-                        text-sm
-                        font-black
-                        text-white
-
-                        dark:bg-white
-                        dark:text-slate-950
-                      "
-                    >
-                      Return to Panic Plan
-
-                      <ArrowRight
-                        className="h-4 w-4"
-                      />
-                    </button>
-
-                    {!fixTestResult.passed && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          closeFixTest();
-
-                          window.setTimeout(
-                            () => {
-                              startFixTest();
-                            },
-                            0
-                          );
-                        }}
-                        className="
-                          inline-flex
-                          items-center
-                          gap-2
-                          rounded-xl
-                          bg-rose-600
-                          px-5
-                          py-3
-                          text-sm
-                          font-black
-                          text-white
-                        "
-                      >
-                        <RotateCcw
-                          className="h-4 w-4"
-                        />
-
-                        Retry Fix Test
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+              panicChapterId:
+                chapter._id,
+
+              subject:
+                chapter.subject,
+
+              exam:
+                session.exam,
+
+              classLevel:
+                selectedClassLevel,
+
+              chapter:
+                chapter.chapter,
+
+              requiredQuestionCount:
+                requiredCount,
+
+              totalQuestions:
+                selected.length,
+
+              difficultyCounts,
+
+              questions:
+                selected.map(
+                  sanitisePracticeQuestion
+                ),
+            },
+          },
+        });
+    } catch (error) {
+      console.error(
+        "GENERATE PANIC PRACTICE ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+
+          message:
+            "Unable to generate targeted practice.",
+        });
+    }
+  };
 
 // ============================================
-// PLAN BUILDER
+// PART 1 ENDS HERE
 // ============================================
 
-function PlanBuilder({
-  exam,
-  setExam,
-  examWindow,
-  setExamWindow,
-  studyTime,
-  setStudyTime,
-  creatingPlan,
-  createPlan
-}) {
-  return (
-    <section
-      className="
-        mt-6
-        rounded-[26px]
-        border
-        border-slate-200
-        bg-white
-        p-5
-        shadow-md
-        sm:p-7
-
-        dark:border-slate-800
-        dark:bg-slate-950
-      "
-    >
-      <p
-        className="
-          text-xs
-          font-black
-          uppercase
-          tracking-wider
-          text-rose-500
-        "
-      >
-        Build Emergency Plan
-      </p>
-
-      <h2
-        className="
-          mt-2
-          text-2xl
-          font-black
-          text-slate-950
-
-          dark:text-white
-        "
-      >
-        Tell NAVTA how close
-        your exam is.
-      </h2>
-
-      <div
-        className="
-          mt-7
-          space-y-7
-        "
-      >
-        <ChoiceGroup
-          title="Preparing for"
-          options={
-            EXAM_OPTIONS
-          }
-          value={exam}
-          onChange={setExam}
-        />
-
-        <ChoiceGroup
-          title="Exam in"
-          options={
-            EXAM_WINDOWS
-          }
-          value={examWindow}
-          onChange={
-            setExamWindow
-          }
-        />
-
-        <ChoiceGroup
-          title="Available study time today"
-          options={
-            STUDY_TIME_OPTIONS
-          }
-          value={studyTime}
-          onChange={
-            setStudyTime
-          }
-        />
-      </div>
-
-      <button
-        type="button"
-        onClick={createPlan}
-        disabled={
-          creatingPlan
-        }
-        className="
-          mt-8
-          inline-flex
-          items-center
-          justify-center
-          gap-2
-          rounded-2xl
-          bg-rose-600
-          px-6
-          py-3.5
-          text-sm
-          font-black
-          text-white
-          hover:bg-rose-700
-          disabled:opacity-50
-        "
-      >
-        {creatingPlan ? (
-          <Loader2
-            className="
-              h-4
-              w-4
-              animate-spin
-            "
-          />
-        ) : (
-          <Sparkles
-            className="h-4 w-4"
-          />
-        )}
-
-        {creatingPlan
-          ? 'Building Plan...'
-          : 'Build My Panic Plan'}
-      </button>
-    </section>
-  );
-}
-
 // ============================================
-// CHOICE GROUP
+// CHECK ONE PRACTICE ANSWER
+// POST /api/panic-mode/chapters/:chapterId/practice/check
 // ============================================
 
-function ChoiceGroup({
-  title,
-  options,
-  value,
-  onChange
-}) {
-  return (
-    <div>
-      <h3
-        className="
-          mb-3
-          text-sm
-          font-black
-          text-slate-800
+exports.checkPracticeAnswer =
+  async (req, res) => {
+    try {
+      const {
+        chapterId,
+      } = req.params;
 
-          dark:text-slate-200
-        "
-      >
-        {title}
-      </h3>
+      const {
+        questionId,
+        selectedOption,
+      } = req.body;
 
-      <div
-        className="
-          grid
-          gap-3
-          sm:grid-cols-2
-          lg:grid-cols-4
-        "
-      >
-        {options.map(
-          (option) => {
-            const selected =
-              value ===
-              option.id;
+      const lookup =
+        await getActiveSessionChapter(
+          req.user.id,
+          chapterId
+        );
 
-            return (
-              <button
-                key={
-                  option.id
-                }
-                type="button"
-                onClick={() =>
-                  onChange(
-                    option.id
-                  )
-                }
-                className={`
-                  rounded-2xl
-                  border
-                  p-4
-                  text-left
-                  transition
-
-                  ${
-                    selected
-                      ? 'border-rose-500 bg-rose-50 dark:bg-rose-500/10'
-                      : 'border-slate-200 hover:border-slate-300 dark:border-slate-700'
-                  }
-                `}
-              >
-                <p
-                  className="
-                    font-black
-                    text-slate-950
-
-                    dark:text-white
-                  "
-                >
-                  {
-                    option.label
-                  }
-                </p>
-
-                {option.description && (
-                  <p
-                    className="
-                      mt-1
-                      text-xs
-                      text-slate-500
-                    "
-                  >
-                    {
-                      option.description
-                    }
-                  </p>
-                )}
-              </button>
-            );
-          }
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ============================================
-// PRIORITY SECTION
-// ============================================
-
-function PrioritySection({
-  title,
-  subtitle,
-  items,
-  activeChapterId,
-  onSelect
-}) {
-  return (
-    <section
-      className="
-        rounded-[24px]
-        border
-        border-slate-200
-        bg-white
-        p-5
-
-        dark:border-slate-800
-        dark:bg-slate-950
-      "
-    >
-      <h3
-        className="
-          font-black
-          text-slate-950
-
-          dark:text-white
-        "
-      >
-        {title}
-      </h3>
-
-      <p
-        className="
-          mt-1
-          text-xs
-          text-slate-500
-        "
-      >
-        {subtitle}
-      </p>
-
-      <div
-        className="
-          mt-4
-          space-y-2
-        "
-      >
-        {items.length === 0 ? (
-          <p
-            className="
-              rounded-xl
-              bg-slate-50
-              p-3
-              text-xs
-              text-slate-500
-
-              dark:bg-slate-900
-            "
-          >
-            No chapters here.
-          </p>
-        ) : (
-          items.map(
-            (chapter) => {
-              const id =
-                chapterId(
-                  chapter
-                );
-
-              const active =
-                id ===
-                activeChapterId;
-
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() =>
-                    onSelect(id)
-                  }
-                  className={`
-                    flex
-                    w-full
-                    items-center
-                    justify-between
-                    gap-3
-                    rounded-xl
-                    border
-                    p-3
-                    text-left
-
-                    ${
-                      active
-                        ? 'border-rose-400 bg-rose-50 dark:bg-rose-500/10'
-                        : 'border-slate-200 dark:border-slate-800'
-                    }
-                  `}
-                >
-                  <div>
-                    <p
-                      className="
-                        text-sm
-                        font-black
-                        text-slate-900
-
-                        dark:text-white
-                      "
-                    >
-                      {
-                        chapter.chapter
-                      }
-                    </p>
-
-                    <p
-                      className="
-                        mt-1
-                        text-xs
-                        text-slate-500
-                      "
-                    >
-                      {
-                        chapter.subject
-                      }
-                    </p>
-                  </div>
-
-                  <span
-                    className="
-                      text-sm
-                      font-black
-                      text-rose-600
-                    "
-                  >
-                    {
-                      chapter.accuracy
-                    }
-                    %
-                  </span>
-                </button>
-              );
-            }
+      if (lookup.error) {
+        return res
+          .status(
+            lookup.error.status
           )
-        )}
-      </div>
-    </section>
-  );
-}
+          .json({
+            success: false,
+
+            message:
+              lookup.error
+                .message,
+          });
+      }
+
+      const {
+        session,
+        chapter,
+      } = lookup;
+
+      if (!chapter.revised) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "Revise the Study Notes before practice.",
+          });
+      }
+
+      if (
+        !mongoose.Types.ObjectId.isValid(
+          questionId
+        )
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "Invalid question ID.",
+          });
+      }
+
+      const question =
+        await NavtaQuestion.findOne({
+          _id:
+            questionId,
+
+          ...buildQuestionFilter({
+            subject:
+              chapter.subject,
+
+            exam:
+              session.exam,
+
+            chapter:
+              chapter.chapter,
+
+            classLevel:
+              chapter.classLevel,
+          }),
+        }).lean();
+
+      if (!question) {
+        return res
+          .status(404)
+          .json({
+            success: false,
+
+            message:
+              "Practice question not found for this Panic Mode chapter.",
+          });
+      }
+
+      const answer =
+        selectedOption === null ||
+        selectedOption === undefined
+          ? null
+          : Number(
+              selectedOption
+            );
+
+      if (
+        answer === null ||
+        !Number.isInteger(
+          answer
+        ) ||
+        answer < 0 ||
+        answer > 3
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "Please select a valid answer.",
+          });
+      }
+
+      const correctAnswer =
+        Number(
+          question.correctAnswer
+        );
+
+      const isCorrect =
+        answer ===
+        correctAnswer;
+
+      return res
+        .status(200)
+        .json({
+          success: true,
+
+          data: {
+            questionId:
+              question._id,
+
+            selectedOption:
+              answer,
+
+            isCorrect,
+
+            correctAnswer:
+              question.correctAnswer,
+
+            explanation:
+              question.explanation ||
+              "",
+
+            difficulty:
+              question.difficulty,
+
+            classLevel:
+              question.classLevel,
+
+            chapter:
+              question.chapter,
+          },
+        });
+    } catch (error) {
+      console.error(
+        "CHECK PANIC PRACTICE ANSWER ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+
+          message:
+            "Unable to check the practice answer.",
+        });
+    }
+  };
 
 // ============================================
-// WORKFLOW STEP
+// COMPLETE TARGETED PRACTICE
+// POST /api/panic-mode/chapters/:chapterId/practice/complete
 // ============================================
 
-function WorkflowStep({
-  number,
-  icon: Icon,
-  title,
-  completed = false,
-  locked = false,
-  children
-}) {
-  return (
-    <div
-      className={`
-        rounded-2xl
-        border
-        p-5
+exports.completeTargetedPractice =
+  async (req, res) => {
+    try {
+      const {
+        chapterId,
+      } = req.params;
 
-        ${
-          completed
-            ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-500/5'
-            : 'border-slate-200 dark:border-slate-800'
+      const {
+        questionIds = [],
+      } = req.body;
+
+      const lookup =
+        await getActiveSessionChapter(
+          req.user.id,
+          chapterId
+        );
+
+      if (lookup.error) {
+        return res
+          .status(
+            lookup.error.status
+          )
+          .json({
+            success: false,
+
+            message:
+              lookup.error
+                .message,
+          });
+      }
+
+      const {
+        session,
+        chapter,
+      } = lookup;
+
+      if (!chapter.revised) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "Revise the Study Notes before completing targeted practice.",
+          });
+      }
+
+      const uniqueIds = [
+        ...new Set(
+          (
+            Array.isArray(
+              questionIds
+            )
+              ? questionIds
+              : []
+          )
+            .map((id) =>
+              normaliseString(
+                id
+              )
+            )
+            .filter(
+              (id) =>
+                mongoose.Types.ObjectId.isValid(
+                  id
+                )
+            )
+        ),
+      ];
+
+      if (
+        uniqueIds.length ===
+        0
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "Completed practice question IDs are required.",
+          });
+      }
+
+      const validQuestionCount =
+        await NavtaQuestion.countDocuments({
+          _id: {
+            $in:
+              uniqueIds,
+          },
+
+          ...buildQuestionFilter({
+            subject:
+              chapter.subject,
+
+            exam:
+              session.exam,
+
+            chapter:
+              chapter.chapter,
+
+            classLevel:
+              chapter.classLevel,
+          }),
+        });
+
+      if (
+        validQuestionCount !==
+        uniqueIds.length
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "One or more submitted questions do not belong to this targeted practice chapter.",
+          });
+      }
+
+      const intendedCount =
+        getPracticeQuestionCount(
+          session.examWindow
+        );
+
+      const availableCount =
+        await NavtaQuestion.countDocuments(
+          buildQuestionFilter({
+            subject:
+              chapter.subject,
+
+            exam:
+              session.exam,
+
+            chapter:
+              chapter.chapter,
+
+            classLevel:
+              chapter.classLevel,
+          })
+        );
+
+      const minimumRequired =
+        Math.min(
+          intendedCount,
+          availableCount
+        );
+
+      if (
+        uniqueIds.length <
+        minimumRequired
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              `Complete all ${minimumRequired} targeted practice questions before unlocking the Fix Test.`,
+
+            data: {
+              required:
+                minimumRequired,
+
+              completed:
+                uniqueIds.length,
+            },
+          });
+      }
+
+      chapter.practised =
+        true;
+
+      await session.save();
+
+      return res
+        .status(200)
+        .json({
+          success: true,
+
+          message:
+            "Targeted practice completed. Fix Test unlocked.",
+
+          data: {
+            completedQuestions:
+              uniqueIds.length,
+
+            chapter,
+
+            session:
+              formatSession(
+                session
+              ),
+          },
+        });
+    } catch (error) {
+      console.error(
+        "COMPLETE PANIC PRACTICE ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+
+          message:
+            "Unable to complete targeted practice.",
+        });
+    }
+  };
+
+// ============================================
+// START SECURE FIX TEST
+// POST /api/panic-mode/chapters/:chapterId/fix-test/start
+// ============================================
+
+exports.startFixTest =
+  async (req, res) => {
+    try {
+      const {
+        chapterId,
+      } = req.params;
+
+      const lookup =
+        await getActiveSessionChapter(
+          req.user.id,
+          chapterId
+        );
+
+      if (lookup.error) {
+        return res
+          .status(
+            lookup.error.status
+          )
+          .json({
+            success: false,
+
+            message:
+              lookup.error.message,
+          });
+      }
+
+      const {
+        session,
+        chapter,
+      } = lookup;
+
+      // ----------------------------------------
+      // PRACTICE MUST BE COMPLETED
+      // ----------------------------------------
+
+      if (!chapter.practised) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "Complete targeted practice before starting the Fix Test.",
+          });
+      }
+
+      // ----------------------------------------
+      // ALREADY FIXED
+      // ----------------------------------------
+
+      if (
+        chapter.fixTestPassed ||
+        chapter.status ===
+          "fixed"
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "This chapter has already been fixed.",
+          });
+      }
+
+      // ----------------------------------------
+      // EXISTING ACTIVE ATTEMPT
+      // ----------------------------------------
+
+      const existingAttempt =
+        await PanicFixAttempt.findOne({
+          user:
+            req.user.id,
+
+          panicSession:
+            session._id,
+
+          panicChapterId:
+            chapter._id,
+
+          completed:
+            false,
+        }).sort({
+          createdAt: -1,
+        });
+
+      if (existingAttempt) {
+        const now =
+          new Date();
+
+        if (
+          existingAttempt.expiresAt >
+          now
+        ) {
+          const existingQuestions =
+            await NavtaQuestion.find({
+              _id: {
+                $in:
+                  existingAttempt.questionIds,
+              },
+
+              isActive:
+                true,
+            })
+              .select(
+                "_id question questionType options difficulty subject exam classLevel chapter"
+              )
+              .lean();
+
+          const questionMap =
+            new Map(
+              existingQuestions.map(
+                (question) => [
+                  String(
+                    question._id
+                  ),
+
+                  question,
+                ]
+              )
+            );
+
+          const orderedQuestions =
+            existingAttempt.questionIds
+              .map((id) =>
+                questionMap.get(
+                  String(id)
+                )
+              )
+              .filter(Boolean);
+
+          if (
+            orderedQuestions.length ===
+            existingAttempt
+              .questionIds
+              .length
+          ) {
+            return res
+              .status(200)
+              .json({
+                success: true,
+
+                message:
+                  "Your active Fix Test has been restored.",
+
+                data: {
+                  fixTest: {
+                    attemptId:
+                      existingAttempt._id,
+
+                    panicSessionId:
+                      session._id,
+
+                    panicChapterId:
+                      chapter._id,
+
+                    subject:
+                      chapter.subject,
+
+                    exam:
+                      session.exam,
+
+                    chapter:
+                      chapter.chapter,
+
+                    classLevel:
+                      existingAttempt
+                        .classLevel ||
+                      chapter.classLevel ||
+                      "",
+
+                    totalQuestions:
+                      existingAttempt
+                        .totalQuestions,
+
+                    targetPercentage:
+                      FIX_TEST_PASS_PERCENTAGE,
+
+                    durationMinutes:
+                      FIX_TEST_DURATION_MINUTES,
+
+                    startedAt:
+                      existingAttempt
+                        .startedAt,
+
+                    expiresAt:
+                      existingAttempt
+                        .expiresAt,
+
+                    questions:
+                      orderedQuestions.map(
+                        sanitiseFixTestQuestion
+                      ),
+                  },
+                },
+              });
+          }
+
+          // Questions belonging to the saved
+          // attempt were removed/deactivated.
+          // Close it and create a fresh attempt.
+
+          existingAttempt.completed =
+            true;
+
+          existingAttempt.submittedAt =
+            now;
+
+          await existingAttempt.save();
+        } else {
+          // ------------------------------------
+          // EXPIRED ATTEMPT
+          // ------------------------------------
+
+          existingAttempt.completed =
+            true;
+
+          existingAttempt.submittedAt =
+            existingAttempt.expiresAt;
+
+          existingAttempt.correctAnswers =
+            0;
+
+          existingAttempt.percentage =
+            0;
+
+          existingAttempt.passed =
+            false;
+
+          await existingAttempt.save();
         }
-      `}
-    >
-      <div
-        className="
-          flex
-          items-start
-          gap-4
-        "
-      >
-        <div
-          className="
-            flex
-            h-10
-            w-10
-            shrink-0
-            items-center
-            justify-center
-            rounded-xl
-            bg-slate-100
+      }
 
-            dark:bg-slate-900
-          "
-        >
-          {locked ? (
-            <Lock
-              className="
-                h-5
-                w-5
-                text-slate-400
-              "
-            />
-          ) : completed ? (
-            <CheckCircle2
-              className="
-                h-5
-                w-5
-                text-emerald-600
-              "
-            />
-          ) : (
-            <Icon
-              className="
-                h-5
-                w-5
-                text-rose-500
-              "
-            />
-          )}
-        </div>
+      // ----------------------------------------
+      // RESOLVE CLASS LEVEL
+      // ----------------------------------------
 
-        <div
-          className="min-w-0 flex-1"
-        >
-          <p
-            className="
-              text-[10px]
-              font-black
-              uppercase
-              tracking-wider
-              text-slate-400
-            "
-          >
-            Step {number}
-          </p>
+      const requestedClassLevel =
+        normaliseClassLevel(
+          req.body?.classLevel
+        );
 
-          <h3
-            className="
-              mt-1
-              font-black
-              text-slate-950
+      // PanicSession's stored class is now
+      // authoritative. Body value is only a
+      // fallback for older Panic Sessions.
 
-              dark:text-white
-            "
-          >
-            {title}
-          </h3>
+      const resolvedClassLevel =
+        normaliseClassLevel(
+          chapter.classLevel
+        ) ||
+        requestedClassLevel;
 
-          <div
-            className="
-              mt-4
-            "
-          >
-            {locked ? (
-              <p
-                className="
-                  text-sm
-                  font-bold
-                  text-slate-400
-                "
-              >
-                Complete the
-                previous step
-                first.
-              </p>
-            ) : (
-              children
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+      // ----------------------------------------
+      // SELECT 10 QUESTIONS
+      // ----------------------------------------
+
+      const selection =
+        await selectFixTestQuestions({
+          subject:
+            chapter.subject,
+
+          exam:
+            session.exam,
+
+          chapter:
+            chapter.chapter,
+
+          classLevel:
+            resolvedClassLevel,
+        });
+
+      if (!selection.success) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              `At least ${FIX_TEST_QUESTION_COUNT} active MCQ questions are required for the secure Fix Test. Only ${selection.available} are currently available.`,
+
+            data: {
+              required:
+                FIX_TEST_QUESTION_COUNT,
+
+              available:
+                selection.available,
+
+              subject:
+                chapter.subject,
+
+              exam:
+                session.exam,
+
+              classLevel:
+                resolvedClassLevel ||
+                null,
+
+              chapter:
+                chapter.chapter,
+            },
+          });
+      }
+
+      const questions =
+        selection.questions;
+
+      // ----------------------------------------
+      // FINAL CLASS LEVEL
+      // ----------------------------------------
+
+      const selectedClassLevel =
+        resolvedClassLevel ||
+        normaliseClassLevel(
+          questions[0]
+            ?.classLevel
+        ) ||
+        undefined;
+
+      // Backfill classLevel into older Panic
+      // Session chapters when it can be safely
+      // determined from the selected questions.
+
+      if (
+        !chapter.classLevel &&
+        selectedClassLevel
+      ) {
+        chapter.classLevel =
+          selectedClassLevel;
+
+        await session.save();
+      }
+
+      // ----------------------------------------
+      // SERVER-SIDE TIMER
+      // ----------------------------------------
+
+      const startedAt =
+        new Date();
+
+      const expiresAt =
+        new Date(
+          startedAt.getTime() +
+            FIX_TEST_DURATION_MINUTES *
+              60 *
+              1000
+        );
+
+      // ----------------------------------------
+      // CREATE SECURE ATTEMPT
+      // ----------------------------------------
+
+      const attempt =
+        await PanicFixAttempt.create({
+          user:
+            req.user.id,
+
+          panicSession:
+            session._id,
+
+          panicChapterId:
+            chapter._id,
+
+          subject:
+            normaliseSubject(
+              chapter.subject
+            ),
+
+          exam:
+            session.exam,
+
+          chapter:
+            chapter.chapter,
+
+          classLevel:
+            selectedClassLevel,
+
+          questionIds:
+            questions.map(
+              (question) =>
+                question._id
+            ),
+
+          answers:
+            [],
+
+          totalQuestions:
+            FIX_TEST_QUESTION_COUNT,
+
+          correctAnswers:
+            0,
+
+          percentage:
+            0,
+
+          passed:
+            false,
+
+          startedAt,
+
+          expiresAt,
+
+          completed:
+            false,
+        });
+
+      // ----------------------------------------
+      // IMPORTANT:
+      // correctAnswer and explanation are NOT
+      // exposed before the student submits.
+      // ----------------------------------------
+
+      return res
+        .status(201)
+        .json({
+          success: true,
+
+          message:
+            "Fix Test started. You have 10 minutes.",
+
+          data: {
+            fixTest: {
+              attemptId:
+                attempt._id,
+
+              panicSessionId:
+                session._id,
+
+              panicChapterId:
+                chapter._id,
+
+              subject:
+                chapter.subject,
+
+              exam:
+                session.exam,
+
+              chapter:
+                chapter.chapter,
+
+              classLevel:
+                selectedClassLevel ||
+                "",
+
+              totalQuestions:
+                FIX_TEST_QUESTION_COUNT,
+
+              targetPercentage:
+                FIX_TEST_PASS_PERCENTAGE,
+
+              durationMinutes:
+                FIX_TEST_DURATION_MINUTES,
+
+              startedAt,
+
+              expiresAt,
+
+              questions:
+                questions.map(
+                  sanitiseFixTestQuestion
+                ),
+            },
+          },
+        });
+    } catch (error) {
+      console.error(
+        "START PANIC FIX TEST ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+
+          message:
+            "Unable to start the Fix Test.",
+        });
+    }
+  };
 
 // ============================================
-// SMALL COMPONENTS
+// SUBMIT SECURE FIX TEST
+// POST /api/panic-mode/chapters/:chapterId/fix-test/submit
 // ============================================
 
-function HeroMetric({
-  icon: Icon,
-  label,
-  value
-}) {
-  return (
-    <div
-      className="
-        rounded-2xl
-        border
-        border-white/70
-        bg-white/70
-        p-3
-        text-center
+exports.submitFixTest =
+  async (req, res) => {
+    try {
+      const {
+        chapterId,
+      } = req.params;
 
-        dark:border-white/10
-        dark:bg-white/5
-      "
-    >
-      <Icon
-        className="
-          mx-auto
-          h-4
-          w-4
-          text-rose-500
-        "
-      />
+      const {
+        attemptId,
+        answers = [],
+      } = req.body;
 
-      <p
-        className="
-          mt-2
-          text-[9px]
-          font-black
-          uppercase
-          text-slate-400
-        "
-      >
-        {label}
-      </p>
+      // ----------------------------------------
+      // VALIDATE PANIC CHAPTER
+      // ----------------------------------------
 
-      <p
-        className="
-          mt-1
-          text-xs
-          font-black
-          text-slate-950
+      const lookup =
+        await getActiveSessionChapter(
+          req.user.id,
+          chapterId
+        );
 
-          dark:text-white
-        "
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
+      if (lookup.error) {
+        return res
+          .status(
+            lookup.error.status
+          )
+          .json({
+            success: false,
 
-function SummaryMetric({
-  icon: Icon,
-  label,
-  value
-}) {
-  return (
-    <div
-      className="
-        flex
-        items-center
-        gap-3
-        rounded-2xl
-        bg-slate-50
-        p-4
+            message:
+              lookup.error.message,
+          });
+      }
 
-        dark:bg-slate-900
-      "
-    >
-      <Icon
-        className="
-          h-5
-          w-5
-          text-rose-500
-        "
-      />
+      const {
+        session,
+        chapter,
+      } = lookup;
 
-      <div>
-        <p
-          className="
-            text-[10px]
-            font-black
-            uppercase
-            text-slate-400
-          "
-        >
-          {label}
-        </p>
+      // ----------------------------------------
+      // PRACTICE MUST STILL BE COMPLETE
+      // ----------------------------------------
 
-        <p
-          className="
-            mt-1
-            text-sm
-            font-black
-            text-slate-950
+      if (!chapter.practised) {
+        return res
+          .status(400)
+          .json({
+            success: false,
 
-            dark:text-white
-          "
-        >
-          {value}
-        </p>
-      </div>
-    </div>
-  );
-}
+            message:
+              "Complete targeted practice before submitting the Fix Test.",
+          });
+      }
 
-function LoadingCard({
-  text
-}) {
-  return (
-    <div
-      className="
-        mt-6
-        rounded-[24px]
-        border
-        border-slate-200
-        bg-white
-        p-10
-        text-center
+      // ----------------------------------------
+      // VALIDATE ATTEMPT ID
+      // ----------------------------------------
 
-        dark:border-slate-800
-        dark:bg-slate-950
-      "
-    >
-      <Loader2
-        className="
-          mx-auto
-          h-7
-          w-7
-          animate-spin
-          text-rose-500
-        "
-      />
+      if (
+        !mongoose.Types.ObjectId.isValid(
+          attemptId
+        )
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
 
-      <p
-        className="
-          mt-4
-          text-sm
-          font-black
-          text-slate-600
+            message:
+              "Invalid Fix Test attempt.",
+          });
+      }
 
-          dark:text-slate-300
-        "
-      >
-        {text}
-      </p>
-    </div>
-  );
-}
+      // ----------------------------------------
+      // FIND SECURE ATTEMPT
+      // ----------------------------------------
 
-function EmptyHistory() {
-  return (
-    <section
-      className="
-        mt-6
-        rounded-[24px]
-        border
-        border-slate-200
-        bg-white
-        p-8
-        text-center
+      const attempt =
+        await PanicFixAttempt.findOne({
+          _id:
+            attemptId,
 
-        dark:border-slate-800
-        dark:bg-slate-950
-      "
-    >
-      <Flame
-        className="
-          mx-auto
-          h-9
-          w-9
-          text-rose-500
-        "
-      />
+          user:
+            req.user.id,
 
-      <h2
-        className="
-          mt-4
-          text-xl
-          font-black
-          text-slate-950
+          panicSession:
+            session._id,
 
-          dark:text-white
-        "
-      >
-        Complete NAVTA TESTs
-        first
-      </h2>
+          panicChapterId:
+            chapter._id,
+        });
 
-      <p
-        className="
-          mx-auto
-          mt-2
-          max-w-xl
-          text-sm
-          leading-6
-          text-slate-500
-        "
-      >
-        NAVTA needs
-        chapter-level test
-        history before it can
-        identify your weak
-        chapters.
-      </p>
+      if (!attempt) {
+        return res
+          .status(404)
+          .json({
+            success: false,
 
-      <Link
-        to="/navta-test"
-        className="
-          mt-5
-          inline-flex
-          items-center
-          gap-2
-          rounded-xl
-          bg-rose-600
-          px-5
-          py-3
-          text-sm
-          font-black
-          text-white
-        "
-      >
-        Take NAVTA TEST
+            message:
+              "Fix Test attempt not found.",
+          });
+      }
 
-        <ArrowRight
-          className="h-4 w-4"
-        />
-      </Link>
-    </section>
-  );
-}
+      // ----------------------------------------
+      // PREVENT DOUBLE SUBMISSION
+      // ----------------------------------------
+
+      if (attempt.completed) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "This Fix Test has already been submitted.",
+          });
+      }
+
+      // ----------------------------------------
+      // SERVER-SIDE EXPIRY
+      // ----------------------------------------
+
+      const now =
+        new Date();
+
+      if (
+        now >
+        attempt.expiresAt
+      ) {
+        attempt.completed =
+          true;
+
+        attempt.submittedAt =
+          attempt.expiresAt;
+
+        attempt.correctAnswers =
+          0;
+
+        attempt.percentage =
+          0;
+
+        attempt.passed =
+          false;
+
+        attempt.answers =
+          [];
+
+        await attempt.save();
+
+        chapter.fixTestScore =
+          0;
+
+        chapter.fixTestPassed =
+          false;
+
+        chapter.status =
+          "fix-first";
+
+        chapter.fixedAt =
+          null;
+
+        session.completed =
+          false;
+
+        session.completedAt =
+          null;
+
+        await session.save();
+
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "Fix Test time expired. Start a new Fix Test and try again.",
+
+            expired:
+              true,
+
+            data: {
+              expired:
+                true,
+
+              percentage:
+                0,
+
+              passed:
+                false,
+
+              targetPercentage:
+                FIX_TEST_PASS_PERCENTAGE,
+
+              session:
+                formatSession(
+                  session
+                ),
+            },
+          });
+      }
+
+      // ----------------------------------------
+      // VALIDATE ANSWERS ARRAY
+      // ----------------------------------------
+
+      if (
+        !Array.isArray(
+          answers
+        )
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "Fix Test answers must be provided.",
+          });
+      }
+
+      // ----------------------------------------
+      // ALLOWED QUESTION IDS
+      // ----------------------------------------
+
+      const allowedQuestionIds =
+        new Set(
+          attempt.questionIds.map(
+            (id) =>
+              String(id)
+          )
+        );
+
+      // ----------------------------------------
+      // NORMALISE SUBMITTED ANSWERS
+      // ----------------------------------------
+
+      const submittedAnswerMap =
+        new Map();
+
+      for (
+        const answer of
+        answers
+      ) {
+        const questionId =
+          normaliseString(
+            answer?.questionId
+          );
+
+        if (
+          !questionId ||
+          !mongoose.Types.ObjectId.isValid(
+            questionId
+          )
+        ) {
+          return res
+            .status(400)
+            .json({
+              success: false,
+
+              message:
+                "One or more Fix Test answers contain an invalid question ID.",
+            });
+        }
+
+        if (
+          !allowedQuestionIds.has(
+            questionId
+          )
+        ) {
+          return res
+            .status(400)
+            .json({
+              success: false,
+
+              message:
+                "One or more submitted answers do not belong to this Fix Test.",
+            });
+        }
+
+        if (
+          submittedAnswerMap.has(
+            questionId
+          )
+        ) {
+          return res
+            .status(400)
+            .json({
+              success: false,
+
+              message:
+                "A Fix Test question was submitted more than once.",
+            });
+        }
+
+        const rawSelectedOption =
+          answer?.selectedOption;
+
+        let selectedOption =
+          null;
+
+        if (
+          rawSelectedOption !==
+            null &&
+          rawSelectedOption !==
+            undefined &&
+          rawSelectedOption !==
+            ""
+        ) {
+          selectedOption =
+            Number(
+              rawSelectedOption
+            );
+
+          if (
+            !Number.isInteger(
+              selectedOption
+            ) ||
+            selectedOption < 0 ||
+            selectedOption > 3
+          ) {
+            return res
+              .status(400)
+              .json({
+                success: false,
+
+                message:
+                  "One or more Fix Test answers contain an invalid option.",
+              });
+          }
+        }
+
+        submittedAnswerMap.set(
+          questionId,
+          selectedOption
+        );
+      }
+
+      // ----------------------------------------
+      // LOAD ORIGINAL QUESTIONS
+      // ----------------------------------------
+
+      const questions =
+        await NavtaQuestion.find({
+          _id: {
+            $in:
+              attempt.questionIds,
+          },
+        })
+          .select(
+            "_id question options correctAnswer explanation difficulty subject exam classLevel chapter isActive questionType"
+          )
+          .lean();
+
+      if (
+        questions.length !==
+        attempt.questionIds.length
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "One or more Fix Test questions are no longer available.",
+          });
+      }
+
+      // ----------------------------------------
+      // EXTRA SECURITY:
+      // Verify questions still belong to the
+      // correct subject/exam/chapter/class.
+      // ----------------------------------------
+
+      const expectedSubject =
+        normaliseSubject(
+          chapter.subject
+        ).toLowerCase();
+
+      const expectedExam =
+        normaliseString(
+          session.exam
+        ).toLowerCase();
+
+      const expectedChapter =
+        normaliseString(
+          chapter.chapter
+        ).toLowerCase();
+
+      const expectedClassLevel =
+        normaliseClassLevel(
+          chapter.classLevel ||
+          attempt.classLevel
+        );
+
+      const invalidStoredQuestion =
+        questions.some(
+          (question) => {
+            const questionSubject =
+              normaliseSubject(
+                question.subject
+              ).toLowerCase();
+
+            const questionExam =
+              normaliseString(
+                question.exam
+              ).toLowerCase();
+
+            const questionChapter =
+              normaliseString(
+                question.chapter
+              ).toLowerCase();
+
+            const questionClassLevel =
+              normaliseClassLevel(
+                question.classLevel
+              );
+
+            if (
+              questionSubject !==
+                expectedSubject ||
+              questionExam !==
+                expectedExam ||
+              questionChapter !==
+                expectedChapter
+            ) {
+              return true;
+            }
+
+            if (
+              expectedClassLevel &&
+              questionClassLevel !==
+                expectedClassLevel
+            ) {
+              return true;
+            }
+
+            return false;
+          }
+        );
+
+      if (invalidStoredQuestion) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "This Fix Test contains a question that does not belong to the selected Panic Mode chapter.",
+          });
+      }
+
+      // ----------------------------------------
+      // RESTORE ORIGINAL QUESTION ORDER
+      // ----------------------------------------
+
+      const questionMap =
+        new Map(
+          questions.map(
+            (question) => [
+              String(
+                question._id
+              ),
+
+              question,
+            ]
+          )
+        );
+
+      // ----------------------------------------
+      // SERVER-SIDE GRADING
+      // ----------------------------------------
+
+      let correctAnswers =
+        0;
+
+      const gradedAnswers =
+        [];
+
+      const review =
+        [];
+
+      for (
+        const questionId of
+        attempt.questionIds
+      ) {
+        const id =
+          String(
+            questionId
+          );
+
+        const question =
+          questionMap.get(
+            id
+          );
+
+        if (!question) {
+          continue;
+        }
+
+        const selectedOption =
+          submittedAnswerMap.has(
+            id
+          )
+            ? submittedAnswerMap.get(
+                id
+              )
+            : null;
+
+        const correctAnswer =
+          Number(
+            question.correctAnswer
+          );
+
+        const isCorrect =
+          selectedOption !==
+            null &&
+          selectedOption ===
+            correctAnswer;
+
+        if (isCorrect) {
+          correctAnswers +=
+            1;
+        }
+
+        gradedAnswers.push({
+          question:
+            question._id,
+
+          selectedOption,
+
+          isCorrect,
+        });
+
+        review.push({
+          questionId:
+            question._id,
+
+          question:
+            question.question,
+
+          options:
+            Array.isArray(
+              question.options
+            )
+              ? question.options
+              : [],
+
+          selectedOption,
+
+          correctAnswer,
+
+          isCorrect,
+
+          explanation:
+            question.explanation ||
+            "",
+
+          difficulty:
+            question.difficulty,
+
+          classLevel:
+            question.classLevel,
+
+          chapter:
+            question.chapter,
+        });
+      }
+
+      // ----------------------------------------
+      // CALCULATE RESULT
+      // ----------------------------------------
+
+      const totalQuestions =
+        attempt.questionIds.length;
+
+      const percentage =
+        totalQuestions > 0
+          ? Math.round(
+              (
+                correctAnswers /
+                totalQuestions
+              ) * 100
+            )
+          : 0;
+
+      const passed =
+        percentage >=
+        FIX_TEST_PASS_PERCENTAGE;
+
+      // ----------------------------------------
+      // SAVE FIX TEST ATTEMPT
+      // ----------------------------------------
+
+      attempt.answers =
+        gradedAnswers;
+
+      attempt.totalQuestions =
+        totalQuestions;
+
+      attempt.correctAnswers =
+        correctAnswers;
+
+      attempt.percentage =
+        percentage;
+
+      attempt.passed =
+        passed;
+
+      attempt.completed =
+        true;
+
+      attempt.submittedAt =
+        now;
+
+      await attempt.save();
+
+      // ----------------------------------------
+      // UPDATE PANIC CHAPTER
+      // ----------------------------------------
+
+      chapter.fixTestScore =
+        percentage;
+
+      chapter.fixTestPassed =
+        passed;
+
+      if (
+        !chapter.classLevel &&
+        attempt.classLevel
+      ) {
+        chapter.classLevel =
+          normaliseClassLevel(
+            attempt.classLevel
+          ) ||
+          undefined;
+      }
+
+      if (passed) {
+        chapter.status =
+          "fixed";
+
+        chapter.fixedAt =
+          now;
+      } else {
+        chapter.status =
+          "fix-first";
+
+        chapter.fixedAt =
+          null;
+      }
+
+      // ----------------------------------------
+      // CHECK PANIC PLAN COMPLETION
+      // ----------------------------------------
+
+      const unresolved =
+        session.chapters.filter(
+          (item) =>
+            item.status ===
+              "fix-first" &&
+            !item.fixTestPassed
+        );
+
+      if (
+        unresolved.length ===
+        0
+      ) {
+        session.completed =
+          true;
+
+        session.completedAt =
+          now;
+      } else {
+        session.completed =
+          false;
+
+        session.completedAt =
+          null;
+      }
+
+      await session.save();
+
+      // ----------------------------------------
+      // RESPONSE
+      // ----------------------------------------
+
+      return res
+        .status(200)
+        .json({
+          success: true,
+
+          message:
+            passed
+              ? "Weakness fixed! You passed the Fix Test."
+              : "You did not reach 70% yet. Review the chapter and retry the Fix Test.",
+
+          data: {
+            result: {
+              attemptId:
+                attempt._id,
+
+              panicSessionId:
+                session._id,
+
+              panicChapterId:
+                chapter._id,
+
+              subject:
+                chapter.subject,
+
+              exam:
+                session.exam,
+
+              classLevel:
+                chapter.classLevel ||
+                attempt.classLevel ||
+                "",
+
+              chapter:
+                chapter.chapter,
+
+              totalQuestions,
+
+              correctAnswers,
+
+              percentage,
+
+              passed,
+
+              targetPercentage:
+                FIX_TEST_PASS_PERCENTAGE,
+
+              submittedAt:
+                attempt.submittedAt,
+
+              review,
+            },
+
+            chapter,
+
+            session:
+              formatSession(
+                session
+              ),
+          },
+        });
+    } catch (error) {
+      console.error(
+        "SUBMIT PANIC FIX TEST ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+
+          message:
+            "Unable to submit the Fix Test.",
+        });
+    }
+  };
+
+// ============================================
+// RESET PANIC PLAN
+// DELETE /api/panic-mode/plan
+// ============================================
+
+exports.resetPanicPlan =
+  async (req, res) => {
+    try {
+      const userId =
+        req.user.id;
+
+      // Find currently active sessions first so
+      // unfinished secure Fix Tests belonging to
+      // them can also be closed.
+
+      const activeSessions =
+        await PanicSession.find({
+          user:
+            userId,
+
+          active:
+            true,
+        })
+          .select(
+            "_id"
+          )
+          .lean();
+
+      const activeSessionIds =
+        activeSessions.map(
+          (session) =>
+            session._id
+        );
+
+      if (
+        activeSessionIds.length >
+        0
+      ) {
+        await PanicFixAttempt.updateMany(
+          {
+            user:
+              userId,
+
+            panicSession: {
+              $in:
+                activeSessionIds,
+            },
+
+            completed:
+              false,
+          },
+          {
+            $set: {
+              completed:
+                true,
+
+              submittedAt:
+                new Date(),
+            },
+          }
+        );
+      }
+
+      await PanicSession.updateMany(
+        {
+          user:
+            userId,
+
+          active:
+            true,
+        },
+        {
+          $set: {
+            active:
+              false,
+
+            completed:
+              false,
+
+            completedAt:
+              null,
+          },
+        }
+      );
+
+      return res
+        .status(200)
+        .json({
+          success: true,
+
+          message:
+            "Panic Mode plan reset successfully.",
+
+          data: {
+            session:
+              null,
+          },
+        });
+    } catch (error) {
+      console.error(
+        "RESET PANIC PLAN ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+
+          message:
+            "Unable to reset Panic Mode plan.",
+        });
+    }
+  };
