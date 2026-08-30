@@ -1,6 +1,7 @@
 const NavtaQuestion = require("../models/NavtaQuestion");
 const Result = require("../models/Result");
 const Student = require("../models/Student");
+
 const {
   applyNavtaStreakActivity,
   getNavtaStreakSnapshot,
@@ -194,6 +195,7 @@ function normaliseSubmittedAnswer(
 // All streak dates use Asia/Kolkata through the shared
 // helper in studentController.js.
 //
+
 async function applyNavtaStreakSafely(
   userId,
   activityDate = new Date()
@@ -708,6 +710,140 @@ exports.deleteQuestion = async (req, res) => {
 };
 
 // ============================================
+// NAVTA AI - ANALYSE IMPORT FILE
+// ============================================
+//
+// This endpoint analyses an uploaded PDF/DOCX/TXT file.
+//
+// At the current stage:
+// - PDF visual analysis is connected.
+// - DOCX/TXT adapters can be connected separately.
+// - This endpoint does NOT save questions to MongoDB.
+// - Admin reviews accepted questions first.
+//
+// ============================================
+
+exports.importQuestionsWithAI = async (req, res) => {
+  try {
+    const {
+      analyseNavtaImport,
+    } = require("../services/navtaAIImportService");
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please upload a PDF, DOCX or TXT file.",
+      });
+    }
+
+    const {
+      subject = "",
+      exam = "",
+      classLevel = "",
+    } = req.body || {};
+
+    console.log(
+      `NAVTA AI import started: ${req.file.originalname}`
+    );
+
+    const result =
+      await analyseNavtaImport({
+        file: req.file,
+        subject,
+        exam,
+        classLevel,
+      });
+
+    console.log(
+      `NAVTA AI import completed: ${req.file.originalname}`,
+      result.summary
+    );
+
+    return res.status(200).json({
+      success: true,
+
+      message:
+        result.acceptedQuestions.length > 0
+          ? `NAVTA AI found ${result.acceptedQuestions.length} question(s) ready for review.`
+          : "NAVTA AI analysed the document, but no questions were accepted.",
+
+      acceptedQuestions:
+        result.acceptedQuestions || [],
+
+      droppedQuestions:
+        result.droppedQuestions || [],
+
+      summary:
+        result.summary || {
+          detected: 0,
+          accepted: 0,
+          dropped: 0,
+        },
+
+      documentInfo:
+        result.documentInfo || null,
+    });
+  } catch (error) {
+    console.error(
+      "NAVTA AI IMPORT ERROR:",
+      error
+    );
+
+    const message =
+      error?.message ||
+      "NAVTA AI could not analyse this file.";
+
+    if (
+      message.includes(
+        "GEMINI_API_KEY"
+      )
+    ) {
+      return res.status(503).json({
+        success: false,
+        message:
+          "NAVTA AI is not configured on the server.",
+      });
+    }
+
+    if (
+      message.includes(
+        "DOCX NAVTA AI import"
+      ) ||
+      message.includes(
+        "TXT NAVTA AI import"
+      )
+    ) {
+      return res.status(501).json({
+        success: false,
+        message,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message,
+    });
+  }
+};
+
+// ============================================
+// NAVTA AI - CONFIRM IMPORT
+// ============================================
+//
+// Keep database confirmation disabled until the
+// analysis/review flow has been tested successfully.
+// ============================================
+
+exports.confirmAIImport = async (req, res) => {
+  return res.status(503).json({
+    success: false,
+    message:
+      "NAVTA AI question confirmation is temporarily disabled until import analysis testing is complete.",
+  });
+};
+
+// ============================================
 // GENERATE STANDARD STUDENT TEST
 // ============================================
 
@@ -864,7 +1000,7 @@ exports.generateTest = async (req, res) => {
           resolvedQuestionType,
 
         durationMinutes:
-          numericDuration,
+          numericDuration,      numericDuration,
 
         durationSeconds:
           numericDuration * 60,
@@ -1938,73 +2074,1732 @@ exports.generateRevengeBattle = async (req, res) => {
         }
       }
     );
-
-    // ========================================
+        // ========================================
     // CALCULATE PERCENTAGES
     // ========================================
 
     Object.values(
       chapterPerformance
-      },
+    ).forEach(
+      (result) => {
+        result.percentage =
+          result.total
+            ? Math.round(
+                (
+                  result.correct /
+                  result.total
+                ) * 100
+              )
+            : 0;
+      }
+    );
+
+    Object.values(
+      difficultyPerformance
+    ).forEach(
+      (result) => {
+        result.percentage =
+          result.total
+            ? Math.round(
+                (
+                  result.correct /
+                  result.total
+                ) * 100
+              )
+            : 0;
+      }
+    );
+
+    // ========================================
+    // FIND WEAKEST CHAPTERS
+    // ========================================
+
+    const weakChapters =
+      Object.entries(
+        chapterPerformance
+      )
+        .sort(
+          (a, b) =>
+            a[1].percentage -
+            b[1].percentage
+        )
+        .map(
+          ([chapter, result]) => ({
+            chapter,
+            ...result,
+          })
+        );
+
+    // ========================================
+    // FIND WEAKEST DIFFICULTIES
+    // ========================================
+
+    const weakDifficulties =
+      Object.entries(
+        difficultyPerformance
+      )
+        .sort(
+          (a, b) =>
+            a[1].percentage -
+            b[1].percentage
+        )
+        .map(
+          ([
+            difficulty,
+            result,
+          ]) => ({
+            difficulty,
+            ...result,
+          })
+        );
+
+    // ========================================
+    // FETCH AVAILABLE REVENGE QUESTIONS
+    // ========================================
+
+    const availableQuestions =
+      await NavtaQuestion.find({
+        subject,
+        exam,
+        classLevel,
+
+        chapter: {
+          $in:
+            selectedChapters,
+        },
+
+        questionType:
+          "mcq",
+
+        difficulty: {
+          $in: [
+            "Easy",
+            "Medium",
+            "Hard",
+          ],
+        },
+
+        isActive: true,
+      }).lean();
+
+    if (
+      availableQuestions.length <
+      questionCount
+    ) {
+      return res.status(400).json({
+        success: false,
+
+        message:
+          "Not enough questions are available for this Revenge Battle.",
+
+        required:
+          questionCount,
+
+        available:
+          availableQuestions.length,
+      });
+    }
+
+    // ========================================
+    // REMOVE PREVIOUS QUESTIONS WHEN POSSIBLE
+    // ========================================
+
+    const previousIdSet =
+      new Set(
+        previousIds
+      );
+
+    const unusedQuestions =
+      availableQuestions.filter(
+        (question) =>
+          !previousIdSet.has(
+            String(
+              question._id
+            )
+          )
+      );
+
+    // If enough fresh questions exist,
+    // Revenge uses only fresh questions.
+    //
+    // If not enough fresh questions exist,
+    // older questions may be reused.
+
+    const primaryPool =
+      unusedQuestions.length >=
+      questionCount
+        ? unusedQuestions
+        : availableQuestions;
+
+    // ========================================
+    // WEAKNESS PRIORITY SCORE
+    // ========================================
+
+    const chapterScore =
+      Object.fromEntries(
+        weakChapters.map(
+          (item, index) => [
+            item.chapter,
+
+            (100 -
+              item.percentage) *
+              4 +
+              (
+                weakChapters.length -
+                index
+              ) *
+                8,
+          ]
+        )
+      );
+
+    const difficultyScore =
+      Object.fromEntries(
+        weakDifficulties.map(
+          (item, index) => [
+            item.difficulty,
+
+            (100 -
+              item.percentage) *
+              3 +
+              (
+                weakDifficulties.length -
+                index
+              ) *
+                6,
+          ]
+        )
+      );
+
+    // ========================================
+    // SCORE THE QUESTION POOL
+    // ========================================
+
+    const scoredPool =
+      shuffleArray(
+        primaryPool
+      )
+        .map(
+          (question) => ({
+            question,
+
+            score:
+              (
+                chapterScore[
+                  question.chapter
+                ] || 0
+              ) +
+              (
+                difficultyScore[
+                  question.difficulty
+                ] || 0
+              ) +
+              Math.random() *
+                12,
+          })
+        )
+        .sort(
+          (a, b) =>
+            b.score -
+            a.score
+        );
+
+    let selectedQuestions = [];
+
+    const selectedIds =
+      new Set();
+
+    // ========================================
+    // GUARANTEE EACH CHAPTER
+    // ========================================
+
+    for (
+      const chapter of
+      selectedChapters
+    ) {
+      const candidate =
+        scoredPool.find(
+          (item) =>
+            item.question
+              .chapter ===
+              chapter &&
+            !selectedIds.has(
+              String(
+                item.question
+                  ._id
+              )
+            )
+        );
+
+      if (candidate) {
+        selectedQuestions.push(
+          candidate.question
+        );
+
+        selectedIds.add(
+          String(
+            candidate.question
+              ._id
+          )
+        );
+      }
+    }
+
+    // ========================================
+    // FILL REMAINING QUESTIONS
+    // ========================================
+
+    for (
+      const item of scoredPool
+    ) {
+      if (
+        selectedQuestions.length >=
+        questionCount
+      ) {
+        break;
+      }
+
+      const id =
+        String(
+          item.question._id
+        );
+
+      if (
+        selectedIds.has(id)
+      ) {
+        continue;
+      }
+
+      selectedQuestions.push(
+        item.question
+      );
+
+      selectedIds.add(id);
+    }
+
+    // ========================================
+    // PREFER UNUSED QUESTIONS
+    // ========================================
+
+    if (
+      unusedQuestions.length <
+      questionCount
+    ) {
+      const unusedSelectedIds =
+        new Set(
+          selectedQuestions
+            .filter(
+              (question) =>
+                !previousIdSet.has(
+                  String(
+                    question._id
+                  )
+                )
+            )
+            .map(
+              (question) =>
+                String(
+                  question._id
+                )
+            )
+        );
+
+      const missingUnused =
+        shuffleArray(
+          unusedQuestions.filter(
+            (question) =>
+              !unusedSelectedIds.has(
+                String(
+                  question._id
+                )
+              )
+          )
+        );
+
+      for (
+        const freshQuestion of
+        missingUnused
+      ) {
+        const replaceIndex =
+          selectedQuestions.findIndex(
+            (question) =>
+              previousIdSet.has(
+                String(
+                  question._id
+                )
+              )
+          );
+
+        if (
+          replaceIndex === -1
+        ) {
+          break;
+        }
+
+        selectedQuestions[
+          replaceIndex
+        ] =
+          freshQuestion;
+      }
+    }
+
+    // ========================================
+    // FINALIZE REVENGE QUESTIONS
+    // ========================================
+
+    selectedQuestions =
+      shuffleArray(
+        selectedQuestions.slice(
+          0,
+          questionCount
+        )
+      );
+
+    if (
+      selectedQuestions.length <
+      questionCount
+    ) {
+      return res.status(400).json({
+        success: false,
+
+        message:
+          "Not enough unique questions are available to build this Revenge Battle.",
+
+        required:
+          questionCount,
+
+        available:
+          selectedQuestions.length,
+      });
+    }
+
+    // ========================================
+    // TIMER
+    // ========================================
+
+    const minutesPerQuestion =
+      exam === "JEE"
+        ? 2
+        : 1;
+
+    const durationMinutes =
+      questionCount *
+      minutesPerQuestion;
+
+    // ========================================
+    // DIFFICULTY BREAKDOWN
+    // ========================================
+
+    const difficultyBreakdown = {
+      Easy: 0,
+      Medium: 0,
+      Hard: 0,
     };
 
     // ========================================
-    // CALCULATE PREVIOUS PERFORMANCE
+    // CHAPTER BREAKDOWN
     // ========================================
 
-    previousQuestions.forEach(
+    const chapterBreakdown = {};
+
+    selectedChapters.forEach(
+      (chapter) => {
+        chapterBreakdown[
+          chapter
+        ] = 0;
+      }
+    );
+
+    selectedQuestions.forEach(
       (question) => {
-        const id =
-          String(
-            question._id
-          );
-
-        const selectedAnswer =
-          answerMap.get(id);
-
-        const isCorrect =
-          Number.isInteger(
-            selectedAnswer
-          ) &&
-          selectedAnswer ===
-            Number(
-              question.correctAnswer
-            );
-
         if (
-          chapterPerformance[
-            question.chapter
-          ]
+          difficultyBreakdown[
+            question.difficulty
+          ] !== undefined
         ) {
-          chapterPerformance[
-            question.chapter
-          ].total += 1;
-
-          if (isCorrect) {
-            chapterPerformance[
-              question.chapter
-            ].correct += 1;
-          }
+          difficultyBreakdown[
+            question.difficulty
+          ] += 1;
         }
 
         if (
-          difficultyPerformance[
-            question.difficulty
-          ]
+          chapterBreakdown[
+            question.chapter
+          ] !== undefined
         ) {
-          difficultyPerformance[
-            question.difficulty
-          ].total += 1;
-
-          if (isCorrect) {
-            difficultyPerformance[
-              question.difficulty
-            ].correct += 1;
-          }
+          chapterBreakdown[
+            question.chapter
+          ] += 1;
         }
       }
     );
 
+    // ========================================
+    // FORMAT QUESTIONS
+    // ========================================
+
+    const questions =
+      selectedQuestions.map(
+        (question) => ({
+          _id:
+            question._id,
+
+          question:
+            question.question,
+
+          questionType:
+            question.questionType,
+
+          options:
+            question.options ||
+            [],
+
+          correctAnswer:
+            question.correctAnswer,
+
+          explanation:
+            question.explanation ||
+            "",
+
+          chapter:
+            question.chapter,
+
+          difficulty:
+            question.difficulty,
+
+          maxMarks:
+            question.maxMarks ||
+            1,
+        })
+      );
+
+    // ========================================
+    // COUNT REPEATED QUESTIONS
+    // ========================================
+
+    const repeatedQuestionCount =
+      questions.filter(
+        (question) =>
+          previousIdSet.has(
+            String(
+              question._id
+            )
+          )
+      ).length;
+
+    // ========================================
+    // RETURN REVENGE BATTLE
+    // ========================================
+
+    return res.status(200).json({
+      success: true,
+
+      revengeBattle: {
+        mode:
+          "revenge",
+
+        winPercentage:
+          BOSS_WIN_PERCENTAGE,
+
+        revengeAttempt:
+          Math.max(
+            1,
+            Number(
+              revengeAttempt
+            ) || 1
+          ),
+
+        previousPercentage:
+          Number(
+            previousPercentage
+          ) || 0,
+
+        originalPercentage:
+          Number(
+            originalPercentage
+          ) || 0,
+
+        subject,
+        exam,
+        classLevel,
+
+        chapters:
+          selectedChapters,
+
+        totalQuestions:
+          questions.length,
+
+        minutesPerQuestion,
+
+        durationMinutes,
+
+        durationSeconds:
+          durationMinutes *
+          60,
+
+        weakChapters,
+
+        weakDifficulties,
+
+        previousChapterPerformance:
+          chapterPerformance,
+
+        previousDifficultyPerformance:
+          difficultyPerformance,
+
+        difficultyBreakdown,
+
+        chapterBreakdown,
+
+        repeatedQuestionCount,
+
+        questions,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "GENERATE REVENGE BATTLE ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+
+      message:
+        "Failed to generate Revenge Battle.",
+
+      error:
+        error.message,
+    });
+  }
+};
+
+// ============================================
+// AI WRITTEN ANSWER EVALUATION
+// ============================================
+
+exports.evaluateWrittenAnswer = async (req, res) => {
+  try {
+    const {
+      questionId,
+      studentAnswer,
+    } = req.body;
+
+    if (
+      !questionId ||
+      !String(
+        studentAnswer || ""
+      ).trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Question and student answer are required.",
+      });
+    }
+
+    const question =
+      await NavtaQuestion.findById(
+        questionId
+      ).lean();
+
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Question not found.",
+      });
+    }
+
+    if (
+      question.exam !== "Boards" ||
+      ![
+        "short",
+        "long",
+      ].includes(
+        question.questionType
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "AI evaluation is only available for Boards written questions.",
+      });
+    }
+
+    const maxMarks =
+      Math.max(
+        1,
+        Number(
+          question.maxMarks
+        ) || 1
+      );
+
+    const cleanedStudentAnswer =
+      String(
+        studentAnswer
+      ).trim();
+
+    const modelAnswer =
+      String(
+        question.modelAnswer ||
+          ""
+      ).trim();
+
+    const keyPoints =
+      Array.isArray(
+        question.keyPoints
+      )
+        ? question.keyPoints
+            .map((item) =>
+              String(
+                item || ""
+              ).trim()
+            )
+            .filter(Boolean)
+        : [];
+
+    const evaluationInstructions =
+      String(
+        question.evaluationInstructions ||
+          ""
+      ).trim();
+
+    // ========================================
+    // LOCAL FALLBACK EVALUATION
+    // ========================================
+
+    const normaliseText = (
+      value
+    ) =>
+      String(value || "")
+        .toLowerCase()
+        .replace(
+          /[^a-z0-9\s]/g,
+          " "
+        )
+        .replace(
+          /\s+/g,
+          " "
+        )
+        .trim();
+
+    const normalizedAnswer =
+      normaliseText(
+        cleanedStudentAnswer
+      );
+
+    const matchedKeyPoints =
+      keyPoints.filter(
+        (point) => {
+          const normalizedPoint =
+            normaliseText(
+              point
+            );
+
+          if (
+            !normalizedPoint
+          ) {
+            return false;
+          }
+
+          if (
+            normalizedAnswer.includes(
+              normalizedPoint
+            )
+          ) {
+            return true;
+          }
+
+          const words =
+            normalizedPoint
+              .split(" ")
+              .filter(
+                (word) =>
+                  word.length >= 4
+              );
+
+          if (
+            words.length === 0
+          ) {
+            return false;
+          }
+
+          const matchedWords =
+            words.filter(
+              (word) =>
+                normalizedAnswer.includes(
+                  word
+                )
+            );
+
+          return (
+            matchedWords.length /
+              words.length >=
+            0.7
+          );
+        }
+      );
+
+    const localPercentage =
+      keyPoints.length > 0
+        ? Math.round(
+            (
+              matchedKeyPoints.length /
+              keyPoints.length
+            ) *
+              100
+          )
+        : 0;
+
+    const localMarks =
+      Number(
+        (
+          maxMarks *
+          (
+            localPercentage /
+            100
+          )
+        ).toFixed(2)
+      );
+
+    const fallbackResult = {
+      marksAwarded:
+        Math.min(
+          maxMarks,
+          Math.max(
+            0,
+            localMarks
+          )
+        ),
+
+      maxMarks,
+
+      percentage:
+        localPercentage,
+
+      feedback:
+        matchedKeyPoints.length > 0
+          ? "Your answer contains some of the expected key points. Review the model answer to improve completeness."
+          : "Review the model answer and include the important concepts and key points.",
+
+      strengths:
+        matchedKeyPoints,
+
+      missingPoints:
+        keyPoints.filter(
+          (point) =>
+            !matchedKeyPoints.includes(
+              point
+            )
+        ),
+
+      modelAnswer,
+
+      evaluatedBy:
+        "local",
+    };
+
+    // ========================================
+    // OPENAI CONFIGURATION
+    // ========================================
+
+    const apiKey =
+      process.env
+        .OPENAI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(200).json({
+        success: true,
+        evaluation:
+          fallbackResult,
+      });
+    }
+
+    // ========================================
+    // BUILD AI PROMPT
+    // ========================================
+
+    const prompt = `
+You are evaluating a school Board examination answer.
+
+Evaluate the student's answer fairly and conservatively.
+
+QUESTION:
+${question.question}
+
+QUESTION TYPE:
+${question.questionType}
+
+MAXIMUM MARKS:
+${maxMarks}
+
+MODEL ANSWER:
+${modelAnswer}
+
+KEY POINTS:
+${keyPoints
+  .map(
+    (point, index) =>
+      `${index + 1}. ${point}`
+  )
+  .join("\n")}
+
+ADDITIONAL EVALUATION INSTRUCTIONS:
+${evaluationInstructions || "None"}
+
+STUDENT ANSWER:
+${cleanedStudentAnswer}
+
+Return ONLY valid JSON using this structure:
+
+{
+  "marksAwarded": 0,
+  "percentage": 0,
+  "feedback": "",
+  "strengths": [],
+  "missingPoints": []
+}
+
+Rules:
+- marksAwarded must be between 0 and ${maxMarks}.
+- percentage must be between 0 and 100.
+- Do not award marks for irrelevant information.
+- Give partial marks where appropriate.
+- Do not require exact wording if the concept is correct.
+- strengths must be short points.
+- missingPoints must contain important missing concepts.
+- feedback should be concise and useful to a student.
+`;
+
+    // ========================================
+    // CALL OPENAI
+    // ========================================
+
+    try {
+      const aiResponse =
+        await fetch(
+          "https://api.openai.com/v1/responses",
+          {
+            method:
+              "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              Authorization:
+                `Bearer ${apiKey}`,
+            },
+
+            body:
+              JSON.stringify({
+                model:
+                  process.env
+                    .OPENAI_EVALUATION_MODEL ||
+                  "gpt-4.1-mini",
+
+                input:
+                  prompt,
+
+                temperature:
+                  0.1,
+              }),
+          }
+        );
+
+      if (!aiResponse.ok) {
+        const errorText =
+          await aiResponse.text();
+
+        console.error(
+          "NAVTA WRITTEN AI API ERROR:",
+          aiResponse.status,
+          errorText
+        );
+
+        return res.status(200).json({
+          success: true,
+          evaluation:
+            fallbackResult,
+        });
+      }
+
+      const aiData =
+        await aiResponse.json();
+
+      let outputText = "";
+
+      if (
+        typeof aiData.output_text ===
+        "string"
+      ) {
+        outputText =
+          aiData.output_text;
+      }
+
+      if (
+        !outputText &&
+        Array.isArray(
+          aiData.output
+        )
+      ) {
+        for (
+          const outputItem of
+          aiData.output
+        ) {
+          if (
+            !Array.isArray(
+              outputItem?.content
+            )
+          ) {
+            continue;
+          }
+
+          for (
+            const contentItem of
+            outputItem.content
+          ) {
+            if (
+              typeof contentItem?.text ===
+              "string"
+            ) {
+              outputText +=
+                contentItem.text;
+            }
+          }
+        }
+      }
+
+      outputText =
+        String(
+          outputText || ""
+        )
+          .replace(
+            /^```json\s*/i,
+            ""
+          )
+          .replace(
+            /^```\s*/i,
+            ""
+          )
+          .replace(
+            /```$/i,
+            ""
+          )
+          .trim();
+
+      if (!outputText) {
+        return res.status(200).json({
+          success: true,
+          evaluation:
+            fallbackResult,
+        });
+      }
+
+      let parsedEvaluation;
+
+      try {
+        parsedEvaluation =
+          JSON.parse(
+            outputText
+          );
+      } catch (parseError) {
+        console.error(
+          "NAVTA WRITTEN AI JSON ERROR:",
+          parseError,
+          outputText
+        );
+
+        return res.status(200).json({
+          success: true,
+          evaluation:
+            fallbackResult,
+        });
+      }
+
+      const aiMarks =
+        Number(
+          parsedEvaluation
+            ?.marksAwarded
+        );
+
+      const safeMarks =
+        Number.isFinite(
+          aiMarks
+        )
+          ? Math.min(
+              maxMarks,
+              Math.max(
+                0,
+                aiMarks
+              )
+            )
+          : fallbackResult
+              .marksAwarded;
+
+      const percentage =
+        Math.min(
+          100,
+          Math.max(
+            0,
+            Math.round(
+              (
+                safeMarks /
+                maxMarks
+              ) *
+                100
+            )
+          )
+        );
+
+      return res.status(200).json({
+        success: true,
+
+        evaluation: {
+          marksAwarded:
+            safeMarks,
+
+          maxMarks,
+
+          percentage,
+
+          feedback:
+            String(
+              parsedEvaluation
+                ?.feedback ||
+                fallbackResult
+                  .feedback
+            ).trim(),
+
+          strengths:
+            Array.isArray(
+              parsedEvaluation
+                ?.strengths
+            )
+              ? parsedEvaluation
+                  .strengths
+                  .map(
+                    (item) =>
+                      String(
+                        item || ""
+                      ).trim()
+                  )
+                  .filter(Boolean)
+              : fallbackResult
+                  .strengths,
+
+          missingPoints:
+            Array.isArray(
+              parsedEvaluation
+                ?.missingPoints
+            )
+              ? parsedEvaluation
+                  .missingPoints
+                  .map(
+                    (item) =>
+                      String(
+                        item || ""
+                      ).trim()
+                  )
+                  .filter(Boolean)
+              : fallbackResult
+                  .missingPoints,
+
+          modelAnswer,
+
+          evaluatedBy:
+            "openai",
+        },
+      });
+    } catch (aiError) {
+      console.error(
+        "NAVTA WRITTEN AI EVALUATION ERROR:",
+        aiError
+      );
+
+      return res.status(200).json({
+        success: true,
+        evaluation:
+          fallbackResult,
+      });
+    }
+  } catch (error) {
+    console.error(
+      "EVALUATE WRITTEN ANSWER ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to evaluate written answer.",
+      error:
+        error.message,
+    });
+  }
+};
+
+// ============================================
+// COMPLETE NAVTA TEST
+// ============================================
+
+exports.completeNavtaTest = async (req, res) => {
+  try {
+    const userId =
+      req.user?._id ||
+      req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Authentication required.",
+      });
+    }
+
+    const {
+      attemptId,
+      testType = "standard",
+      subject,
+      exam,
+      classLevel,
+      chapter,
+      chapters = [],
+      difficulty,
+      questionType = "mcq",
+      selectedDuration,
+      totalQuestions,
+      correctAnswers,
+      wrongAnswers,
+      unanswered,
+      percentage,
+      answers = [],
+      bossWinPercentage,
+      bossDefeated,
+      revengeAttempt,
+      previousPercentage,
+      originalPercentage,
+    } = req.body;
+
+    // ========================================
+    // VALIDATE RESULT TYPE
+    // ========================================
+
+    if (
+      !NAVTA_RESULT_TYPES.includes(
+        testType
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid NAVTA TEST type.",
+      });
+    }
+
+    if (!attemptId) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Attempt ID is required.",
+      });
+    }
+
+    const existingResult =
+      await Result.findOne({
+        user: userId,
+        attemptId,
+      });
+
+    if (existingResult) {
+      const student =
+        await Student.findOne({
+          user: userId,
+        });
+
+      return res.status(200).json({
+        success: true,
+        alreadyCompleted: true,
+        message:
+          "This NAVTA TEST attempt has already been completed.",
+
+        result:
+          existingResult,
+
+        coinsEarned:
+          Number(
+            existingResult
+              .coinsEarned
+          ) || 0,
+
+        totalCoins:
+          Number(
+            student?.coins
+          ) || 0,
+
+        streak:
+          student
+            ? getNavtaStreakSnapshot(
+                student
+              )
+            : null,
+      });
+    }
+
+    // ========================================
+    // BASIC METADATA
+    // ========================================
+
+    if (
+      !subject ||
+      !exam ||
+      !classLevel
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Subject, preparation and class are required.",
+      });
+    }
+
+    const numericTotalQuestions =
+      Number(totalQuestions);
+
+    const numericCorrectAnswers =
+      Number(correctAnswers);
+
+    const numericWrongAnswers =
+      Number(wrongAnswers);
+
+    const numericUnanswered =
+      Number(unanswered);
+
+    const numericPercentage =
+      Number(percentage);
+
+    const numericDuration =
+      Number(selectedDuration);
+
+    if (
+      !Number.isInteger(
+        numericTotalQuestions
+      ) ||
+      numericTotalQuestions <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid total question count.",
+      });
+    }
+
+    if (
+      !Number.isFinite(
+        numericPercentage
+      ) ||
+      numericPercentage < 0 ||
+      numericPercentage > 100
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid percentage.",
+      });
+    }
+
+    if (
+      !Number.isFinite(
+        numericDuration
+      ) ||
+      numericDuration <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid selected duration.",
+      });
+    }
+
+    const safeCorrect =
+      Number.isFinite(
+        numericCorrectAnswers
+      )
+        ? Math.max(
+            0,
+            numericCorrectAnswers
+          )
+        : 0;
+
+    const safeWrong =
+      Number.isFinite(
+        numericWrongAnswers
+      )
+        ? Math.max(
+            0,
+            numericWrongAnswers
+          )
+        : 0;
+
+    const safeUnanswered =
+      Number.isFinite(
+        numericUnanswered
+      )
+        ? Math.max(
+            0,
+            numericUnanswered
+          )
+        : 0;
+
+    // ========================================
+    // NORMALIZE CHAPTERS
+    // ========================================
+
+    const resultChapters =
+      Array.isArray(chapters)
+        ? [
+            ...new Set(
+              chapters
+                .map(
+                  (item) =>
+                    String(
+                      item || ""
+                    ).trim()
+                )
+                .filter(Boolean)
+            ),
+          ]
+        : [];
+
+    if (
+      chapter &&
+      !resultChapters.includes(
+        String(chapter).trim()
+      )
+    ) {
+      resultChapters.push(
+        String(chapter).trim()
+      );
+    }
+
+    // ========================================
+    // NORMALIZE ANSWERS
+    // ========================================
+
+    const normalizedAnswers =
+      Array.isArray(answers)
+        ? answers
+            .map((item) => {
+              const questionId =
+                String(
+                  item?.questionId ||
+                    item?._id ||
+                    ""
+                ).trim();
+
+              if (!questionId) {
+                return null;
+              }
+
+              return {
+                question:
+                  questionId,
+
+                selectedAnswer:
+                  normaliseSubmittedAnswer(
+                    item?.selectedAnswer
+                  ),
+
+                isCorrect:
+                  Boolean(
+                    item?.isCorrect
+                  ),
+              };
+            })
+            .filter(Boolean)
+        : [];
+
+    // ========================================
+    // COINS
+    // ========================================
+
+    const coinsEarned =
+      calculateNavtaCoins(
+        numericPercentage,
+        numericDuration
+      );
+
+    // ========================================
+    // RESULT PAYLOAD
+    // ========================================
+
+    const resultPayload = {
+      user:
+        userId,
+
+      attemptId:
+        String(attemptId),
+
+      testType,
+
+      subject:
+        String(subject).trim(),
+
+      exam:
+        String(exam).trim(),
+
+      classLevel:
+        String(
+          classLevel
+        ).trim(),
+
+      chapter:
+        String(
+          chapter || ""
+        ).trim(),
+
+      chapters:
+        resultChapters,
+
+      difficulty:
+        String(
+          difficulty || ""
+        ).trim(),
+
+      questionType:
+        String(
+          questionType ||
+            "mcq"
+        ).trim(),
+
+      selectedDuration:
+        numericDuration,
+
+      totalQuestions:
+        numericTotalQuestions,
+
+      correctAnswers:
+        safeCorrect,
+
+      wrongAnswers:
+        safeWrong,
+
+      unanswered:
+        safeUnanswered,
+
+      percentage:
+        numericPercentage,
+
+      answers:
+        normalizedAnswers,
+
+      coinsEarned,
+
+      completedAt:
+        new Date(),
+    };
+
+    // ========================================
+    // BOSS / REVENGE METADATA
+    // ========================================
+
+    if (
+      testType === "boss" ||
+      testType === "revenge"
+    ) {
+      resultPayload.bossWinPercentage =
+        Number(
+          bossWinPercentage
+        ) ||
+        BOSS_WIN_PERCENTAGE;
+
+      resultPayload.bossDefeated =
+        typeof bossDefeated ===
+        "boolean"
+          ? bossDefeated
+          : numericPercentage >=
+            BOSS_WIN_PERCENTAGE;
+    }
+
+    if (
+      testType === "revenge"
+    ) {
+      resultPayload.revengeAttempt =
+        Math.max(
+          1,
+          Number(
+            revengeAttempt
+          ) || 1
+        );
+
+      resultPayload.previousPercentage =
+        Number(
+          previousPercentage
+        ) || 0;
+
+      resultPayload.originalPercentage =
+        Number(
+          originalPercentage
+        ) || 0;
+    }
+
+    // ========================================
+    // CREATE RESULT FIRST
+    // ========================================
+
+    let createdResult;
+
+    try {
+      createdResult =
+        await Result.create(
+          resultPayload
+        );
+    } catch (createError) {
+      // Another duplicate completion may have
+      // reached MongoDB at the same time.
+      if (
+        createError?.code ===
+        11000
+      ) {
+        const duplicateResult =
+          await Result.findOne({
+            user: userId,
+            attemptId,
+          });
+
+        const student =
+          await Student.findOne({
+            user: userId,
+          });
+
+        return res.status(200).json({
+          success: true,
+          alreadyCompleted: true,
+
+          message:
+            "This NAVTA TEST attempt has already been completed.",
+
+          result:
+            duplicateResult,
+
+          coinsEarned:
+            Number(
+              duplicateResult
+                ?.coinsEarned
+            ) || 0,
+
+          totalCoins:
+            Number(
+              student?.coins
+            ) || 0,
+
+          streak:
+            student
+              ? getNavtaStreakSnapshot(
+                  student
+                )
+              : null,
+        });
+      }
+
+      throw createError;
+    }
+
+    // ========================================
+    // UPDATE STUDENT COINS
+    // ========================================
+
+    let updatedStudent;
+
+    if (coinsEarned > 0) {
+      updatedStudent =
+        await Student.findOneAndUpdate(
+          {
+            user:
+              userId,
+          },
+          {
+            $inc: {
+              coins:
+                coinsEarned,
+            },
+          },
+          {
+            new: true,
+          }
+        );
+    } else {
+      updatedStudent =
+        await Student.findOne({
+          user:
+            userId,
+        });
+    }
+
+    if (!updatedStudent) {
+      throw new Error(
+        "Student profile not found."
+      );
+    }
+
+    // ========================================
+    // UPDATE NAVTA STREAK
+    // ========================================
+
+    const streakResult =
+      await applyNavtaStreakSafely(
+        userId,
+        new Date()
+      );
+
+    // Refresh student after streak update.
+    updatedStudent =
+      await Student.findOne({
+        user:
+          userId,
+      });
+
+    // ========================================
+    // SUCCESS
+    // ========================================
+
+    return res.status(201).json({
+      success: true,
+
+      alreadyCompleted:
+        false,
+
+      message:
+        "NAVTA TEST completed successfully.",
+
+      result:
+        createdResult,
+
+      coinsEarned,
+
+      totalCoins:
+        Number(
+          updatedStudent?.coins
+        ) || 0,
+
+      streak:
+        streakResult,
+    });
+  } catch (error) {
+    console.error(
+      "COMPLETE NAVTA TEST ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to complete NAVTA TEST.",
+      error:
+        error.message,
+    });
+  }
+};
     // ========================================
     // CALCULATE PERCENTAGES
     // ========================================
@@ -2606,1071 +4401,255 @@ exports.generateRevengeBattle = async (req, res) => {
 };
 
 // ============================================
-// COMPLETE NAVTA TEST
-// ============================================
-//
-// Saves Standard Test / Boss Battle / Revenge
-// results for dashboard performance analytics.
-//
-// Coin rule:
-// - Score <= 80%: 0 coins
-// - Score > 80% and duration < 30 min: 1 coin
-// - Score > 80% and duration >= 30 min: 2 coins
-//
-// IMPORTANT:
-// This endpoint must be protected by the
-// student authentication middleware in routes.
-//
-// Endpoint:
-// POST /api/navta-test/complete
-//
+// AI WRITTEN ANSWER EVALUATION
 // ============================================
 
-exports.completeNavtaTest =
-  async (req, res) => {
-    try {
-      const userId =
-        req.user?.id;
+exports.evaluateWrittenAnswer = async (req, res) => {
+  try {
+    const {
+      questionId,
+      studentAnswer,
+    } = req.body;
 
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "Authentication is required.",
-        });
-      }
+    if (
+      !questionId ||
+      !String(
+        studentAnswer || ""
+      ).trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Question and student answer are required.",
+      });
+    }
 
-      const {
-        attemptId,
-        testType = "standard",
-        subject,
-        exam,
-        classLevel,
-        chapter,
-        chapters = [],
-        difficulty,
-        questionType,
-        selectedDuration,
-        timeTaken,
-        answers = [],
-      } = req.body;
+    const question =
+      await NavtaQuestion.findById(
+        questionId
+      ).lean();
 
-      // ========================================
-      // ATTEMPT ID
-      // ========================================
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Question not found.",
+      });
+    }
 
-      const cleanedAttemptId =
-        String(
-          attemptId || ""
-        ).trim();
+    if (
+      question.exam !== "Boards" ||
+      ![
+        "short",
+        "long",
+      ].includes(
+        question.questionType
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "AI evaluation is only available for Boards written questions.",
+      });
+    }
 
-      if (!cleanedAttemptId) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Attempt ID is required.",
-        });
-      }
+    const maxMarks =
+      Math.max(
+        1,
+        Number(
+          question.maxMarks
+        ) || 1
+      );
 
-      // ========================================
-      // DUPLICATE ATTEMPT PROTECTION
-      // ========================================
+    const cleanedStudentAnswer =
+      String(
+        studentAnswer
+      ).trim();
 
-      const existingResult =
-        await Result.findOne({
-          user: userId,
-          attemptId:
-            cleanedAttemptId,
-        });
+    const modelAnswer =
+      String(
+        question.modelAnswer ||
+          ""
+      ).trim();
 
-      if (existingResult) {
-        // A retry must not create another streak day.
-        // Using the original result creation date also
-        // lets us safely repair a streak update if the
-        // server previously saved the result but stopped
-        // before updating the streak.
-        const streak =
-          await applyNavtaStreakSafely(
-            userId,
-            existingResult.createdAt ||
-              new Date()
-          );
-
-        const existingStudent =
-          await Student.findOne({
-            user: userId,
-          }).select(
-            "coins xp level currentStreak longestStreak lastNavtaTestDate streakRecoveryActive streakRecoveryRequired streakRecoveryCompleted streakLastUpdatedAt"
-          );
-
-        return res.status(200).json({
-          success: true,
-          alreadySubmitted: true,
-          message:
-            "This NAVTA Test attempt was already saved.",
-          data: {
-            result:
-              existingResult,
-            percentage:
-              existingResult.percentage,
-            selectedDuration:
-              existingResult.selectedDuration,
-            coinsEarned:
-              Number(
-                existingResult.coinsAwarded ||
-                  0
-              ),
-            coinBalance:
-              Number(
-                existingStudent?.coins ||
-                  0
-              ),
-            newCoins:
-              Number(
-                existingStudent?.coins ||
-                  0
-              ),
-            streak,
-          },
-        });
-      }
-
-      // ========================================
-      // BASIC TEST VALIDATION
-      // ========================================
-
-      if (
-        !NAVTA_RESULT_TYPES.includes(
-          testType
-        )
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid NAVTA Test type.",
-        });
-      }
-
-      if (
-        !subject ||
-        !exam ||
-        !classLevel
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Subject, preparation and class are required.",
-        });
-      }
-
-      if (
-        !allowedExams[subject] ||
-        !allowedExams[
-          subject
-        ].includes(exam)
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid subject or preparation.",
-        });
-      }
-
-      if (
-        classLevel !==
-          "Class 11" &&
-        classLevel !==
-          "Class 12"
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid class.",
-        });
-      }
-
-      if (
-        !Array.isArray(answers) ||
-        answers.length === 0
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Completed test answers are required.",
-        });
-      }
-
-      // ========================================
-      // DURATION
-      // ========================================
-
-      const numericDuration =
-        Number(selectedDuration);
-
-      if (
-        !Number.isFinite(
-          numericDuration
-        ) ||
-        numericDuration <= 0
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "A valid selected test duration is required.",
-        });
-      }
-
-      // ========================================
-      // QUESTION IDS
-      // ========================================
-
-      const questionIds =
-        answers
-          .map(
-            (item) =>
-              String(
-                item?.questionId ||
-                  ""
-              ).trim()
-          )
-          .filter(Boolean);
-
-      const uniqueQuestionIds = [
-        ...new Set(
-          questionIds
-        ),
-      ];
-
-      if (
-        uniqueQuestionIds.length !==
-        answers.length
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Every submitted answer must contain one unique question ID.",
-        });
-      }
-
-      // ========================================
-      // LOAD REAL QUESTIONS FROM DATABASE
-      // ========================================
-
-      const storedQuestions =
-        await NavtaQuestion.find({
-          _id: {
-            $in:
-              uniqueQuestionIds,
-          },
-          subject,
-          exam,
-          classLevel,
-          isActive: true,
-        })
-          .select(
-            "_id chapter difficulty questionType correctAnswer maxMarks modelAnswer"
-          )
-          .lean();
-
-      if (
-        storedQuestions.length !==
-        uniqueQuestionIds.length
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "One or more submitted questions are invalid for this NAVTA Test.",
-        });
-      }
-
-      const questionMap =
-        new Map(
-          storedQuestions.map(
-            (item) => [
-              String(item._id),
-              item,
-            ]
-          )
-        );
-
-      // ========================================
-      // STANDARD TEST VALIDATION
-      // ========================================
-
-      const resolvedQuestionType =
-        normaliseQuestionType(
-          exam,
-          questionType
-        );
-
-      if (
-        testType ===
-        "standard"
-      ) {
-        if (
-          !chapter ||
-          !difficulty ||
-          !validDifficulties.includes(
-            difficulty
-          ) ||
-          !validQuestionTypes.includes(
-            resolvedQuestionType
-          )
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Chapter, difficulty and question type are required for a Standard Test.",
-          });
-        }
-
-        if (
-          !isAllowedDuration(
-            exam,
-            resolvedQuestionType,
-            numericDuration
-          )
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Invalid duration for this Standard Test.",
-          });
-        }
-
-        const expectedQuestionCount =
-          getQuestionCount(
-            exam,
-            resolvedQuestionType,
-            numericDuration
-          );
-
-        if (
-          answers.length !==
-          expectedQuestionCount
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "The submitted Standard Test question count does not match the selected duration.",
-          });
-        }
-
-        const invalidStandardQuestion =
-          storedQuestions.some(
-            (item) =>
-              item.chapter !==
-                chapter ||
-              item.difficulty !==
-                difficulty ||
-              item.questionType !==
-                resolvedQuestionType
-          );
-
-        if (
-          invalidStandardQuestion
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "One or more questions do not match the selected Standard Test setup.",
-          });
-        }
-      }
-
-      // ========================================
-      // BOSS / REVENGE VALIDATION
-      // ========================================
-
-      let cleanedChapters = [];
-
-      if (
-        testType === "boss" ||
-        testType === "revenge"
-      ) {
-        cleanedChapters = [
-          ...new Set(
-            (Array.isArray(
-              chapters
-            )
-              ? chapters
-              : []
-            )
-              .map(
-                (item) =>
-                  String(
-                    item || ""
-                  ).trim()
-              )
-              .filter(Boolean)
-          ),
-        ];
-
-        if (
-          cleanedChapters.length <
-          2
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Boss and Revenge Battle results require at least 2 selected chapters.",
-          });
-        }
-
-        if (
-          !BOSS_BATTLE_SIZES.includes(
-            answers.length
-          )
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Boss and Revenge Battle results must contain 15, 30 or 50 questions.",
-          });
-        }
-
-        const invalidBattleQuestion =
-          storedQuestions.some(
-            (item) =>
-              item.questionType !==
-                "mcq" ||
-              !cleanedChapters.includes(
-                item.chapter
-              ) ||
-              !validDifficulties.includes(
-                item.difficulty
-              )
-          );
-
-        if (
-          invalidBattleQuestion
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "One or more questions do not match the Boss/Revenge Battle setup.",
-          });
-        }
-
-        const expectedDuration =
-          answers.length *
-          (exam === "JEE"
-            ? 2
-            : 1);
-
-        if (
-          numericDuration !==
-          expectedDuration
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "The submitted Boss/Revenge duration does not match the official battle timer.",
-          });
-        }
-      }
-
-      // ========================================
-      // CANONICAL RESULT CONTEXT
-      // ========================================
-      //
-      // The submitted questions above have already
-      // been validated against subject, exam and
-      // classLevel. Build the stored chapter context
-      // from those real database questions so Panic
-      // Mode receives trustworthy Class 11 / Class 12
-      // chapter history.
-      // ========================================
-
-      const verifiedChapters = [
-        ...new Set(
-          storedQuestions
+    const keyPoints =
+      Array.isArray(
+        question.keyPoints
+      )
+        ? question.keyPoints
             .map((item) =>
               String(
-                item.chapter || ""
+                item || ""
               ).trim()
             )
             .filter(Boolean)
-        ),
-      ];
+        : [];
 
-      const resultChapter =
-        testType === "standard"
-          ? verifiedChapters[0] ||
-            String(
-              chapter || ""
-            ).trim()
-          : undefined;
+    const evaluationInstructions =
+      String(
+        question.evaluationInstructions ||
+          ""
+      ).trim();
 
-      const resultChapters =
-        testType === "standard"
-          ? resultChapter
-            ? [resultChapter]
-            : []
-          : verifiedChapters;
+    // ========================================
+    // LOCAL FALLBACK EVALUATION
+    // ========================================
 
-      // ========================================
-      // GRADE TEST ON SERVER
-      // ========================================
-
-      let earnedMarks = 0;
-      let maximumMarks = 0;
-      let correctAnswers = 0;
-
-      const gradedAnswers =
-        answers.map(
-          (submitted) => {
-            const id =
-              String(
-                submitted.questionId
-              );
-
-            const question =
-              questionMap.get(id);
-
-            if (!question) {
-              return null;
-            }
-
-            // ------------------------------------
-            // MCQ
-            // ------------------------------------
-
-            if (
-              question.questionType ===
-              "mcq"
-            ) {
-              const selectedOption =
-                normaliseSubmittedAnswer(
-                  submitted.selectedOption
-                );
-
-              const correctOption =
-                Number(
-                  question.correctAnswer
-                );
-
-              const isCorrect =
-                Number.isInteger(
-                  selectedOption
-                ) &&
-                selectedOption ===
-                  correctOption;
-
-              maximumMarks += 1;
-
-              if (isCorrect) {
-                earnedMarks += 1;
-                correctAnswers += 1;
-              }
-
-              return {
-                question:
-                  question._id,
-                selectedOption,
-                textAnswer: "",
-                isCorrect,
-              };
-            }
-
-            // ------------------------------------
-            // WRITTEN
-            // ------------------------------------
-            //
-            // Written answers have already been
-            // evaluated by the backend evaluation
-            // endpoint during the test.
-            //
-            // We cap submitted marks to the real
-            // stored maxMarks so impossible values
-            // cannot be stored.
-            //
-            // ------------------------------------
-
-            const maxMarks =
-              Math.max(
-                1,
-                Number(
-                  question.maxMarks ||
-                    1
-                )
-              );
-
-            const rawAwarded =
-              Number(
-                submitted
-                  ?.evaluation
-                  ?.marksAwarded
-              );
-
-            const awarded =
-              Number.isFinite(
-                rawAwarded
-              )
-                ? Math.max(
-                    0,
-                    Math.min(
-                      maxMarks,
-                      rawAwarded
-                    )
-                  )
-                : 0;
-
-            maximumMarks +=
-              maxMarks;
-
-            earnedMarks +=
-              awarded;
-
-            const isCorrect =
-              awarded >= maxMarks;
-
-            if (isCorrect) {
-              correctAnswers += 1;
-            }
-
-            return {
-              question:
-                question._id,
-              selectedOption:
-                null,
-              textAnswer:
-                String(
-                  submitted.textAnswer ||
-                    ""
-                ),
-              isCorrect,
-            };
-          }
+    const normaliseText = (
+      value
+    ) =>
+      String(value || "")
+        .toLowerCase()
+        .replace(
+          /[^a-z0-9\s]/g,
+          " "
         )
-        .filter(Boolean);
+        .replace(
+          /\s+/g,
+          " "
+        )
+        .trim();
 
-      if (
-        maximumMarks <= 0
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Unable to calculate this test result.",
-        });
-      }
-
-      const percentage =
-        Math.max(
-          0,
-          Math.min(
-            100,
-            Math.round(
-              (
-                earnedMarks /
-                maximumMarks
-              ) * 100
-            )
-          )
-        );
-
-      const totalQuestions =
-        storedQuestions.length;
-
-      const score =
-        Math.round(
-          earnedMarks * 100
-        ) / 100;
-
-      // 70% is retained as the NAVTA
-      // performance success threshold.
-      const isPassed =
-        percentage >= 70;
-
-      // ========================================
-      // COIN REWARD
-      // ========================================
-
-      const coinsEarned =
-        calculateNavtaCoins(
-          percentage,
-          numericDuration
-        );
-
-      // ========================================
-      // ACTUAL TIME TAKEN
-      // ========================================
-
-      const numericTimeTaken =
-        Number(timeTaken);
-
-      const safeTimeTaken =
-        Number.isFinite(
-          numericTimeTaken
-        ) &&
-        numericTimeTaken >= 0
-          ? Math.round(
-              numericTimeTaken
-            )
-          : 0;
-
-      // ========================================
-      // STUDENT PROFILE
-      // ========================================
-
-      const student =
-        await Student.findOne({
-          user: userId,
-        });
-
-      if (!student) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Student profile not found.",
-        });
-      }
-
-      // ========================================
-      // SAVE RESULT FIRST
-      // ========================================
-      //
-      // NOTE:
-      // Result.test must be optional for NAVTA
-      // generated tests because these tests are
-      // generated dynamically and do not have a
-      // Test document.
-      //
-      // ========================================
-
-      let result;
-
-      try {
-        result =
-          await Result.create({
-            user: userId,
-            answers:
-              gradedAnswers,
-            score,
-            percentage,
-            timeTaken:
-              safeTimeTaken,
-            selectedDuration:
-              numericDuration,
-            testType,
-            subject:
-              String(subject).trim(),
-            exam:
-              String(exam).trim(),
-            classLevel:
-              String(classLevel).trim(),
-            chapter:
-              resultChapter,
-            chapters:
-              resultChapters,
-            difficulty:
-              testType === "standard"
-                ? String(difficulty || "")
-                : "",
-            questionType:
-              testType === "standard"
-                ? resolvedQuestionType
-                : "mcq",
-            attemptId:
-              cleanedAttemptId,
-            coinsAwarded:
-              coinsEarned,
-            coinRewardProcessed:
-              false,
-            coinRewardProcessedAt:
-              null,
-            correctAnswers,
-            totalQuestions,
-            isPassed,
-          });
-      } catch (createError) {
-        if (
-          createError?.code ===
-          11000
-        ) {
-          const duplicateResult =
-            await Result.findOne({
-              user: userId,
-              attemptId:
-                cleanedAttemptId,
-            });
-
-          const streak =
-            await applyNavtaStreakSafely(
-              userId,
-              duplicateResult?.createdAt ||
-                new Date()
-            );
-
-          const duplicateStudent =
-            await Student.findOne({
-              user: userId,
-            }).select(
-              "coins currentStreak longestStreak lastNavtaTestDate streakRecoveryActive streakRecoveryRequired streakRecoveryCompleted streakLastUpdatedAt"
-            );
-
-          return res.status(200).json({
-            success: true,
-            alreadySubmitted: true,
-            message:
-              "This NAVTA Test attempt was already saved.",
-            data: {
-              result:
-                duplicateResult,
-              percentage:
-                duplicateResult?.percentage ||
-                0,
-              selectedDuration:
-                duplicateResult?.selectedDuration ||
-                numericDuration,
-              coinsEarned:
-                Number(
-                  duplicateResult?.coinsAwarded ||
-                    0
-                ),
-              coinBalance:
-                Number(
-                  duplicateStudent?.coins ||
-                    0
-                ),
-              newCoins:
-                Number(
-                  duplicateStudent?.coins ||
-                    0
-                ),
-              streak,
-            },
-          });
-        }
-
-        throw createError;
-      }
-
-      // ========================================
-      // APPLY COINS ONCE
-      // ========================================
-
-      const claimedReward =
-        await Result.findOneAndUpdate(
-          {
-            _id: result._id,
-            coinRewardProcessed:
-              false,
-          },
-          {
-            $set: {
-              coinRewardProcessed:
-                true,
-              coinRewardProcessedAt:
-                new Date(),
-            },
-          },
-          {
-            new: true,
-          }
-        );
-
-      if (
-        claimedReward &&
-        coinsEarned > 0
-      ) {
-        // Atomic increment avoids overwriting streak
-        // fields if another NAVTA TEST completion is
-        // updating the Student document at the same time.
-        await Student.updateOne(
-          {
-            user: userId,
-          },
-          {
-            $inc: {
-              coins:
-                coinsEarned,
-            },
-          }
-        );
-      }
-
-      // ========================================
-      // NAVTA TEST DAILY STREAK
-      // ========================================
-      //
-      // Any successfully saved Standard, Boss, or
-      // Revenge completion qualifies, regardless of
-      // score.
-      //
-      // Only the first qualifying completion on the
-      // same India-calendar day changes streak state.
-      //
-      // Miss 1 day:
-      //   1 recovery work day.
-      //
-      // Miss 2 days:
-      //   2 recovery work days.
-      //
-      // Miss 3+ consecutive full days:
-      //   old streak ends and this completion starts
-      //   a new streak at 1.
-      //
-      // Recovery days protect the old streak but do
-      // not increase currentStreak.
-      // ========================================
-
-      const streak =
-        await applyNavtaStreakSafely(
-          userId,
-          result.createdAt ||
-            new Date()
-        );
-
-      const finalStudent =
-        await Student.findOne({
-          user: userId,
-        }).select(
-          "coins xp level currentStreak longestStreak lastNavtaTestDate streakRecoveryActive streakRecoveryRequired streakRecoveryCompleted streakLastUpdatedAt"
-        );
-
-      result =
-        await Result.findById(
-          result._id
-        );
-
-      // ========================================
-      // RESPONSE
-      // ========================================
-
-      return res.status(201).json({
-        success: true,
-        alreadySubmitted: false,
-        message:
-          "NAVTA Test performance saved successfully.",
-        data: {
-          result,
-          percentage,
-          score,
-          correctAnswers,
-          totalQuestions,
-          selectedDuration:
-            numericDuration,
-          testType,
-          coinsEarned,
-          coinBalance:
-            Number(
-              finalStudent?.coins ||
-                0
-            ),
-          newCoins:
-            Number(
-              finalStudent?.coins ||
-                0
-            ),
-          streak,
-        },
-      });
-    } catch (error) {
-      console.error(
-        "COMPLETE NAVTA TEST ERROR:",
-        error
+    const normalizedAnswer =
+      normaliseText(
+        cleanedStudentAnswer
       );
 
-      return res.status(500).json({
-        success: false,
-        message:
-          "Failed to save NAVTA Test performance.",
-        error:
-          error.message,
+    const matchedKeyPoints =
+      keyPoints.filter(
+        (point) => {
+          const normalizedPoint =
+            normaliseText(
+              point
+            );
+
+          if (
+            !normalizedPoint
+          ) {
+            return false;
+          }
+
+          if (
+            normalizedAnswer.includes(
+              normalizedPoint
+            )
+          ) {
+            return true;
+          }
+
+          const words =
+            normalizedPoint
+              .split(" ")
+              .filter(
+                (word) =>
+                  word.length >= 4
+              );
+
+          if (
+            words.length === 0
+          ) {
+            return false;
+          }
+
+          const matchedWords =
+            words.filter(
+              (word) =>
+                normalizedAnswer.includes(
+                  word
+                )
+            );
+
+          return (
+            matchedWords.length /
+              words.length >=
+            0.7
+          );
+        }
+      );
+
+    const localPercentage =
+      keyPoints.length > 0
+        ? Math.round(
+            (
+              matchedKeyPoints.length /
+              keyPoints.length
+            ) *
+              100
+          )
+        : 0;
+
+    const localMarks =
+      Number(
+        (
+          maxMarks *
+          (
+            localPercentage /
+            100
+          )
+        ).toFixed(2)
+      );
+
+    const fallbackResult = {
+      marksAwarded:
+        Math.min(
+          maxMarks,
+          Math.max(
+            0,
+            localMarks
+          )
+        ),
+
+      maxMarks,
+
+      percentage:
+        localPercentage,
+
+      feedback:
+        matchedKeyPoints.length > 0
+          ? "Your answer contains some of the expected key points. Review the model answer to improve completeness."
+          : "Review the model answer and include the important concepts and key points.",
+
+      strengths:
+        matchedKeyPoints,
+
+      missingPoints:
+        keyPoints.filter(
+          (point) =>
+            !matchedKeyPoints.includes(
+              point
+            )
+        ),
+
+      modelAnswer,
+
+      evaluatedBy:
+        "local",
+    };
+
+    // ========================================
+    // OPENAI CONFIGURATION
+    // ========================================
+
+    const apiKey =
+      process.env
+        .OPENAI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(200).json({
+        success: true,
+        evaluation:
+          fallbackResult,
       });
     }
-  };
 
+    // ========================================
+    // BUILD AI PROMPT
+    // ========================================
 
-// ============================================
-// BOARDS WRITTEN ANSWER EVALUATION
-// ============================================
+    const prompt = `
+You are evaluating a school Board examination answer.
 
-exports.evaluateWrittenAnswer =
-  async (req, res) => {
-    try {
-      const {
-        questionId,
-        studentAnswer,
-      } = req.body;
-
-      // ========================================
-      // VALIDATE INPUT
-      // ========================================
-
-      if (
-        !questionId ||
-        !String(
-          studentAnswer || ""
-        ).trim()
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Question ID and student answer are required.",
-        });
-      }
-
-      // ========================================
-      // FIND QUESTION
-      // ========================================
-
-      const question =
-        await NavtaQuestion.findById(
-          questionId
-        );
-
-      if (!question) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Question not found.",
-        });
-      }
-
-      // ========================================
-      // ONLY BOARDS WRITTEN ANSWERS
-      // ========================================
-
-      if (
-        question.exam !==
-          "Boards" ||
-        ![
-          "short",
-          "long",
-        ].includes(
-          question.questionType
-        )
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "AI evaluation is only available for Boards written-answer questions.",
-        });
-      }
-
-      // ========================================
-      // CHECK OPENAI CONFIG
-      // ========================================
-
-      if (
-        !process.env
-          .OPENAI_API_KEY
-      ) {
-        return res.status(503).json({
-          success: false,
-          message:
-            "AI evaluation is not configured yet.",
-        });
-      }
-
-      // ========================================
-      // BUILD EVALUATION PROMPT
-      // ========================================
-
-      const evaluationPrompt = `
-You are evaluating a school board examination answer.
+Evaluate the student's answer fairly and conservatively.
 
 QUESTION:
 ${question.question}
@@ -3679,13 +4658,13 @@ QUESTION TYPE:
 ${question.questionType}
 
 MAXIMUM MARKS:
-${question.maxMarks}
+${maxMarks}
 
 MODEL ANSWER:
-${question.modelAnswer}
+${modelAnswer}
 
-REQUIRED KEY POINTS:
-${(question.keyPoints || [])
+KEY POINTS:
+${keyPoints
   .map(
     (point, index) =>
       `${index + 1}. ${point}`
@@ -3693,46 +4672,37 @@ ${(question.keyPoints || [])
   .join("\n")}
 
 ADDITIONAL EVALUATION INSTRUCTIONS:
-${question.evaluationInstructions || "None"}
+${evaluationInstructions || "None"}
 
 STUDENT ANSWER:
-${String(studentAnswer).trim()}
+${cleanedStudentAnswer}
 
-Evaluate the student's answer fairly.
-
-Award marks between 0 and ${question.maxMarks}.
-
-Use the model answer and required key points as the marking guide.
-
-Do not require exact wording if the student's meaning is correct.
-
-Return ONLY valid JSON.
-
-Do not include markdown.
-
-Do not include code fences.
-
-Return exactly this structure:
+Return ONLY valid JSON using this structure:
 
 {
-  "status": "correct",
   "marksAwarded": 0,
-  "maxMarks": ${question.maxMarks},
+  "percentage": 0,
   "feedback": "",
+  "strengths": [],
   "missingPoints": []
 }
 
-Allowed status values:
-
-correct
-partially_correct
-incorrect
+Rules:
+- marksAwarded must be between 0 and ${maxMarks}.
+- percentage must be between 0 and 100.
+- Do not award marks for irrelevant information.
+- Give partial marks where appropriate.
+- Do not require exact wording if the concept is correct.
+- strengths must be short points.
+- missingPoints must contain important missing concepts.
+- feedback should be concise and useful to a student.
 `;
 
-      // ========================================
-      // CALL OPENAI RESPONSES API
-      // ========================================
+    // ========================================
+    // CALL OPENAI
+    // ========================================
 
+    try {
       const aiResponse =
         await fetch(
           "https://api.openai.com/v1/responses",
@@ -3745,54 +4715,57 @@ incorrect
                 "application/json",
 
               Authorization:
-                `Bearer ${process.env.OPENAI_API_KEY}`,
+                `Bearer ${apiKey}`,
             },
 
             body:
               JSON.stringify({
                 model:
                   process.env
-                    .OPENAI_MODEL ||
+                    .OPENAI_EVALUATION_MODEL ||
                   "gpt-4.1-mini",
 
                 input:
-                  evaluationPrompt,
+                  prompt,
+
+                temperature:
+                  0.1,
               }),
           }
         );
 
-      const aiData =
-        await aiResponse.json();
-
       if (!aiResponse.ok) {
+        const errorText =
+          await aiResponse.text();
+
         console.error(
-          "OPENAI EVALUATION ERROR:",
-          aiData
+          "NAVTA WRITTEN AI API ERROR:",
+          aiResponse.status,
+          errorText
         );
 
-        return res.status(502).json({
-          success: false,
-          message:
-            "AI evaluation service failed.",
+        return res.status(200).json({
+          success: true,
+          evaluation:
+            fallbackResult,
         });
       }
 
-      // ========================================
-      // EXTRACT RESPONSE TEXT
-      // ========================================
+      const aiData =
+        await aiResponse.json();
 
-      let rawText = "";
+      let outputText = "";
 
       if (
         typeof aiData.output_text ===
         "string"
       ) {
-        rawText =
+        outputText =
           aiData.output_text;
       }
 
       if (
-        !rawText &&
+        !outputText &&
         Array.isArray(
           aiData.output
         )
@@ -3803,7 +4776,7 @@ incorrect
         ) {
           if (
             !Array.isArray(
-              outputItem.content
+              outputItem?.content
             )
           ) {
             continue;
@@ -3814,19 +4787,20 @@ incorrect
             outputItem.content
           ) {
             if (
-              typeof contentItem.text ===
+              typeof contentItem?.text ===
               "string"
             ) {
-              rawText +=
+              outputText +=
                 contentItem.text;
             }
           }
         }
       }
 
-      rawText =
-        rawText
-          .trim()
+      outputText =
+        String(
+          outputText || ""
+        )
           .replace(
             /^```json\s*/i,
             ""
@@ -3836,126 +4810,719 @@ incorrect
             ""
           )
           .replace(
-            /\s*```$/i,
+            /```$/i,
             ""
-          );
+          )
+          .trim();
 
-      // ========================================
-      // PARSE AI JSON
-      // ========================================
-
-      let evaluation;
-
-      try {
-        evaluation =
-          JSON.parse(
-            rawText
-          );
-      } catch (parseError) {
-        console.error(
-          "AI JSON PARSE ERROR:",
-          parseError
-        );
-
-        console.error(
-          "AI RAW RESPONSE:",
-          rawText
-        );
-
-        return res.status(502).json({
-          success: false,
-          message:
-            "AI returned an invalid evaluation format.",
+      if (!outputText) {
+        return res.status(200).json({
+          success: true,
+          evaluation:
+            fallbackResult,
         });
       }
 
-      // ========================================
-      // VALIDATE MARKS
-      // ========================================
+      let parsedEvaluation;
 
-      const maxMarks =
-        Number(
-          question.maxMarks
+      try {
+        parsedEvaluation =
+          JSON.parse(
+            outputText
+          );
+      } catch (parseError) {
+        console.error(
+          "NAVTA WRITTEN AI JSON ERROR:",
+          parseError,
+          outputText
         );
 
-      let marksAwarded =
-        Number(
-          evaluation.marksAwarded
-        );
-
-      if (
-        !Number.isFinite(
-          marksAwarded
-        )
-      ) {
-        marksAwarded = 0;
+        return res.status(200).json({
+          success: true,
+          evaluation:
+            fallbackResult,
+        });
       }
 
-      marksAwarded =
-        Math.max(
-          0,
-          Math.min(
-            maxMarks,
-            marksAwarded
-          )
+      const aiMarks =
+        Number(
+          parsedEvaluation
+            ?.marksAwarded
         );
 
-      // ========================================
-      // VALIDATE STATUS
-      // ========================================
-
-      const allowedStatuses = [
-        "correct",
-        "partially_correct",
-        "incorrect",
-      ];
-
-      const status =
-        allowedStatuses.includes(
-          evaluation.status
+      const safeMarks =
+        Number.isFinite(
+          aiMarks
         )
-          ? evaluation.status
-          : "incorrect";
+          ? Math.min(
+              maxMarks,
+              Math.max(
+                0,
+                aiMarks
+              )
+            )
+          : fallbackResult
+              .marksAwarded;
 
-      // ========================================
-      // RETURN EVALUATION
-      // ========================================
+      const percentage =
+        Math.min(
+          100,
+          Math.max(
+            0,
+            Math.round(
+              (
+                safeMarks /
+                maxMarks
+              ) *
+                100
+            )
+          )
+        );
 
       return res.status(200).json({
         success: true,
 
         evaluation: {
-          status,
-
-          marksAwarded,
+          marksAwarded:
+            safeMarks,
 
           maxMarks,
 
+          percentage,
+
           feedback:
-            evaluation.feedback ||
-            question.explanation ||
-            "",
+            String(
+              parsedEvaluation
+                ?.feedback ||
+                fallbackResult
+                  .feedback
+            ).trim(),
+
+          strengths:
+            Array.isArray(
+              parsedEvaluation
+                ?.strengths
+            )
+              ? parsedEvaluation
+                  .strengths
+                  .map(
+                    (item) =>
+                      String(
+                        item || ""
+                      ).trim()
+                  )
+                  .filter(Boolean)
+              : fallbackResult
+                  .strengths,
 
           missingPoints:
             Array.isArray(
-              evaluation.missingPoints
+              parsedEvaluation
+                ?.missingPoints
             )
-              ? evaluation.missingPoints
-              : [],
+              ? parsedEvaluation
+                  .missingPoints
+                  .map(
+                    (item) =>
+                      String(
+                        item || ""
+                      ).trim()
+                  )
+                  .filter(Boolean)
+              : fallbackResult
+                  .missingPoints,
+
+          modelAnswer,
+
+          evaluatedBy:
+            "openai",
         },
       });
-    } catch (error) {
+    } catch (aiError) {
       console.error(
-        "AI WRITTEN ANSWER EVALUATION ERROR:",
-        error
+        "NAVTA WRITTEN AI EVALUATION ERROR:",
+        aiError
       );
 
-      return res.status(500).json({
-        success: false,
-        message:
-          "Failed to evaluate written answer.",
-        error:
-          error.message,
+      return res.status(200).json({
+        success: true,
+        evaluation:
+          fallbackResult,
       });
     }
-  };
+  } catch (error) {
+    console.error(
+      "EVALUATE WRITTEN ANSWER ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to evaluate written answer.",
+      error:
+        error.message,
+    });
+  }
+};
+
+// ============================================
+// COMPLETE NAVTA TEST
+// ============================================
+
+exports.completeNavtaTest = async (req, res) => {
+  try {
+    const userId =
+      req.user?._id ||
+      req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Authentication required.",
+      });
+    }
+
+    const {
+      attemptId,
+      testType = "standard",
+      subject,
+      exam,
+      classLevel,
+      chapter,
+      chapters = [],
+      difficulty,
+      questionType = "mcq",
+      selectedDuration,
+      totalQuestions,
+      correctAnswers,
+      wrongAnswers,
+      unanswered,
+      percentage,
+      answers = [],
+      bossWinPercentage,
+      bossDefeated,
+      revengeAttempt,
+      previousPercentage,
+      originalPercentage,
+    } = req.body;
+
+    // ========================================
+    // VALIDATE RESULT TYPE
+    // ========================================
+
+    if (
+      !NAVTA_RESULT_TYPES.includes(
+        testType
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid NAVTA TEST type.",
+      });
+    }
+
+    if (!attemptId) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Attempt ID is required.",
+      });
+    }
+
+    const existingResult =
+      await Result.findOne({
+        user: userId,
+        attemptId,
+      });
+
+    if (existingResult) {
+      const student =
+        await Student.findOne({
+          user: userId,
+        });
+
+      return res.status(200).json({
+        success: true,
+        alreadyCompleted: true,
+        message:
+          "This NAVTA TEST attempt has already been completed.",
+
+        result:
+          existingResult,
+
+        coinsEarned:
+          Number(
+            existingResult
+              .coinsEarned
+          ) || 0,
+
+        totalCoins:
+          Number(
+            student?.coins
+          ) || 0,
+
+        streak:
+          student
+            ? getNavtaStreakSnapshot(
+                student
+              )
+            : null,
+      });
+    }
+
+    // ========================================
+    // BASIC METADATA
+    // ========================================
+
+    if (
+      !subject ||
+      !exam ||
+      !classLevel
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Subject, preparation and class are required.",
+      });
+    }
+
+    const numericTotalQuestions =
+      Number(totalQuestions);
+
+    const numericCorrectAnswers =
+      Number(correctAnswers);
+
+    const numericWrongAnswers =
+      Number(wrongAnswers);
+
+    const numericUnanswered =
+      Number(unanswered);
+
+    const numericPercentage =
+      Number(percentage);
+
+    const numericDuration =
+      Number(selectedDuration);
+
+    if (
+      !Number.isInteger(
+        numericTotalQuestions
+      ) ||
+      numericTotalQuestions <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid total question count.",
+      });
+    }
+
+    if (
+      !Number.isFinite(
+        numericPercentage
+      ) ||
+      numericPercentage < 0 ||
+      numericPercentage > 100
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid percentage.",
+      });
+    }
+
+    if (
+      !Number.isFinite(
+        numericDuration
+      ) ||
+      numericDuration <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid selected duration.",
+      });
+    }
+
+    const safeCorrect =
+      Number.isFinite(
+        numericCorrectAnswers
+      )
+        ? Math.max(
+            0,
+            numericCorrectAnswers
+          )
+        : 0;
+
+    const safeWrong =
+      Number.isFinite(
+        numericWrongAnswers
+      )
+        ? Math.max(
+            0,
+            numericWrongAnswers
+          )
+        : 0;
+
+    const safeUnanswered =
+      Number.isFinite(
+        numericUnanswered
+      )
+        ? Math.max(
+            0,
+            numericUnanswered
+          )
+        : 0;
+
+    // ========================================
+    // NORMALIZE CHAPTERS
+    // ========================================
+
+    const resultChapters =
+      Array.isArray(chapters)
+        ? [
+            ...new Set(
+              chapters
+                .map(
+                  (item) =>
+                    String(
+                      item || ""
+                    ).trim()
+                )
+                .filter(Boolean)
+            ),
+          ]
+        : [];
+
+    if (
+      chapter &&
+      !resultChapters.includes(
+        String(chapter).trim()
+      )
+    ) {
+      resultChapters.push(
+        String(chapter).trim()
+      );
+    }
+
+    // ========================================
+    // NORMALIZE ANSWERS
+    // ========================================
+
+    const normalizedAnswers =
+      Array.isArray(answers)
+        ? answers
+            .map((item) => {
+              const questionId =
+                String(
+                  item?.questionId ||
+                    item?._id ||
+                    ""
+                ).trim();
+
+              if (!questionId) {
+                return null;
+              }
+
+              return {
+                question:
+                  questionId,
+
+                selectedAnswer:
+                  normaliseSubmittedAnswer(
+                    item?.selectedAnswer
+                  ),
+
+                isCorrect:
+                  Boolean(
+                    item?.isCorrect
+                  ),
+              };
+            })
+            .filter(Boolean)
+        : [];
+
+    // ========================================
+    // COINS
+    // ========================================
+
+    const coinsEarned =
+      calculateNavtaCoins(
+        numericPercentage,
+        numericDuration
+      );
+
+    // ========================================
+    // RESULT PAYLOAD
+    // ========================================
+
+    const resultPayload = {
+      user:
+        userId,
+
+      attemptId:
+        String(attemptId),
+
+      testType,
+
+      subject:
+        String(subject).trim(),
+
+      exam:
+        String(exam).trim(),
+
+      classLevel:
+        String(
+          classLevel
+        ).trim(),
+
+      chapter:
+        String(
+          chapter || ""
+        ).trim(),
+
+      chapters:
+        resultChapters,
+
+      difficulty:
+        String(
+          difficulty || ""
+        ).trim(),
+
+      questionType:
+        String(
+          questionType ||
+            "mcq"
+        ).trim(),
+
+      selectedDuration:
+        numericDuration,
+
+      totalQuestions:
+        numericTotalQuestions,
+
+      correctAnswers:
+        safeCorrect,
+
+      wrongAnswers:
+        safeWrong,
+
+      unanswered:
+        safeUnanswered,
+
+      percentage:
+        numericPercentage,
+
+      answers:
+        normalizedAnswers,
+
+      coinsEarned,
+
+      completedAt:
+        new Date(),
+    };
+
+    // ========================================
+    // BOSS / REVENGE METADATA
+    // ========================================
+
+    if (
+      testType === "boss" ||
+      testType === "revenge"
+    ) {
+      resultPayload.bossWinPercentage =
+        Number(
+          bossWinPercentage
+        ) ||
+        BOSS_WIN_PERCENTAGE;
+
+      resultPayload.bossDefeated =
+        typeof bossDefeated ===
+        "boolean"
+          ? bossDefeated
+          : numericPercentage >=
+            BOSS_WIN_PERCENTAGE;
+    }
+
+    if (
+      testType === "revenge"
+    ) {
+      resultPayload.revengeAttempt =
+        Math.max(
+          1,
+          Number(
+            revengeAttempt
+          ) || 1
+        );
+
+      resultPayload.previousPercentage =
+        Number(
+          previousPercentage
+        ) || 0;
+
+      resultPayload.originalPercentage =
+        Number(
+          originalPercentage
+        ) || 0;
+    }
+
+    // ========================================
+    // CREATE RESULT FIRST
+    // ========================================
+
+    let createdResult;
+
+    try {
+      createdResult =
+        await Result.create(
+          resultPayload
+        );
+    } catch (createError) {
+      // Another duplicate completion may have
+      // reached MongoDB at the same time.
+      if (
+        createError?.code ===
+        11000
+      ) {
+        const duplicateResult =
+          await Result.findOne({
+            user: userId,
+            attemptId,
+          });
+
+        const student =
+          await Student.findOne({
+            user: userId,
+          });
+
+        return res.status(200).json({
+          success: true,
+          alreadyCompleted: true,
+
+          message:
+            "This NAVTA TEST attempt has already been completed.",
+
+          result:
+            duplicateResult,
+
+          coinsEarned:
+            Number(
+              duplicateResult
+                ?.coinsEarned
+            ) || 0,
+
+          totalCoins:
+            Number(
+              student?.coins
+            ) || 0,
+
+          streak:
+            student
+              ? getNavtaStreakSnapshot(
+                  student
+                )
+              : null,
+        });
+      }
+
+      throw createError;
+    }
+
+    // ========================================
+    // UPDATE STUDENT COINS
+    // ========================================
+
+    let updatedStudent;
+
+    if (coinsEarned > 0) {
+      updatedStudent =
+        await Student.findOneAndUpdate(
+          {
+            user:
+              userId,
+          },
+          {
+            $inc: {
+              coins:
+                coinsEarned,
+            },
+          },
+          {
+            new: true,
+          }
+        );
+    } else {
+      updatedStudent =
+        await Student.findOne({
+          user:
+            userId,
+        });
+    }
+
+    if (!updatedStudent) {
+      throw new Error(
+        "Student profile not found."
+      );
+    }
+
+    // ========================================
+    // UPDATE NAVTA STREAK
+    // ========================================
+
+    const streakResult =
+      await applyNavtaStreakSafely(
+        userId,
+        new Date()
+      );
+
+    // Refresh student after streak update.
+    updatedStudent =
+      await Student.findOne({
+        user:
+          userId,
+      });
+
+    // ========================================
+    // SUCCESS
+    // ========================================
+
+    return res.status(201).json({
+      success: true,
+
+      alreadyCompleted:
+        false,
+
+      message:
+        "NAVTA TEST completed successfully.",
+
+      result:
+        createdResult,
+
+      coinsEarned,
+
+      totalCoins:
+        Number(
+          updatedStudent?.coins
+        ) || 0,
+
+      streak:
+        streakResult,
+    });
+  } catch (error) {
+    console.error(
+      "COMPLETE NAVTA TEST ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to complete NAVTA TEST.",
+      error:
+        error.message,
+    });
+  }
+};
