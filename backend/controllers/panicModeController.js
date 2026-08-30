@@ -800,17 +800,195 @@ const analyseStudentPerformance =
     userId,
     exam
   ) => {
+    // Panic Mode must only learn from real NAVTA TEST
+    // completions. Limiting the history also keeps plan
+    // creation fast as the student's history grows.
     const results =
       await Result.find({
         user: userId,
+        testType: {
+          $in: [
+            "standard",
+            "boss",
+            "revenge",
+          ],
+        },
       })
         .sort({
           createdAt: -1,
         })
+        .limit(200)
         .lean();
 
     const performanceMap =
       new Map();
+
+    // Boss/Revenge results can contain questions from
+    // multiple chapters. Load their real NavtaQuestion
+    // records once so each chapter receives its own
+    // actual performance instead of the overall battle
+    // percentage.
+    const battleQuestionIds = [
+      ...new Set(
+        results
+          .filter(
+            (result) =>
+              result.testType === "boss" ||
+              result.testType === "revenge"
+          )
+          .flatMap((result) =>
+            Array.isArray(result.answers)
+              ? result.answers
+                  .map((answer) =>
+                    normaliseString(
+                      answer?.question
+                    )
+                  )
+                  .filter(
+                    (id) =>
+                      mongoose.Types.ObjectId.isValid(
+                        id
+                      )
+                  )
+              : []
+          )
+      ),
+    ];
+
+    const battleQuestions =
+      battleQuestionIds.length > 0
+        ? await NavtaQuestion.find({
+            _id: {
+              $in:
+                battleQuestionIds,
+            },
+          })
+            .select(
+              "_id subject exam classLevel chapter questionType"
+            )
+            .lean()
+        : [];
+
+    const battleQuestionMap =
+      new Map(
+        battleQuestions.map(
+          (question) => [
+            String(question._id),
+            question,
+          ]
+        )
+      );
+
+    const addPerformance = ({
+      subject,
+      classLevel,
+      chapter,
+      correctAnswers,
+      totalQuestions,
+      percentage,
+    }) => {
+      const safeSubject =
+        normaliseSubject(subject);
+
+      const safeClassLevel =
+        normaliseClassLevel(
+          classLevel
+        );
+
+      const safeChapter =
+        normaliseString(chapter);
+
+      // Do not merge legacy results whose class cannot
+      // be proven. New NAVTA TEST results always save
+      // Class 11 / Class 12.
+      if (
+        !safeSubject ||
+        !safeClassLevel ||
+        !safeChapter
+      ) {
+        return;
+      }
+
+      const safeTotal =
+        Math.max(
+          0,
+          Number(totalQuestions) ||
+            0
+        );
+
+      if (safeTotal <= 0) {
+        return;
+      }
+
+      const safeCorrect =
+        Math.max(
+          0,
+          Math.min(
+            safeTotal,
+            Number(correctAnswers) ||
+              0
+          )
+        );
+
+      const safePercentage =
+        Number.isFinite(
+          Number(percentage)
+        )
+          ? clampPercentage(
+              percentage
+            )
+          : clampPercentage(
+              (
+                safeCorrect /
+                safeTotal
+              ) * 100
+            );
+
+      const key =
+        buildChapterKey(
+          safeSubject,
+          safeClassLevel,
+          safeChapter
+        );
+
+      const existing =
+        performanceMap.get(
+          key
+        ) || {
+          subject:
+            safeSubject,
+
+          classLevel:
+            safeClassLevel,
+
+          chapter:
+            safeChapter,
+
+          weightedScore:
+            0,
+
+          totalWeight:
+            0,
+
+          attempts:
+            0,
+        };
+
+      existing.weightedScore +=
+        safePercentage *
+        safeTotal;
+
+      existing.totalWeight +=
+        safeTotal;
+
+      existing.attempts +=
+        1;
+
+      performanceMap.set(
+        key,
+        existing
+      );
+    };
 
     results.forEach(
       (result) => {
@@ -819,91 +997,229 @@ const analyseStudentPerformance =
             result.exam
           );
 
+        // Results created before exam context was stored
+        // are intentionally ignored because they cannot
+        // be safely assigned to a Panic Mode exam.
         if (
-          resultExam &&
+          !resultExam ||
           resultExam.toLowerCase() !==
             exam.toLowerCase()
         ) {
           return;
         }
 
-        const subject =
+        const resultSubject =
           normaliseSubject(
             result.subject
           );
 
-        const classLevel =
+        const resultClassLevel =
           normaliseClassLevel(
             result.classLevel
           );
 
-        const chapters =
-          getResultChapters(
-            result
-          );
-
         if (
-          !subject ||
-          chapters.length === 0
+          !resultSubject ||
+          !resultClassLevel
         ) {
           return;
         }
 
-        const percentage =
-          getResultPercentage(
-            result
-          );
+        // ========================================
+        // STANDARD TEST
+        // ========================================
+        //
+        // A Standard Test belongs to one chapter, so
+        // its server-calculated percentage is the most
+        // accurate source (including Boards written
+        // marking).
+        // ========================================
 
-        const questionCount =
-          Math.max(
-            1,
-            getResultQuestionCount(
+        if (
+          result.testType ===
+          "standard"
+        ) {
+          const chapters =
+            getResultChapters(
               result
-            )
-          );
+            );
 
-        chapters.forEach(
-          (chapter) => {
+          const chapter =
+            chapters[0];
+
+          if (!chapter) {
+            return;
+          }
+
+          const totalQuestions =
+            Math.max(
+              1,
+              getResultQuestionCount(
+                result
+              )
+            );
+
+          const percentage =
+            getResultPercentage(
+              result
+            );
+
+          addPerformance({
+            subject:
+              resultSubject,
+
+            classLevel:
+              resultClassLevel,
+
+            chapter,
+
+            correctAnswers:
+              Math.round(
+                (
+                  percentage /
+                  100
+                ) *
+                  totalQuestions
+              ),
+
+            totalQuestions,
+
+            percentage,
+          });
+
+          return;
+        }
+
+        // ========================================
+        // BOSS / REVENGE
+        // ========================================
+        //
+        // Grade chapter-by-chapter from the stored
+        // answer records and the real NavtaQuestion
+        // chapter metadata. This prevents a 30-question
+        // battle's overall score from being copied to
+        // every chapter.
+        // ========================================
+
+        const chapterStats =
+          new Map();
+
+        const answers =
+          Array.isArray(
+            result.answers
+          )
+            ? result.answers
+            : [];
+
+        answers.forEach(
+          (answer) => {
+            const questionId =
+              normaliseString(
+                answer?.question
+              );
+
+            const question =
+              battleQuestionMap.get(
+                questionId
+              );
+
+            if (!question) {
+              return;
+            }
+
+            const questionExam =
+              normaliseString(
+                question.exam
+              );
+
+            const questionSubject =
+              normaliseSubject(
+                question.subject
+              );
+
+            const questionClassLevel =
+              normaliseClassLevel(
+                question.classLevel
+              );
+
+            const questionChapter =
+              normaliseString(
+                question.chapter
+              );
+
+            if (
+              questionExam.toLowerCase() !==
+                exam.toLowerCase() ||
+              questionSubject !==
+                resultSubject ||
+              questionClassLevel !==
+                resultClassLevel ||
+              !questionChapter
+            ) {
+              return;
+            }
+
             const key =
               buildChapterKey(
-                subject,
-                classLevel,
-                chapter
+                questionSubject,
+                questionClassLevel,
+                questionChapter
               );
 
             const existing =
-              performanceMap.get(
+              chapterStats.get(
                 key
-              ) ||
-              {
-                subject,
+              ) || {
+                subject:
+                  questionSubject,
 
                 classLevel:
-                  classLevel ||
-                  undefined,
+                  questionClassLevel,
 
-                chapter,
+                chapter:
+                  questionChapter,
 
-                weightedScore: 0,
+                correctAnswers:
+                  0,
 
-                totalWeight: 0,
-
-                attempts: 0,
+                totalQuestions:
+                  0,
               };
 
-            existing.weightedScore +=
-              percentage *
-              questionCount;
+            existing.totalQuestions +=
+              1;
 
-            existing.totalWeight +=
-              questionCount;
+            if (
+              answer?.isCorrect ===
+              true
+            ) {
+              existing.correctAnswers +=
+                1;
+            }
 
-            existing.attempts += 1;
-
-            performanceMap.set(
+            chapterStats.set(
               key,
               existing
             );
+          }
+        );
+
+        chapterStats.forEach(
+          (entry) => {
+            const percentage =
+              entry.totalQuestions >
+              0
+                ? (
+                    entry.correctAnswers /
+                    entry.totalQuestions
+                  ) *
+                  100
+                : 0;
+
+            addPerformance({
+              ...entry,
+              percentage,
+            });
           }
         );
       }
