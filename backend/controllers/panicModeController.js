@@ -46,6 +46,11 @@ const VALID_DIFFICULTIES = [
   "Hard",
 ];
 
+const VALID_CLASS_LEVELS = [
+  "Class 11",
+  "Class 12",
+];
+
 const FIX_TEST_QUESTION_COUNT = 10;
 
 const FIX_TEST_PASS_PERCENTAGE = 70;
@@ -85,6 +90,42 @@ const normaliseSubject = (subject) => {
   }
 
   return value;
+};
+
+const normaliseClassLevel = (value) => {
+  const classLevel =
+    normaliseString(value);
+
+  if (!classLevel) {
+    return "";
+  }
+
+  const compact =
+    classLevel
+      .toLowerCase()
+      .replace(/\s+/g, "");
+
+  if (
+    compact === "class11" ||
+    compact === "11" ||
+    compact === "xi"
+  ) {
+    return "Class 11";
+  }
+
+  if (
+    compact === "class12" ||
+    compact === "12" ||
+    compact === "xii"
+  ) {
+    return "Class 12";
+  }
+
+  return VALID_CLASS_LEVELS.includes(
+    classLevel
+  )
+    ? classLevel
+    : "";
 };
 
 const clampPercentage = (value) => {
@@ -143,10 +184,13 @@ const getPracticeQuestionCount = (
 
 const buildChapterKey = (
   subject,
+  classLevel,
   chapter
 ) => {
   return `${normaliseString(
     subject
+  ).toLowerCase()}::${normaliseClassLevel(
+    classLevel
   ).toLowerCase()}::${normaliseString(
     chapter
   ).toLowerCase()}`;
@@ -357,14 +401,15 @@ const buildQuestionFilter = ({
       true,
   };
 
-  if (
-    normaliseString(
+  const safeClassLevel =
+    normaliseClassLevel(
       classLevel
-    )
-  ) {
+    );
+
+  if (safeClassLevel) {
     filter.classLevel =
       exactCaseInsensitive(
-        classLevel
+        safeClassLevel
       );
   }
 
@@ -640,29 +685,36 @@ const selectFixTestQuestions =
           break;
         }
 
-        if (
+        const currentDifficultyCount =
           selected.filter(
             (item) =>
               item.difficulty ===
               difficulty
-          ).length >=
+          ).length;
+
+        if (
+          currentDifficultyCount >=
           targetCount
         ) {
           break;
         }
 
-        const id =
+        const questionId =
           String(
             question._id
           );
 
         if (
-          usedIds.has(id)
+          usedIds.has(
+            questionId
+          )
         ) {
           continue;
         }
 
-        usedIds.add(id);
+        usedIds.add(
+          questionId
+        );
 
         selected.push(
           question
@@ -687,7 +739,8 @@ const selectFixTestQuestions =
         );
 
       for (
-        const question of remaining
+        const question of
+        remaining
       ) {
         if (
           selected.length >=
@@ -696,10 +749,21 @@ const selectFixTestQuestions =
           break;
         }
 
-        usedIds.add(
+        const questionId =
           String(
             question._id
+          );
+
+        if (
+          usedIds.has(
+            questionId
           )
+        ) {
+          continue;
+        }
+
+        usedIds.add(
+          questionId
         );
 
         selected.push(
@@ -718,10 +782,10 @@ const selectFixTestQuestions =
 
       questions:
         shuffleArray(
-          selected.slice(
-            0,
-            FIX_TEST_QUESTION_COUNT
-          )
+          selected
+        ).slice(
+          0,
+          FIX_TEST_QUESTION_COUNT
         ),
     };
   };
@@ -738,48 +802,38 @@ const analyseStudentPerformance =
     const results =
       await Result.find({
         user: userId,
-
-        testType: {
-          $in: [
-            "standard",
-            "boss",
-            "revenge",
-          ],
-        },
       })
         .sort({
           createdAt: -1,
         })
-        .limit(200)
         .lean();
 
-    const relevantResults =
-      results.filter(
-        (result) => {
-          const resultExam =
-            normaliseString(
-              result.exam
-            );
-
-          if (!resultExam) {
-            return true;
-          }
-
-          return (
-            resultExam.toLowerCase() ===
-            exam.toLowerCase()
-          );
-        }
-      );
-
-    const chapterMap =
+    const performanceMap =
       new Map();
 
-    relevantResults.forEach(
+    results.forEach(
       (result) => {
+        const resultExam =
+          normaliseString(
+            result.exam
+          );
+
+        if (
+          resultExam &&
+          resultExam.toLowerCase() !==
+            exam.toLowerCase()
+        ) {
+          return;
+        }
+
         const subject =
           normaliseSubject(
             result.subject
+          );
+
+        const classLevel =
+          normaliseClassLevel(
+            result.classLevel
           );
 
         const chapters =
@@ -799,16 +853,12 @@ const analyseStudentPerformance =
             result
           );
 
-        const totalQuestions =
-          getResultQuestionCount(
-            result
-          );
-
-        const questionWeight =
+        const questionCount =
           Math.max(
             1,
-            totalQuestions /
-              chapters.length
+            getResultQuestionCount(
+              result
+            )
           );
 
         chapters.forEach(
@@ -816,48 +866,52 @@ const analyseStudentPerformance =
             const key =
               buildChapterKey(
                 subject,
+                classLevel,
                 chapter
               );
 
-            if (
-              !chapterMap.has(
+            const existing =
+              performanceMap.get(
                 key
-              )
-            ) {
-              chapterMap.set(
-                key,
-                {
-                  subject,
-                  chapter,
-                  weightedScore: 0,
-                  totalWeight: 0,
-                  attempts: 0,
-                }
-              );
-            }
+              ) ||
+              {
+                subject,
 
-            const entry =
-              chapterMap.get(
-                key
-              );
+                classLevel:
+                  classLevel ||
+                  undefined,
 
-            entry.weightedScore +=
+                chapter,
+
+                weightedScore: 0,
+
+                totalWeight: 0,
+
+                attempts: 0,
+              };
+
+            existing.weightedScore +=
               percentage *
-              questionWeight;
+              questionCount;
 
-            entry.totalWeight +=
-              questionWeight;
+            existing.totalWeight +=
+              questionCount;
 
-            entry.attempts += 1;
+            existing.attempts += 1;
+
+            performanceMap.set(
+              key,
+              existing
+            );
           }
         );
       }
     );
 
-    const chapters =
-      Array.from(
-        chapterMap.values()
-      ).map(
+    return Array.from(
+      performanceMap.values()
+    )
+      .map(
         (entry) => {
           const accuracy =
             entry.totalWeight > 0
@@ -867,67 +921,61 @@ const analyseStudentPerformance =
                 )
               : 0;
 
+          const totalQuestions =
+            entry.totalWeight;
+
+          const correctAnswers =
+            Math.round(
+              (
+                accuracy /
+                100
+              ) *
+                totalQuestions
+            );
+
           return {
             subject:
               entry.subject,
+
+            classLevel:
+              entry.classLevel,
 
             chapter:
               entry.chapter,
 
             accuracy,
 
-            totalQuestions:
-              Math.round(
-                entry.totalWeight
-              ),
+            totalQuestions,
 
-            correctAnswers:
-              Math.round(
-                (
-                  accuracy /
-                  100
-                ) *
-                  entry.totalWeight
-              ),
+            correctAnswers,
 
             status:
               getChapterStatus(
                 accuracy
               ),
 
-            revised: false,
+            revised:
+              false,
 
-            practised: false,
+            practised:
+              false,
 
             fixTestPassed:
               false,
 
             fixTestScore:
               null,
+
+            fixedAt:
+              null,
           };
         }
-      );
-
-    chapters.sort(
-      (a, b) => {
-        if (
-          a.accuracy !==
+      )
+      .sort(
+        (a, b) =>
+          a.accuracy -
           b.accuracy
-        ) {
-          return (
-            a.accuracy -
-            b.accuracy
-          );
-        }
-
-        return (
-          b.totalQuestions -
-          a.totalQuestions
-        );
-      }
-    );
-
-    return chapters;
+      );
   };
 
 // ============================================
@@ -938,14 +986,14 @@ const analyseStudentPerformance =
 exports.createPanicPlan =
   async (req, res) => {
     try {
-      const userId =
-        req.user.id;
-
       const {
         exam,
         examWindow,
         studyTimeMinutes,
       } = req.body;
+
+      const userId =
+        req.user.id;
 
       if (
         !VALID_EXAMS.includes(
@@ -956,22 +1004,25 @@ exports.createPanicPlan =
           .status(400)
           .json({
             success: false,
+
             message:
-              "Please select NEET, JEE or Boards.",
+              "Please select a valid exam.",
           });
       }
 
       if (
-        !EXAM_WINDOWS[
+        !Object.prototype.hasOwnProperty.call(
+          EXAM_WINDOWS,
           examWindow
-        ]
+        )
       ) {
         return res
           .status(400)
           .json({
             success: false,
+
             message:
-              "Invalid exam window.",
+              "Please select a valid exam window.",
           });
       }
 
@@ -989,8 +1040,9 @@ exports.createPanicPlan =
           .status(400)
           .json({
             success: false,
+
             message:
-              "Invalid study time.",
+              "Please select a valid study time.",
           });
       }
 
@@ -1000,6 +1052,8 @@ exports.createPanicPlan =
           exam
         );
 
+      // Close any previous active Panic Mode
+      // session before creating a new one.
       await PanicSession.updateMany(
         {
           user: userId,
@@ -1012,6 +1066,8 @@ exports.createPanicPlan =
         }
       );
 
+      // Close unfinished Fix Test attempts from
+      // previous Panic Mode sessions.
       await PanicFixAttempt.updateMany(
         {
           user: userId,
@@ -1020,6 +1076,7 @@ exports.createPanicPlan =
         {
           $set: {
             completed: true,
+
             submittedAt:
               new Date(),
           },
@@ -1028,7 +1085,8 @@ exports.createPanicPlan =
 
       const session =
         await PanicSession.create({
-          user: userId,
+          user:
+            userId,
 
           exam,
 
@@ -1044,9 +1102,11 @@ exports.createPanicPlan =
 
           chapters,
 
-          active: true,
+          active:
+            true,
 
-          completed: false,
+          completed:
+            false,
         });
 
       return res
@@ -1076,6 +1136,7 @@ exports.createPanicPlan =
         .status(500)
         .json({
           success: false,
+
           message:
             "Unable to create Panic Mode plan.",
         });
@@ -1123,6 +1184,7 @@ exports.getActivePanicPlan =
         .status(500)
         .json({
           success: false,
+
           message:
             "Unable to load Panic Mode plan.",
         });
@@ -1154,6 +1216,7 @@ exports.updateChapterProgress =
           )
           .json({
             success: false,
+
             message:
               lookup.error
                 .message,
@@ -1230,6 +1293,7 @@ exports.updateChapterProgress =
         .status(500)
         .json({
           success: false,
+
           message:
             "Unable to update Panic Mode progress.",
         });
@@ -1261,6 +1325,7 @@ exports.generateTargetedPractice =
           )
           .json({
             success: false,
+
             message:
               lookup.error
                 .message,
@@ -1283,10 +1348,19 @@ exports.generateTargetedPractice =
           });
       }
 
+      // New PanicSession records already contain
+      // classLevel. req.body.classLevel is kept
+      // only as a fallback for older sessions.
       const requestedClassLevel =
-        normaliseString(
+        normaliseClassLevel(
           req.body?.classLevel
         );
+
+      const resolvedClassLevel =
+        normaliseClassLevel(
+          chapter.classLevel
+        ) ||
+        requestedClassLevel;
 
       const requiredCount =
         getPracticeQuestionCount(
@@ -1305,7 +1379,7 @@ exports.generateTargetedPractice =
             chapter.chapter,
 
           classLevel:
-            requestedClassLevel,
+            resolvedClassLevel,
         });
 
       const availableQuestions =
@@ -1342,6 +1416,10 @@ exports.generateTargetedPractice =
               exam:
                 session.exam,
 
+              classLevel:
+                resolvedClassLevel ||
+                null,
+
               chapter:
                 chapter.chapter,
             },
@@ -1361,6 +1439,27 @@ exports.generateTargetedPractice =
           0,
           actualCount
         );
+
+      // Older PanicSession records may not contain
+      // classLevel. Once we safely discover it
+      // from the selected question, save it.
+      const selectedClassLevel =
+        resolvedClassLevel ||
+        normaliseClassLevel(
+          selected[0]
+            ?.classLevel
+        ) ||
+        "";
+
+      if (
+        !chapter.classLevel &&
+        selectedClassLevel
+      ) {
+        chapter.classLevel =
+          selectedClassLevel;
+
+        await session.save();
+      }
 
       const difficultyCounts =
         VALID_DIFFICULTIES.reduce(
@@ -1409,14 +1508,11 @@ exports.generateTargetedPractice =
               exam:
                 session.exam,
 
+              classLevel:
+                selectedClassLevel,
+
               chapter:
                 chapter.chapter,
-
-              classLevel:
-                requestedClassLevel ||
-                selected[0]
-                  ?.classLevel ||
-                "",
 
               requiredQuestionCount:
                 requiredCount,
@@ -1451,6 +1547,10 @@ exports.generateTargetedPractice =
   };
 
 // ============================================
+// PART 1 ENDS HERE
+// ============================================
+
+// ============================================
 // CHECK ONE PRACTICE ANSWER
 // POST /api/panic-mode/chapters/:chapterId/practice/check
 // ============================================
@@ -1480,6 +1580,7 @@ exports.checkPracticeAnswer =
           )
           .json({
             success: false,
+
             message:
               lookup.error
                 .message,
@@ -1496,6 +1597,7 @@ exports.checkPracticeAnswer =
           .status(400)
           .json({
             success: false,
+
             message:
               "Revise the Study Notes before practice.",
           });
@@ -1510,6 +1612,7 @@ exports.checkPracticeAnswer =
           .status(400)
           .json({
             success: false,
+
             message:
               "Invalid question ID.",
           });
@@ -1529,6 +1632,9 @@ exports.checkPracticeAnswer =
 
             chapter:
               chapter.chapter,
+
+            classLevel:
+              chapter.classLevel,
           }),
         }).lean();
 
@@ -1537,16 +1643,15 @@ exports.checkPracticeAnswer =
           .status(404)
           .json({
             success: false,
+
             message:
               "Practice question not found for this Panic Mode chapter.",
           });
       }
 
       const answer =
-        selectedOption ===
-          null ||
-        selectedOption ===
-          undefined
+        selectedOption === null ||
+        selectedOption === undefined
           ? null
           : Number(
               selectedOption
@@ -1564,6 +1669,7 @@ exports.checkPracticeAnswer =
           .status(400)
           .json({
             success: false,
+
             message:
               "Please select a valid answer.",
           });
@@ -1602,6 +1708,9 @@ exports.checkPracticeAnswer =
             difficulty:
               question.difficulty,
 
+            classLevel:
+              question.classLevel,
+
             chapter:
               question.chapter,
           },
@@ -1616,6 +1725,7 @@ exports.checkPracticeAnswer =
         .status(500)
         .json({
           success: false,
+
           message:
             "Unable to check the practice answer.",
         });
@@ -1651,6 +1761,7 @@ exports.completeTargetedPractice =
           )
           .json({
             success: false,
+
             message:
               lookup.error
                 .message,
@@ -1667,34 +1778,34 @@ exports.completeTargetedPractice =
           .status(400)
           .json({
             success: false,
+
             message:
               "Revise the Study Notes before completing targeted practice.",
           });
       }
 
-      const uniqueIds =
-        [
-          ...new Set(
-            (
-              Array.isArray(
-                questionIds
-              )
-                ? questionIds
-                : []
+      const uniqueIds = [
+        ...new Set(
+          (
+            Array.isArray(
+              questionIds
             )
-              .map((id) =>
-                normaliseString(
+              ? questionIds
+              : []
+          )
+            .map((id) =>
+              normaliseString(
+                id
+              )
+            )
+            .filter(
+              (id) =>
+                mongoose.Types.ObjectId.isValid(
                   id
                 )
-              )
-              .filter(
-                (id) =>
-                  mongoose.Types.ObjectId.isValid(
-                    id
-                  )
-              )
-          ),
-        ];
+            )
+        ),
+      ];
 
       if (
         uniqueIds.length ===
@@ -1704,6 +1815,7 @@ exports.completeTargetedPractice =
           .status(400)
           .json({
             success: false,
+
             message:
               "Completed practice question IDs are required.",
           });
@@ -1725,6 +1837,9 @@ exports.completeTargetedPractice =
 
             chapter:
               chapter.chapter,
+
+            classLevel:
+              chapter.classLevel,
           }),
         });
 
@@ -1758,6 +1873,9 @@ exports.completeTargetedPractice =
 
             chapter:
               chapter.chapter,
+
+            classLevel:
+              chapter.classLevel,
           })
         );
 
@@ -1824,6 +1942,7 @@ exports.completeTargetedPractice =
         .status(500)
         .json({
           success: false,
+
           message:
             "Unable to complete targeted practice.",
         });
@@ -1855,6 +1974,7 @@ exports.startFixTest =
           )
           .json({
             success: false,
+
             message:
               lookup.error.message,
           });
@@ -1866,7 +1986,7 @@ exports.startFixTest =
       } = lookup;
 
       // ----------------------------------------
-      // TARGETED PRACTICE MUST BE COMPLETED
+      // PRACTICE MUST BE COMPLETED
       // ----------------------------------------
 
       if (!chapter.practised) {
@@ -1881,12 +2001,13 @@ exports.startFixTest =
       }
 
       // ----------------------------------------
-      // IF ALREADY FIXED
+      // ALREADY FIXED
       // ----------------------------------------
 
       if (
         chapter.fixTestPassed ||
-        chapter.status === "fixed"
+        chapter.status ===
+          "fixed"
       ) {
         return res
           .status(400)
@@ -1899,7 +2020,7 @@ exports.startFixTest =
       }
 
       // ----------------------------------------
-      // CHECK FOR AN EXISTING ACTIVE ATTEMPT
+      // EXISTING ACTIVE ATTEMPT
       // ----------------------------------------
 
       const existingAttempt =
@@ -1949,6 +2070,7 @@ exports.startFixTest =
                   String(
                     question._id
                   ),
+
                   question,
                 ]
               )
@@ -1965,7 +2087,9 @@ exports.startFixTest =
 
           if (
             orderedQuestions.length ===
-            existingAttempt.questionIds.length
+            existingAttempt
+              .questionIds
+              .length
           ) {
             return res
               .status(200)
@@ -1996,11 +2120,14 @@ exports.startFixTest =
                       chapter.chapter,
 
                     classLevel:
-                      existingAttempt.classLevel ||
+                      existingAttempt
+                        .classLevel ||
+                      chapter.classLevel ||
                       "",
 
                     totalQuestions:
-                      existingAttempt.totalQuestions,
+                      existingAttempt
+                        .totalQuestions,
 
                     targetPercentage:
                       FIX_TEST_PASS_PERCENTAGE,
@@ -2009,10 +2136,12 @@ exports.startFixTest =
                       FIX_TEST_DURATION_MINUTES,
 
                     startedAt:
-                      existingAttempt.startedAt,
+                      existingAttempt
+                        .startedAt,
 
                     expiresAt:
-                      existingAttempt.expiresAt,
+                      existingAttempt
+                        .expiresAt,
 
                     questions:
                       orderedQuestions.map(
@@ -2023,8 +2152,10 @@ exports.startFixTest =
               });
           }
 
-          // If questions were removed/deactivated,
-          // close this attempt and create a fresh one.
+          // Questions belonging to the saved
+          // attempt were removed/deactivated.
+          // Close it and create a fresh attempt.
+
           existingAttempt.completed =
             true;
 
@@ -2033,9 +2164,9 @@ exports.startFixTest =
 
           await existingAttempt.save();
         } else {
-          // --------------------------------------
+          // ------------------------------------
           // EXPIRED ATTEMPT
-          // --------------------------------------
+          // ------------------------------------
 
           existingAttempt.completed =
             true;
@@ -2057,13 +2188,23 @@ exports.startFixTest =
       }
 
       // ----------------------------------------
-      // OPTIONAL CLASS LEVEL
+      // RESOLVE CLASS LEVEL
       // ----------------------------------------
 
       const requestedClassLevel =
-        normaliseString(
+        normaliseClassLevel(
           req.body?.classLevel
         );
+
+      // PanicSession's stored class is now
+      // authoritative. Body value is only a
+      // fallback for older Panic Sessions.
+
+      const resolvedClassLevel =
+        normaliseClassLevel(
+          chapter.classLevel
+        ) ||
+        requestedClassLevel;
 
       // ----------------------------------------
       // SELECT 10 QUESTIONS
@@ -2081,7 +2222,7 @@ exports.startFixTest =
             chapter.chapter,
 
           classLevel:
-            requestedClassLevel,
+            resolvedClassLevel,
         });
 
       if (!selection.success) {
@@ -2106,6 +2247,10 @@ exports.startFixTest =
               exam:
                 session.exam,
 
+              classLevel:
+                resolvedClassLevel ||
+                null,
+
               chapter:
                 chapter.chapter,
             },
@@ -2116,14 +2261,30 @@ exports.startFixTest =
         selection.questions;
 
       // ----------------------------------------
-      // CLASS LEVEL
+      // FINAL CLASS LEVEL
       // ----------------------------------------
 
       const selectedClassLevel =
-        requestedClassLevel ||
-        questions[0]
-          ?.classLevel ||
+        resolvedClassLevel ||
+        normaliseClassLevel(
+          questions[0]
+            ?.classLevel
+        ) ||
         undefined;
+
+      // Backfill classLevel into older Panic
+      // Session chapters when it can be safely
+      // determined from the selected questions.
+
+      if (
+        !chapter.classLevel &&
+        selectedClassLevel
+      ) {
+        chapter.classLevel =
+          selectedClassLevel;
+
+        await session.save();
+      }
 
       // ----------------------------------------
       // SERVER-SIDE TIMER
@@ -2199,8 +2360,9 @@ exports.startFixTest =
         });
 
       // ----------------------------------------
-      // RETURN SANITISED QUESTIONS
-      // correctAnswer IS NOT returned
+      // IMPORTANT:
+      // correctAnswer and explanation are NOT
+      // exposed before the student submits.
       // ----------------------------------------
 
       return res
@@ -2290,7 +2452,7 @@ exports.submitFixTest =
       } = req.body;
 
       // ----------------------------------------
-      // VALIDATE CHAPTER
+      // VALIDATE PANIC CHAPTER
       // ----------------------------------------
 
       const lookup =
@@ -2306,6 +2468,7 @@ exports.submitFixTest =
           )
           .json({
             success: false,
+
             message:
               lookup.error.message,
           });
@@ -2351,7 +2514,7 @@ exports.submitFixTest =
       }
 
       // ----------------------------------------
-      // FIND ATTEMPT
+      // FIND SECURE ATTEMPT
       // ----------------------------------------
 
       const attempt =
@@ -2396,7 +2559,7 @@ exports.submitFixTest =
       }
 
       // ----------------------------------------
-      // SERVER-SIDE EXPIRY CHECK
+      // SERVER-SIDE EXPIRY
       // ----------------------------------------
 
       const now =
@@ -2454,6 +2617,9 @@ exports.submitFixTest =
             message:
               "Fix Test time expired. Start a new Fix Test and try again.",
 
+            expired:
+              true,
+
             data: {
               expired:
                 true,
@@ -2476,7 +2642,7 @@ exports.submitFixTest =
       }
 
       // ----------------------------------------
-      // VALIDATE ANSWERS
+      // VALIDATE ANSWERS ARRAY
       // ----------------------------------------
 
       if (
@@ -2495,7 +2661,7 @@ exports.submitFixTest =
       }
 
       // ----------------------------------------
-      // BUILD QUESTION ID SET
+      // ALLOWED QUESTION IDS
       // ----------------------------------------
 
       const allowedQuestionIds =
@@ -2514,7 +2680,8 @@ exports.submitFixTest =
         new Map();
 
       for (
-        const answer of answers
+        const answer of
+        answers
       ) {
         const questionId =
           normaliseString(
@@ -2611,7 +2778,7 @@ exports.submitFixTest =
       }
 
       // ----------------------------------------
-      // LOAD QUESTIONS FROM DATABASE
+      // LOAD ORIGINAL QUESTIONS
       // ----------------------------------------
 
       const questions =
@@ -2641,7 +2808,91 @@ exports.submitFixTest =
       }
 
       // ----------------------------------------
-      // MAP QUESTIONS FOR ORIGINAL ORDER
+      // EXTRA SECURITY:
+      // Verify questions still belong to the
+      // correct subject/exam/chapter/class.
+      // ----------------------------------------
+
+      const expectedSubject =
+        normaliseSubject(
+          chapter.subject
+        ).toLowerCase();
+
+      const expectedExam =
+        normaliseString(
+          session.exam
+        ).toLowerCase();
+
+      const expectedChapter =
+        normaliseString(
+          chapter.chapter
+        ).toLowerCase();
+
+      const expectedClassLevel =
+        normaliseClassLevel(
+          chapter.classLevel ||
+          attempt.classLevel
+        );
+
+      const invalidStoredQuestion =
+        questions.some(
+          (question) => {
+            const questionSubject =
+              normaliseSubject(
+                question.subject
+              ).toLowerCase();
+
+            const questionExam =
+              normaliseString(
+                question.exam
+              ).toLowerCase();
+
+            const questionChapter =
+              normaliseString(
+                question.chapter
+              ).toLowerCase();
+
+            const questionClassLevel =
+              normaliseClassLevel(
+                question.classLevel
+              );
+
+            if (
+              questionSubject !==
+                expectedSubject ||
+              questionExam !==
+                expectedExam ||
+              questionChapter !==
+                expectedChapter
+            ) {
+              return true;
+            }
+
+            if (
+              expectedClassLevel &&
+              questionClassLevel !==
+                expectedClassLevel
+            ) {
+              return true;
+            }
+
+            return false;
+          }
+        );
+
+      if (invalidStoredQuestion) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "This Fix Test contains a question that does not belong to the selected Panic Mode chapter.",
+          });
+      }
+
+      // ----------------------------------------
+      // RESTORE ORIGINAL QUESTION ORDER
       // ----------------------------------------
 
       const questionMap =
@@ -2651,6 +2902,7 @@ exports.submitFixTest =
               String(
                 question._id
               ),
+
               question,
             ]
           )
@@ -2747,11 +2999,17 @@ exports.submitFixTest =
 
           difficulty:
             question.difficulty,
+
+          classLevel:
+            question.classLevel,
+
+          chapter:
+            question.chapter,
         });
       }
 
       // ----------------------------------------
-      // CALCULATE SCORE
+      // CALCULATE RESULT
       // ----------------------------------------
 
       const totalQuestions =
@@ -2772,7 +3030,7 @@ exports.submitFixTest =
         FIX_TEST_PASS_PERCENTAGE;
 
       // ----------------------------------------
-      // SAVE ATTEMPT
+      // SAVE FIX TEST ATTEMPT
       // ----------------------------------------
 
       attempt.answers =
@@ -2808,6 +3066,17 @@ exports.submitFixTest =
       chapter.fixTestPassed =
         passed;
 
+      if (
+        !chapter.classLevel &&
+        attempt.classLevel
+      ) {
+        chapter.classLevel =
+          normaliseClassLevel(
+            attempt.classLevel
+          ) ||
+          undefined;
+      }
+
       if (passed) {
         chapter.status =
           "fixed";
@@ -2823,7 +3092,7 @@ exports.submitFixTest =
       }
 
       // ----------------------------------------
-      // CHECK IF PANIC PLAN IS COMPLETE
+      // CHECK PANIC PLAN COMPLETION
       // ----------------------------------------
 
       const unresolved =
@@ -2835,7 +3104,8 @@ exports.submitFixTest =
         );
 
       if (
-        unresolved.length === 0
+        unresolved.length ===
+        0
       ) {
         session.completed =
           true;
@@ -2864,12 +3134,32 @@ exports.submitFixTest =
           message:
             passed
               ? "Weakness fixed! You passed the Fix Test."
-              : "You scored below 70%. Review this chapter and try the Fix Test again.",
+              : "You did not reach 70% yet. Review the chapter and retry the Fix Test.",
 
           data: {
             result: {
               attemptId:
                 attempt._id,
+
+              panicSessionId:
+                session._id,
+
+              panicChapterId:
+                chapter._id,
+
+              subject:
+                chapter.subject,
+
+              exam:
+                session.exam,
+
+              classLevel:
+                chapter.classLevel ||
+                attempt.classLevel ||
+                "",
+
+              chapter:
+                chapter.chapter,
 
               totalQuestions,
 
@@ -2914,43 +3204,51 @@ exports.submitFixTest =
   };
 
 // ============================================
-// RESET ACTIVE PANIC PLAN
+// RESET PANIC PLAN
 // DELETE /api/panic-mode/plan
 // ============================================
 
 exports.resetPanicPlan =
   async (req, res) => {
     try {
+      const userId =
+        req.user.id;
+
+      // Find currently active sessions first so
+      // unfinished secure Fix Tests belonging to
+      // them can also be closed.
+
       const activeSessions =
         await PanicSession.find({
           user:
-            req.user.id,
+            userId,
 
           active:
             true,
-        }).select("_id");
+        })
+          .select(
+            "_id"
+          )
+          .lean();
 
-      const sessionIds =
+      const activeSessionIds =
         activeSessions.map(
           (session) =>
             session._id
         );
 
-      // ----------------------------------------
-      // CLOSE ACTIVE FIX TESTS
-      // ----------------------------------------
-
       if (
-        sessionIds.length > 0
+        activeSessionIds.length >
+        0
       ) {
         await PanicFixAttempt.updateMany(
           {
             user:
-              req.user.id,
+              userId,
 
             panicSession: {
               $in:
-                sessionIds,
+                activeSessionIds,
             },
 
             completed:
@@ -2963,22 +3261,15 @@ exports.resetPanicPlan =
 
               submittedAt:
                 new Date(),
-
-              passed:
-                false,
             },
           }
         );
       }
 
-      // ----------------------------------------
-      // CLOSE PANIC SESSIONS
-      // ----------------------------------------
-
       await PanicSession.updateMany(
         {
           user:
-            req.user.id,
+            userId,
 
           active:
             true,
@@ -2987,6 +3278,12 @@ exports.resetPanicPlan =
           $set: {
             active:
               false,
+
+            completed:
+              false,
+
+            completedAt:
+              null,
           },
         }
       );
@@ -2997,7 +3294,12 @@ exports.resetPanicPlan =
           success: true,
 
           message:
-            "Panic Mode plan reset.",
+            "Panic Mode plan reset successfully.",
+
+          data: {
+            session:
+              null,
+          },
         });
     } catch (error) {
       console.error(
