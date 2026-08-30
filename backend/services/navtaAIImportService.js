@@ -24,7 +24,6 @@ const {
 // CONSTANTS
 // =====================================================
 
-
 const VALID_SUBJECTS = new Set([
   "Physics",
   "Chemistry",
@@ -55,8 +54,9 @@ const VALID_QUESTION_TYPES = new Set([
   "long",
 ]);
 
-// Render at most this many pages during one import.
-// We can add batching later for very large PDFs.
+// Limit the number of PDF pages processed in one import.
+// This protects server memory and avoids sending a huge
+// number of AI requests during a single upload.
 const MAX_PDF_PAGES_PER_IMPORT = 20;
 
 // =====================================================
@@ -80,6 +80,10 @@ const getFileType = (fileName = "") => {
     .replace(".", "");
 };
 
+// =====================================================
+// SUBJECT NORMALIZATION
+// =====================================================
+
 const normalizeSubject = (value) => {
   const text =
     cleanString(value).toLowerCase();
@@ -93,8 +97,15 @@ const normalizeSubject = (value) => {
     biology: "Biology",
   };
 
-  return map[text] || cleanString(value);
+  return (
+    map[text] ||
+    cleanString(value)
+  );
 };
+
+// =====================================================
+// EXAM NORMALIZATION
+// =====================================================
 
 const normalizeExam = (value) => {
   const text =
@@ -123,6 +134,10 @@ const normalizeExam = (value) => {
 
   return cleanString(value);
 };
+
+// =====================================================
+// CLASS NORMALIZATION
+// =====================================================
 
 const normalizeClassLevel = (value) => {
   const text =
@@ -219,6 +234,10 @@ const validateDetectedQuestion = (
 
   const reasons = [];
 
+  // =========================================
+  // AI DROP CHECK
+  // =========================================
+
   if (question.drop) {
     reasons.push(
       question.dropReason ||
@@ -226,11 +245,19 @@ const validateDetectedQuestion = (
     );
   }
 
+  // =========================================
+  // QUESTION TEXT
+  // =========================================
+
   if (!question.question) {
     reasons.push(
       "Question text is missing."
     );
   }
+
+  // =========================================
+  // SUBJECT
+  // =========================================
 
   if (
     !VALID_SUBJECTS.has(
@@ -242,6 +269,10 @@ const validateDetectedQuestion = (
     );
   }
 
+  // =========================================
+  // EXAM
+  // =========================================
+
   if (
     !VALID_EXAMS.has(
       question.exam
@@ -251,6 +282,10 @@ const validateDetectedQuestion = (
       "Invalid or uncertain exam."
     );
   }
+
+  // =========================================
+  // CLASS
+  // =========================================
 
   if (
     !VALID_CLASSES.has(
@@ -262,11 +297,19 @@ const validateDetectedQuestion = (
     );
   }
 
+  // =========================================
+  // CHAPTER
+  // =========================================
+
   if (!question.chapter) {
     reasons.push(
       "Chapter could not be identified."
     );
   }
+
+  // =========================================
+  // DIFFICULTY
+  // =========================================
 
   if (
     !VALID_DIFFICULTIES.has(
@@ -278,6 +321,10 @@ const validateDetectedQuestion = (
     );
   }
 
+  // =========================================
+  // QUESTION TYPE
+  // =========================================
+
   if (
     !VALID_QUESTION_TYPES.has(
       question.questionType
@@ -288,7 +335,10 @@ const validateDetectedQuestion = (
     );
   }
 
-  // JEE and NEET only support MCQ
+  // =========================================
+  // JEE / NEET TYPE RULE
+  // =========================================
+
   if (
     ["JEE", "NEET"].includes(
       question.exam
@@ -299,6 +349,10 @@ const validateDetectedQuestion = (
       `${question.exam} questions must be MCQ.`
     );
   }
+
+  // =========================================
+  // MCQ VALIDATION
+  // =========================================
 
   if (
     question.questionType === "mcq"
@@ -335,7 +389,7 @@ const validateDetectedQuestion = (
 };
 
 // =====================================================
-// PROCESS DIAGRAM
+// PROCESS QUESTION DIAGRAM
 // =====================================================
 
 const processQuestionVisual =
@@ -344,29 +398,58 @@ const processQuestionVisual =
     renderedPage,
     sourceFileName,
   }) => {
+    // No visual was detected.
     if (
       !question.hasVisual ||
-      !question.visualBoundingBox ||
-      !renderedPage
+      !question.visualBoundingBox
     ) {
       return {
         questionImage: null,
       };
     }
 
+    // Visual exists according to AI but we
+    // cannot locate its source page.
+    if (!renderedPage) {
+      return {
+        questionImage: null,
+
+        visualWarning:
+          "NAVTA AI detected a diagram, but its PDF page could not be located.",
+      };
+    }
+
     try {
+      // =====================================
+      // CROP THE VISUAL
+      // =====================================
+
       const cropped =
         await createQuestionDiagram({
           question,
+
           pageBuffer:
             renderedPage.buffer,
         });
 
-      if (!cropped) {
+      if (
+        !cropped ||
+        !Buffer.isBuffer(
+          cropped.buffer
+        ) ||
+        cropped.buffer.length === 0
+      ) {
         return {
           questionImage: null,
+
+          visualWarning:
+            "NAVTA detected the diagram but could not create its image.",
         };
       }
+
+      // =====================================
+      // SAFE FILE NAME
+      // =====================================
 
       const safeFileName =
         cleanString(
@@ -376,7 +459,12 @@ const processQuestionVisual =
             /[^a-zA-Z0-9._-]/g,
             "-"
           )
-          .slice(0, 80);
+          .slice(0, 80) ||
+        "navta-question";
+
+      // =====================================
+      // CLOUDINARY UPLOAD
+      // =====================================
 
       const upload =
         await uploadQuestionImage({
@@ -390,13 +478,26 @@ const processQuestionVisual =
             "navta/ai-imports/pending",
         });
 
+      if (!upload?.url) {
+        return {
+          questionImage: null,
+
+          visualWarning:
+            "The question diagram could not be uploaded.",
+        };
+      }
+
+      // =====================================
+      // RETURN IMAGE METADATA
+      // =====================================
+
       return {
         questionImage: {
           url:
             upload.url,
 
           publicId:
-            upload.publicId,
+            upload.publicId || "",
 
           altText:
             question.visualDescription ||
@@ -406,10 +507,12 @@ const processQuestionVisual =
             question.sourcePage,
 
           width:
-            upload.width,
+            upload.width ||
+            cropped.width,
 
           height:
-            upload.height,
+            upload.height ||
+            cropped.height,
         },
       };
     } catch (error) {
@@ -428,7 +531,7 @@ const processQuestionVisual =
   };
 
 // =====================================================
-// BUILD FRONTEND QUESTION
+// BUILD QUESTION FOR ADMIN REVIEW
 // =====================================================
 
 const buildImportQuestion = ({
@@ -477,7 +580,7 @@ const buildImportQuestion = ({
   };
 
   // =========================================
-  // MCQ
+  // MCQ DATA
   // =========================================
 
   if (
@@ -491,7 +594,7 @@ const buildImportQuestion = ({
   }
 
   // =========================================
-  // WRITTEN
+  // WRITTEN QUESTION DATA
   // =========================================
 
   if (
@@ -506,6 +609,8 @@ const buildImportQuestion = ({
       question.keyPoints || [];
 
     if (
+      question.maxMarks !== null &&
+      question.maxMarks !== undefined &&
       Number.isFinite(
         Number(
           question.maxMarks
@@ -520,12 +625,10 @@ const buildImportQuestion = ({
   }
 
   // =========================================
-  // DIAGRAM
+  // QUESTION IMAGE
   // =========================================
 
-  if (
-    questionImage?.url
-  ) {
+  if (questionImage?.url) {
     result.questionImage =
       questionImage;
 
@@ -533,15 +636,12 @@ const buildImportQuestion = ({
       questionImage,
     ];
   } else {
-    result.questionImages =
-      [];
+    result.questionImages = [];
   }
 
   return result;
-};
-
-// =====================================================
-// PROCESS PDF
+};// =====================================================
+// PROCESS PDF IMPORT
 // =====================================================
 
 const processPdfImport =
@@ -550,6 +650,10 @@ const processPdfImport =
     documentResult,
     hints,
   }) => {
+    // =========================================
+    // RENDER PDF PAGES
+    // =========================================
+
     const rendered =
       await renderPdfPages({
         buffer:
@@ -563,6 +667,10 @@ const processPdfImport =
       });
 
     if (
+      !rendered ||
+      !Array.isArray(
+        rendered.pages
+      ) ||
       rendered.pages.length === 0
     ) {
       throw new Error(
@@ -570,20 +678,25 @@ const processPdfImport =
       );
     }
 
+    // =========================================
+    // GEMINI / NAVTA AI ANALYSIS
+    // =========================================
+
     const detectedQuestions =
       await analyseRenderedPages({
         pages:
           rendered.pages,
 
-        // Current document service gives document-wide
-        // extracted text. The rendered image remains the
-        // primary source for visual analysis.
         text:
           documentResult.text ||
           "",
 
         hints,
       });
+
+    // =========================================
+    // CREATE PAGE LOOKUP
+    // =========================================
 
     const pageMap =
       new Map();
@@ -593,7 +706,9 @@ const processPdfImport =
       rendered.pages
     ) {
       pageMap.set(
-        page.pageNumber,
+        Number(
+          page.pageNumber
+        ),
         page
       );
     }
@@ -604,6 +719,10 @@ const processPdfImport =
     const droppedQuestions =
       [];
 
+    // =========================================
+    // VALIDATE EACH DETECTED QUESTION
+    // =========================================
+
     for (
       const rawQuestion of
       detectedQuestions
@@ -613,21 +732,25 @@ const processPdfImport =
           rawQuestion
         );
 
+      // =====================================
+      // DROP INVALID QUESTION
+      // =====================================
+
       if (
         !validation.valid
       ) {
+        const reason =
+          validation.reasons.join(
+            " "
+          );
+
         droppedQuestions.push({
           ...validation.question,
 
-          reason:
-            validation.reasons.join(
-              " "
-            ),
+          reason,
 
           dropReason:
-            validation.reasons.join(
-              " "
-            ),
+            reason,
         });
 
         continue;
@@ -636,6 +759,10 @@ const processPdfImport =
       const question =
         validation.question;
 
+      // =====================================
+      // FIND SOURCE PDF PAGE
+      // =====================================
+
       const renderedPage =
         pageMap.get(
           Number(
@@ -643,17 +770,28 @@ const processPdfImport =
           )
         );
 
+      // =====================================
+      // PROCESS DIAGRAM / VISUAL
+      // =====================================
+
       const visual =
         await processQuestionVisual({
           question,
+
           renderedPage,
+
           sourceFileName:
             file.originalname,
         });
 
+      // =====================================
+      // BUILD ADMIN REVIEW QUESTION
+      // =====================================
+
       const importQuestion =
         buildImportQuestion({
           question,
+
           questionImage:
             visual.questionImage,
 
@@ -664,10 +802,18 @@ const processPdfImport =
             "pdf",
         });
 
+      // =====================================
+      // VISUAL REQUIRED BUT FAILED
+      // =====================================
+
       if (
         question.hasVisual &&
         !visual.questionImage
       ) {
+        const reason =
+          visual.visualWarning ||
+          "The question requires a diagram, but the diagram could not be preserved.";
+
         droppedQuestions.push({
           ...importQuestion,
 
@@ -677,25 +823,31 @@ const processPdfImport =
           visualDescription:
             question.visualDescription,
 
-          reason:
-            visual.visualWarning ||
-            "The question requires a diagram, but the diagram could not be preserved.",
+          reason,
 
           dropReason:
-            visual.visualWarning ||
-            "The question requires a diagram, but the diagram could not be preserved.",
+            reason,
         });
 
         continue;
       }
+
+      // =====================================
+      // ACCEPT QUESTION
+      // =====================================
 
       acceptedQuestions.push(
         importQuestion
       );
     }
 
+    // =========================================
+    // RETURN PDF RESULT
+    // =========================================
+
     return {
       acceptedQuestions,
+
       droppedQuestions,
 
       documentInfo: {
@@ -720,7 +872,7 @@ const processPdfImport =
   };
 
 // =====================================================
-// MAIN IMPORT SERVICE
+// MAIN NAVTA AI IMPORT SERVICE
 // =====================================================
 
 const analyseNavtaImport =
@@ -730,29 +882,63 @@ const analyseNavtaImport =
     exam,
     classLevel,
   }) => {
+    // =========================================
+    // FILE CHECK
+    // =========================================
+
     if (!file) {
       throw new Error(
         "Please upload a PDF, DOCX or TXT file."
       );
     }
 
+    // =========================================
+    // GOOGLE AI STUDIO / GEMINI CHECK
+    // =========================================
+
     if (
-      !process.env.OPENAI_API_KEY
+      !process.env.GEMINI_API_KEY
     ) {
       throw new Error(
-        "OPENAI_API_KEY is not configured on the server."
+        "GEMINI_API_KEY is not configured on the server."
       );
     }
+
+    // =========================================
+    // FILE TYPE
+    // =========================================
 
     const fileType =
       getFileType(
         file.originalname
       );
 
+    if (
+      ![
+        "pdf",
+        "docx",
+        "txt",
+      ].includes(
+        fileType
+      )
+    ) {
+      throw new Error(
+        "Unsupported file type. Please upload a PDF, DOCX or TXT file."
+      );
+    }
+
+    // =========================================
+    // PROCESS ORIGINAL DOCUMENT
+    // =========================================
+
     const documentResult =
       await processNavtaDocument(
         file
       );
+
+    // =========================================
+    // NORMALIZE ADMIN HINTS
+    // =========================================
 
     const hints = {
       subject:
@@ -771,9 +957,9 @@ const analyseNavtaImport =
         ),
     };
 
-    // =================================================
-    // PDF
-    // =================================================
+    // =========================================
+    // PDF IMPORT
+    // =========================================
 
     if (
       fileType === "pdf"
@@ -781,61 +967,73 @@ const analyseNavtaImport =
       const result =
         await processPdfImport({
           file,
+
           documentResult,
+
           hints,
         });
+
+      const acceptedCount =
+        result
+          .acceptedQuestions
+          .length;
+
+      const droppedCount =
+        result
+          .droppedQuestions
+          .length;
 
       return {
         ...result,
 
         summary: {
           detected:
-            result
-              .acceptedQuestions
-              .length +
-            result
-              .droppedQuestions
-              .length,
+            acceptedCount +
+            droppedCount,
 
           accepted:
-            result
-              .acceptedQuestions
-              .length,
+            acceptedCount,
 
           dropped:
-            result
-              .droppedQuestions
-              .length,
+            droppedCount,
         },
       };
     }
 
-    // =================================================
-    // DOCX / TXT
-    // =================================================
+    // =========================================
+    // DOCX
+    // =========================================
     //
-    // We intentionally do not silently process these
-    // incorrectly yet.
+    // DOCX text/image extraction exists in the
+    // document service, but question-to-image
+    // association is not enabled yet.
     //
-    // DOCX needs question ↔ embedded-image association.
-    // TXT needs a text-only AI parser.
-    //
-    // Those are the next two adapters.
-    // =================================================
+    // We intentionally stop here instead of
+    // importing diagrams incorrectly.
+    // =========================================
 
     if (
       fileType === "docx"
     ) {
       throw new Error(
-        "DOCX NAVTA AI import is being connected next. PDF visual import is ready first."
+        "DOCX NAVTA AI import is being connected next. Please use PDF for the current visual-import test."
       );
     }
+
+    // =========================================
+    // TXT
+    // =========================================
+    //
+    // TXT has no embedded visual information.
+    // A dedicated text-only AI parser will be
+    // connected separately.
+    // =========================================
 
     if (
       fileType === "txt"
     ) {
       throw new Error(
-        "TXT NAVTA AI import is being connected next. PDF visual import is ready first."
+        "TXT NAVTA AI import is being connected next. Please use PDF for the current test."
       );
     }
 
