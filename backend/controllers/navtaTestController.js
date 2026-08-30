@@ -6,10 +6,6 @@ const {
   getNavtaStreakSnapshot,
 } = require("./studentController");
 
-const {
-  analyseNavtaImport,
-} = require("../services/navtaAIImportService");
-
 // ============================================
 // TEST RULES
 // ============================================
@@ -727,6 +723,10 @@ exports.deleteQuestion = async (req, res) => {
 
 exports.importQuestionsWithAI = async (req, res) => {
   try {
+    const {
+      analyseNavtaImport,
+    } = require("../services/navtaAIImportService");
+
     if (!req.file) {
       return res.status(400).json({
         success: false,
