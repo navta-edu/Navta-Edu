@@ -11,6 +11,8 @@ const {
   generateRevengeBattle,
   evaluateWrittenAnswer,
   completeNavtaTest,
+  importQuestionsWithAI,
+  confirmAIImport,
 } = require("../controllers/navtaTestController");
 
 const {
@@ -19,7 +21,7 @@ const {
 } = require("../middleware/auth");
 
 // ============================================
-// ADMIN - CREATE QUESTION
+// QUESTION MANAGEMENT
 // ============================================
 
 router.post(
@@ -27,13 +29,64 @@ router.post(
   createQuestion
 );
 
+router.get(
+  "/questions",
+  getQuestions
+);
+
+router.delete(
+  "/questions/:id",
+  deleteQuestion
+);
+
 // ============================================
-// STUDENT - GENERATE STANDARD NAVTA TEST
+// NAVTA AI IMPORT
 // ============================================
 //
-// Endpoint:
-// POST /api/navta-test/generate
-//
+// Multer is loaded lazily here so a problem with
+// the new AI upload dependency cannot crash the
+// entire NAVTA backend during startup.
+// ============================================
+
+router.post(
+  "/import",
+  (req, res, next) => {
+    try {
+      const uploadNavtaAIFile =
+        require("../middleware/navtaAiUpload");
+
+      return uploadNavtaAIFile.single("file")(
+        req,
+        res,
+        next
+      );
+    } catch (error) {
+      console.error(
+        "NAVTA AI UPLOAD MIDDLEWARE ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "NAVTA AI upload service could not be loaded.",
+        error:
+          error.message,
+      });
+    }
+  },
+  importQuestionsWithAI
+);
+
+// Keep saving disabled until analysis has
+// been tested successfully.
+router.post(
+  "/import/confirm",
+  confirmAIImport
+);
+
+// ============================================
+// STANDARD TEST
 // ============================================
 
 router.post(
@@ -42,18 +95,7 @@ router.post(
 );
 
 // ============================================
-// STUDENT - GENERATE BOSS BATTLE
-// ============================================
-//
-// Boss Battle supports:
-// - Multiple chapters
-// - Minimum 2 chapters
-// - Automatic Easy / Medium / Hard mix
-// - 15, 30 or 50 questions
-//
-// Endpoint:
-// POST /api/navta-test/boss-battle
-//
+// BOSS BATTLE
 // ============================================
 
 router.post(
@@ -62,25 +104,7 @@ router.post(
 );
 
 // ============================================
-// STUDENT - GENERATE REVENGE BATTLE
-// ============================================
-//
-// Revenge Battle supports:
-// - Unlocks after a failed Boss Battle
-// - Boss must be defeated with 70% or higher
-// - Uses the same subject
-// - Uses the same preparation/exam
-// - Uses the same class
-// - Uses the same selected chapters
-// - Uses the same Boss Battle size
-// - Focuses on weak chapters
-// - Focuses on weak difficulty levels
-// - Tries to avoid recently answered questions
-// - Supports repeated Revenge attempts
-//
-// Endpoint:
-// POST /api/navta-test/revenge-battle
-//
+// REVENGE BATTLE
 // ============================================
 
 router.post(
@@ -89,29 +113,7 @@ router.post(
 );
 
 // ============================================
-// STUDENT - COMPLETE NAVTA TEST
-// ============================================
-//
-// Saves:
-// - Standard Test
-// - Boss Battle
-// - Revenge Battle
-//
-// Updates:
-// - Daily Performance Overview
-// - Student Coin Balance
-//
-// Coin rule:
-// Score <= 80% = 0 coins
-// Score > 80% + duration < 30 min = 1 coin
-// Score > 80% + duration >= 30 min = 2 coins
-//
-// This route is protected because performance
-// and coins belong to the logged-in student.
-//
-// Endpoint:
-// POST /api/navta-test/complete
-//
+// COMPLETE NAVTA TEST
 // ============================================
 
 router.post(
@@ -122,35 +124,12 @@ router.post(
 );
 
 // ============================================
-// STUDENT - EVALUATE WRITTEN ANSWER
-// ============================================
-//
-// Endpoint:
-// POST /api/navta-test/evaluate-answer
-//
+// WRITTEN ANSWER EVALUATION
 // ============================================
 
 router.post(
   "/evaluate-answer",
   evaluateWrittenAnswer
-);
-
-// ============================================
-// ADMIN - GET QUESTIONS
-// ============================================
-
-router.get(
-  "/questions",
-  getQuestions
-);
-
-// ============================================
-// ADMIN - DELETE QUESTION
-// ============================================
-
-router.delete(
-  "/questions/:id",
-  deleteQuestion
 );
 
 module.exports = router;
