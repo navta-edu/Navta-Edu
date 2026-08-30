@@ -708,6 +708,32 @@ exports.deleteQuestion = async (req, res) => {
 };
 
 // ============================================
+// AI IMPORT - TEMPORARILY DISABLED
+// ============================================
+//
+// These endpoints stay exported so existing routes do not break,
+// but they do not load mammoth, pdf-parse, multer, or the OpenAI service.
+//
+// Once deployment dependencies are fixed, restore the full importer.
+//
+
+exports.importQuestionsWithAI = async (req, res) => {
+  return res.status(503).json({
+    success: false,
+    message:
+      "AI question file import is temporarily disabled while the deployment is being updated.",
+  });
+};
+
+exports.confirmAIImport = async (req, res) => {
+  return res.status(503).json({
+    success: false,
+    message:
+      "AI question file import is temporarily disabled while the deployment is being updated.",
+  });
+};
+
+// ============================================
 // GENERATE STANDARD STUDENT TEST
 // ============================================
 
