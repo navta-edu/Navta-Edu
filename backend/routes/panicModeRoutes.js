@@ -9,7 +9,8 @@ const {
   generateTargetedPractice,
   checkPracticeAnswer,
   completeTargetedPractice,
-  saveFixTestResult,
+  startFixTest,
+  submitFixTest,
   resetPanicPlan,
 } = require(
   "../controllers/panicModeController"
@@ -72,7 +73,7 @@ router.post(
   generateTargetedPractice
 );
 
-// Check one answer
+// Check one targeted practice answer
 router.post(
   "/chapters/:chapterId/practice/check",
   checkPracticeAnswer
@@ -85,12 +86,23 @@ router.post(
 );
 
 // ============================================
-// FIX TEST
+// SECURE FIX TEST
 // ============================================
 
+// Start a new secure 10-question Fix Test
 router.post(
-  "/chapters/:chapterId/fix-test",
-  saveFixTestResult
+  "/chapters/:chapterId/fix-test/start",
+  startFixTest
 );
+
+// Submit Fix Test answers for server-side grading
+router.post(
+  "/chapters/:chapterId/fix-test/submit",
+  submitFixTest
+);
+
+// ============================================
+// EXPORT
+// ============================================
 
 module.exports = router;
