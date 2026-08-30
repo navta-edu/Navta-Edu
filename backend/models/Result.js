@@ -14,6 +14,76 @@ const ResultSchema = new mongoose.Schema({
     required: true
   },
 
+  // ============================================
+  // NAVTA TEST CONTEXT
+  // ============================================
+  //
+  // These fields allow features such as
+  // Panic Mode to identify performance by:
+  //
+  // Exam -> Subject -> Class -> Chapter
+  //
+  // They are optional so older Result documents
+  // already stored in MongoDB continue to work.
+  // ============================================
+
+  subject: {
+    type: String,
+    enum: [
+      'Physics',
+      'Chemistry',
+      'Maths',
+      'Biology'
+    ],
+    trim: true,
+    default: undefined
+  },
+
+  exam: {
+    type: String,
+    enum: [
+      'NEET',
+      'JEE',
+      'Boards'
+    ],
+    trim: true,
+    default: undefined
+  },
+
+  classLevel: {
+    type: String,
+    enum: [
+      'Class 11',
+      'Class 12'
+    ],
+    trim: true,
+    default: undefined
+  },
+
+  // Used when the NAVTA TEST contains
+  // one selected chapter.
+  chapter: {
+    type: String,
+    trim: true,
+    default: undefined
+  },
+
+  // Kept for compatibility with NAVTA TEST
+  // attempts that may contain multiple chapters.
+  chapters: {
+    type: [
+      {
+        type: String,
+        trim: true
+      }
+    ],
+    default: undefined
+  },
+
+  // ============================================
+  // ANSWERS
+  // ============================================
+
   answers: [
     {
       question: {
@@ -34,6 +104,10 @@ const ResultSchema = new mongoose.Schema({
       }
     }
   ],
+
+  // ============================================
+  // RESULT
+  // ============================================
 
   score: {
     type: Number,
@@ -61,7 +135,8 @@ const ResultSchema = new mongoose.Schema({
     min: 1
   },
 
-  // standard / boss / revenge or another future test type
+  // standard / boss / revenge or another
+  // future NAVTA TEST type.
   testType: {
     type: String,
     default: 'standard',
@@ -69,16 +144,25 @@ const ResultSchema = new mongoose.Schema({
   },
 
   // Unique ID for one particular test attempt.
-  // This prevents refresh/resubmit from awarding coins twice.
+  // This prevents refresh/resubmit from
+  // awarding coins twice.
   attemptId: {
     type: String,
     trim: true,
     default: undefined
   },
 
+  // ============================================
+  // COIN REWARD
+  // ============================================
+
   coinsAwarded: {
     type: Number,
-    enum: [0, 1, 2],
+    enum: [
+      0,
+      1,
+      2
+    ],
     default: 0
   },
 
@@ -92,20 +176,30 @@ const ResultSchema = new mongoose.Schema({
     default: null
   },
 
+  // ============================================
+  // PERFORMANCE
+  // ============================================
+
   correctAnswers: {
     type: Number,
-    required: true
+    required: true,
+    min: 0
   },
 
   totalQuestions: {
     type: Number,
-    required: true
+    required: true,
+    min: 0
   },
 
   isPassed: {
     type: Boolean,
     required: true
   },
+
+  // ============================================
+  // CREATED DATE
+  // ============================================
 
   createdAt: {
     type: Date,
@@ -114,10 +208,15 @@ const ResultSchema = new mongoose.Schema({
   }
 });
 
-// Prevent the same attempt from being submitted twice.
+// ============================================
+// INDEXES
+// ============================================
+
+// Prevent the same attempt from being
+// submitted twice.
 //
-// Existing older results without attemptId will still work because
-// this index is sparse.
+// Existing older results without attemptId
+// will still work because this index is sparse.
 ResultSchema.index(
   {
     user: 1,
@@ -129,12 +228,35 @@ ResultSchema.index(
   }
 );
 
-// Makes dashboard date-based analytics faster
+// Makes dashboard date-based analytics faster.
 ResultSchema.index({
   user: 1,
   createdAt: 1
 });
 
+// Helps Panic Mode retrieve NAVTA TEST
+// performance efficiently by student,
+// exam, class and subject.
+ResultSchema.index({
+  user: 1,
+  exam: 1,
+  classLevel: 1,
+  subject: 1,
+  createdAt: -1
+});
+
+// Helps chapter-level Panic Mode analysis.
+ResultSchema.index({
+  user: 1,
+  exam: 1,
+  classLevel: 1,
+  subject: 1,
+  chapter: 1
+});
+
 module.exports =
   mongoose.models.Result ||
-  mongoose.model('Result', ResultSchema);
+  mongoose.model(
+    'Result',
+    ResultSchema
+  );
