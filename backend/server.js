@@ -17,6 +17,7 @@ const studentRoutes = require("./routes/studentRoutes");
 const teacherRoutes = require("./routes/teacherRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const navtaTestRoutes = require("./routes/navtaTestRoutes");
+const aiRoutes = require("./routes/aiRoutes");
 
 // ============================================
 // MISTAKE NOTEBOOK ROUTES
@@ -219,6 +220,24 @@ app.use(
 );
 
 // ============================================
+// NAVTA AI
+// ============================================
+//
+// NAVTA AI Tutor API
+//
+// Base endpoint:
+// /api/ai
+//
+// Example:
+// POST /api/ai/chat
+//
+
+app.use(
+  "/api/ai",
+  aiRoutes
+);
+
+// ============================================
 // API 404 HANDLER
 // IMPORTANT:
 // Prevent unknown API requests from returning
@@ -370,6 +389,10 @@ const server = app.listen(
 
     console.log(
       `Panic Mode API: http://localhost:${PORT}/api/panic-mode`
+    );
+
+    console.log(
+      `NAVTA AI API: http://localhost:${PORT}/api/ai`
     );
 
     console.log(
