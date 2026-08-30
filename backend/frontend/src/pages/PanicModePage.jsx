@@ -253,6 +253,50 @@ export default function PanicModePage() {
   ] = useState('');
 
   // ============================================
+  // SECURE FIX TEST STATE
+  // ============================================
+
+  const [
+    fixTest,
+    setFixTest
+  ] = useState(null);
+
+  const [
+    loadingFixTest,
+    setLoadingFixTest
+  ] = useState(false);
+
+  const [
+    submittingFixTest,
+    setSubmittingFixTest
+  ] = useState(false);
+
+  const [
+    fixTestIndex,
+    setFixTestIndex
+  ] = useState(0);
+
+  const [
+    fixTestAnswers,
+    setFixTestAnswers
+  ] = useState({});
+
+  const [
+    fixTestSecondsLeft,
+    setFixTestSecondsLeft
+  ] = useState(0);
+
+  const [
+    fixTestResult,
+    setFixTestResult
+  ] = useState(null);
+
+  const [
+    fixTestMessage,
+    setFixTestMessage
+  ] = useState('');
+
+  // ============================================
   // DERIVED DATA
   // ============================================
 
@@ -410,6 +454,49 @@ export default function PanicModePage() {
           ) * 100
         )
       : 0;
+
+  // ============================================
+  // FIX TEST DERIVED DATA
+  // ============================================
+
+  const fixTestQuestions =
+    Array.isArray(
+      fixTest?.questions
+    )
+      ? fixTest.questions
+      : [];
+
+  const currentFixQuestion =
+    fixTestQuestions[
+      fixTestIndex
+    ] || null;
+
+  const currentFixQuestionId =
+    String(
+      currentFixQuestion?._id ||
+      ''
+    );
+
+  const fixTestAnsweredCount =
+    Object.keys(
+      fixTestAnswers
+    ).filter(
+      (questionId) =>
+        fixTestAnswers[
+          questionId
+        ] !== undefined &&
+        fixTestAnswers[
+          questionId
+        ] !== null
+    ).length;
+
+  const fixTestMinutes =
+    Math.floor(
+      fixTestSecondsLeft / 60
+    );
+
+  const fixTestSeconds =
+    fixTestSecondsLeft % 60;
 
   // ============================================
   // SYNC SESSION
@@ -627,6 +714,7 @@ export default function PanicModePage() {
         setSession(null);
         setActiveChapterId('');
         closePractice();
+        closeFixTest();
       } catch (
         requestError
       ) {
@@ -913,6 +1001,335 @@ export default function PanicModePage() {
         );
       }
     };
+
+  // ============================================
+  // START SECURE FIX TEST
+  // ============================================
+
+  const startFixTest =
+    async () => {
+      if (
+        !activeChapter?._id ||
+        !progress.practised
+      ) {
+        return;
+      }
+
+      setLoadingFixTest(true);
+      setFixTestMessage('');
+      setError('');
+
+      try {
+        const response =
+          await panicModeAPI
+            .startFixTest(
+              activeChapter._id
+            );
+
+        const nextFixTest =
+          response?.data
+            ?.fixTest ||
+          response?.data
+            ?.attempt ||
+          response?.data ||
+          null;
+
+        const questions =
+          Array.isArray(
+            nextFixTest?.questions
+          )
+            ? nextFixTest.questions
+            : [];
+
+        if (
+          !nextFixTest ||
+          questions.length === 0
+        ) {
+          throw new Error(
+            'No Fix Test questions were returned.'
+          );
+        }
+
+        const expiresAt =
+          nextFixTest.expiresAt ||
+          response?.data?.expiresAt;
+
+        const remainingSeconds =
+          expiresAt
+            ? Math.max(
+                0,
+                Math.ceil(
+                  (
+                    new Date(
+                      expiresAt
+                    ).getTime() -
+                    Date.now()
+                  ) / 1000
+                )
+              )
+            : 10 * 60;
+
+        setFixTest({
+          ...nextFixTest,
+          questions,
+          attemptId:
+            nextFixTest.attemptId ||
+            nextFixTest._id ||
+            response?.data
+              ?.attemptId
+        });
+
+        setFixTestIndex(0);
+        setFixTestAnswers({});
+        setFixTestResult(null);
+        setFixTestSecondsLeft(
+          remainingSeconds
+        );
+      } catch (
+        requestError
+      ) {
+        setError(
+          getErrorMessage(
+            requestError,
+            'Unable to start the Fix Test.'
+          )
+        );
+      } finally {
+        setLoadingFixTest(false);
+      }
+    };
+
+  // ============================================
+  // SELECT FIX TEST ANSWER
+  // ============================================
+
+  const selectFixTestAnswer = (
+    optionIndex
+  ) => {
+    if (
+      !currentFixQuestionId ||
+      fixTestResult
+    ) {
+      return;
+    }
+
+    setFixTestAnswers(
+      (previous) => ({
+        ...previous,
+
+        [currentFixQuestionId]:
+          optionIndex
+      })
+    );
+  };
+
+  // ============================================
+  // SUBMIT SECURE FIX TEST
+  // ============================================
+
+  const submitFixTest =
+    async (
+      autoSubmit = false
+    ) => {
+      if (
+        !activeChapter?._id ||
+        !fixTest ||
+        submittingFixTest ||
+        fixTestResult
+      ) {
+        return;
+      }
+
+      const attemptId =
+        fixTest.attemptId ||
+        fixTest._id;
+
+      if (!attemptId) {
+        setFixTestMessage(
+          'Fix Test attempt ID is missing. Close the test and start again.'
+        );
+
+        return;
+      }
+
+      if (
+        !autoSubmit &&
+        fixTestAnsweredCount <
+          fixTestQuestions.length
+      ) {
+        setFixTestMessage(
+          `Answer all ${fixTestQuestions.length} questions before submitting.`
+        );
+
+        return;
+      }
+
+      setSubmittingFixTest(true);
+      setFixTestMessage('');
+
+      try {
+        const answers =
+          fixTestQuestions.map(
+            (question) => {
+              const questionId =
+                String(
+                  question._id
+                );
+
+              const selectedOption =
+                fixTestAnswers[
+                  questionId
+                ];
+
+              return {
+                questionId,
+
+                selectedOption:
+                  selectedOption ===
+                    undefined
+                    ? null
+                    : selectedOption
+              };
+            }
+          );
+
+        const response =
+          await panicModeAPI
+            .submitFixTest(
+              activeChapter._id,
+              attemptId,
+              answers
+            );
+
+        const result =
+          response?.data
+            ?.result ||
+          response?.data ||
+          null;
+
+        setFixTestResult(
+          result
+        );
+
+        if (
+          response?.data
+            ?.session
+        ) {
+          syncSession(
+            response.data.session
+          );
+        } else {
+          try {
+            const planResponse =
+              await panicModeAPI
+                .getPlan();
+
+            syncSession(
+              planResponse?.data
+                ?.session ||
+              session
+            );
+          } catch {
+            // Result is still shown even if
+            // refreshing the plan fails.
+          }
+        }
+
+        setFixTestSecondsLeft(0);
+      } catch (
+        requestError
+      ) {
+        const expired =
+          Boolean(
+            requestError
+              ?.response
+              ?.data
+              ?.expired
+          );
+
+        setFixTestMessage(
+          getErrorMessage(
+            requestError,
+            expired
+              ? 'Time is over. This Fix Test attempt has expired.'
+              : 'Unable to submit the Fix Test.'
+          )
+        );
+
+        if (expired) {
+          setFixTestSecondsLeft(0);
+        }
+      } finally {
+        setSubmittingFixTest(false);
+      }
+    };
+
+  // ============================================
+  // FIX TEST TIMER
+  // ============================================
+
+  useEffect(() => {
+    if (
+      !fixTest ||
+      fixTestResult ||
+      fixTestSecondsLeft <= 0
+    ) {
+      return undefined;
+    }
+
+    const timer =
+      window.setInterval(
+        () => {
+          setFixTestSecondsLeft(
+            (previous) =>
+              Math.max(
+                0,
+                previous - 1
+              )
+          );
+        },
+        1000
+      );
+
+    return () => {
+      window.clearInterval(
+        timer
+      );
+    };
+  }, [
+    fixTest,
+    fixTestResult,
+    fixTestSecondsLeft
+  ]);
+
+  useEffect(() => {
+    if (
+      fixTest &&
+      !fixTestResult &&
+      fixTestSecondsLeft === 0 &&
+      !submittingFixTest
+    ) {
+      submitFixTest(true);
+    }
+  }, [
+    fixTestSecondsLeft,
+    fixTest,
+    fixTestResult,
+    submittingFixTest
+  ]);
+
+  // ============================================
+  // CLOSE FIX TEST
+  // ============================================
+
+  function closeFixTest() {
+    setFixTest(null);
+    setFixTestIndex(0);
+    setFixTestAnswers({});
+    setFixTestResult(null);
+    setFixTestSecondsLeft(0);
+    setFixTestMessage('');
+  }
 
   // ============================================
   // CLOSE PRACTICE
@@ -1658,30 +2075,53 @@ export default function PanicModePage() {
                         ) : (
                           <button
                             type="button"
-                            disabled
+                            disabled={
+                              !progress.practised ||
+                              loadingFixTest
+                            }
+                            onClick={
+                              startFixTest
+                            }
                             className="
                               inline-flex
                               items-center
                               gap-2
                               rounded-xl
-                              bg-slate-200
+                              bg-rose-600
                               px-4
                               py-3
                               text-xs
                               font-black
-                              text-slate-500
+                              text-white
+                              hover:bg-rose-700
+                              disabled:cursor-not-allowed
+                              disabled:bg-slate-200
+                              disabled:text-slate-500
+                              disabled:opacity-70
 
-                              dark:bg-slate-800
-                              dark:text-slate-400
+                              dark:disabled:bg-slate-800
+                              dark:disabled:text-slate-400
                             "
                           >
-                            <Lock
-                              className="h-4 w-4"
-                            />
+                            {loadingFixTest ? (
+                              <Loader2
+                                className="
+                                  h-4
+                                  w-4
+                                  animate-spin
+                                "
+                              />
+                            ) : (
+                              <Target
+                                className="h-4 w-4"
+                              />
+                            )}
 
-                            {progress.practised
-                              ? 'Secure Fix Test Coming Next'
-                              : 'Complete Practice First'}
+                            {!progress.practised
+                              ? 'Complete Practice First'
+                              : loadingFixTest
+                                ? 'Preparing Fix Test...'
+                                : 'Start 10-Min Fix Test'}
                           </button>
                         )}
                       </WorkflowStep>
@@ -2489,6 +2929,801 @@ export default function PanicModePage() {
                     </button>
                   </div>
                 )}
+            </div>
+          </div>
+        )}
+
+        {/* ====================================
+            SECURE FIX TEST PANEL
+        ==================================== */}
+
+        {fixTest && (
+          <div
+            className="
+              fixed
+              inset-0
+              z-[60]
+              overflow-y-auto
+              bg-slate-950/80
+              p-3
+              backdrop-blur-sm
+              sm:p-6
+            "
+          >
+            <div
+              className="
+                mx-auto
+                my-4
+                max-w-4xl
+                rounded-[28px]
+                bg-white
+                p-5
+                shadow-2xl
+                sm:p-8
+
+                dark:bg-slate-950
+              "
+            >
+              <div
+                className="
+                  flex
+                  flex-wrap
+                  items-start
+                  justify-between
+                  gap-4
+                "
+              >
+                <div>
+                  <p
+                    className="
+                      text-xs
+                      font-black
+                      uppercase
+                      tracking-wider
+                      text-rose-500
+                    "
+                  >
+                    🔒 Secure Panic Fix Test
+                  </p>
+
+                  <h2
+                    className="
+                      mt-2
+                      text-2xl
+                      font-black
+                      text-slate-950
+
+                      dark:text-white
+                    "
+                  >
+                    {fixTest.chapter ||
+                      activeChapter?.chapter}
+                  </h2>
+
+                  <p
+                    className="
+                      mt-1
+                      text-sm
+                      text-slate-500
+                    "
+                  >
+                    10 questions • 10 minutes •
+                    70% required
+                  </p>
+                </div>
+
+                <div
+                  className="
+                    flex
+                    items-center
+                    gap-3
+                  "
+                >
+                  {!fixTestResult && (
+                    <div
+                      className={`
+                        inline-flex
+                        items-center
+                        gap-2
+                        rounded-xl
+                        px-4
+                        py-2
+                        text-sm
+                        font-black
+
+                        ${
+                          fixTestSecondsLeft <= 60
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
+                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                        }
+                      `}
+                    >
+                      <Clock3
+                        className="h-4 w-4"
+                      />
+
+                      {String(
+                        fixTestMinutes
+                      ).padStart(2, '0')}
+                      :
+                      {String(
+                        fixTestSeconds
+                      ).padStart(2, '0')}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={
+                      closeFixTest
+                    }
+                    className="
+                      rounded-xl
+                      border
+                      border-slate-200
+                      p-2
+
+                      dark:border-slate-700
+                    "
+                  >
+                    <X
+                      className="h-5 w-5"
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {!fixTestResult ? (
+                <>
+                  <div
+                    className="
+                      mt-6
+                      flex
+                      items-center
+                      justify-between
+                      gap-3
+                    "
+                  >
+                    <p
+                      className="
+                        text-sm
+                        font-bold
+                        text-slate-600
+
+                        dark:text-slate-300
+                      "
+                    >
+                      Question{' '}
+                      {fixTestIndex + 1}
+                      {' / '}
+                      {fixTestQuestions.length}
+                    </p>
+
+                    <p
+                      className="
+                        text-sm
+                        font-black
+                        text-rose-600
+                      "
+                    >
+                      {fixTestAnsweredCount}{' '}
+                      answered
+                    </p>
+                  </div>
+
+                  <div
+                    className="
+                      mt-3
+                      h-2
+                      overflow-hidden
+                      rounded-full
+                      bg-slate-100
+
+                      dark:bg-slate-800
+                    "
+                  >
+                    <div
+                      className="
+                        h-full
+                        rounded-full
+                        bg-rose-600
+                        transition-all
+                      "
+                      style={{
+                        width: `${
+                          fixTestQuestions.length
+                            ? (
+                                fixTestAnsweredCount /
+                                fixTestQuestions.length
+                              ) * 100
+                            : 0
+                        }%`
+                      }}
+                    />
+                  </div>
+
+                  {currentFixQuestion && (
+                    <div
+                      className="
+                        mt-7
+                        rounded-[24px]
+                        border
+                        border-slate-200
+                        p-5
+                        sm:p-6
+
+                        dark:border-slate-800
+                      "
+                    >
+                      <div
+                        className="
+                          flex
+                          flex-wrap
+                          gap-2
+                        "
+                      >
+                        <span
+                          className="
+                            rounded-full
+                            bg-rose-50
+                            px-3
+                            py-1
+                            text-xs
+                            font-black
+                            text-rose-600
+
+                            dark:bg-rose-500/10
+                          "
+                        >
+                          {currentFixQuestion.difficulty}
+                        </span>
+
+                        <span
+                          className="
+                            rounded-full
+                            bg-slate-100
+                            px-3
+                            py-1
+                            text-xs
+                            font-bold
+                            text-slate-500
+
+                            dark:bg-slate-800
+                          "
+                        >
+                          {currentFixQuestion.chapter}
+                        </span>
+                      </div>
+
+                      <h3
+                        className="
+                          mt-5
+                          text-lg
+                          font-black
+                          leading-8
+                          text-slate-950
+                          sm:text-xl
+
+                          dark:text-white
+                        "
+                      >
+                        {currentFixQuestion.question}
+                      </h3>
+
+                      <div
+                        className="
+                          mt-6
+                          space-y-3
+                        "
+                      >
+                        {(
+                          currentFixQuestion.options ||
+                          []
+                        ).map(
+                          (
+                            option,
+                            optionIndex
+                          ) => {
+                            const selected =
+                              fixTestAnswers[
+                                currentFixQuestionId
+                              ] ===
+                              optionIndex;
+
+                            return (
+                              <button
+                                key={
+                                  optionIndex
+                                }
+                                type="button"
+                                onClick={() =>
+                                  selectFixTestAnswer(
+                                    optionIndex
+                                  )
+                                }
+                                className={`
+                                  flex
+                                  w-full
+                                  items-center
+                                  gap-3
+                                  rounded-2xl
+                                  border
+                                  p-4
+                                  text-left
+                                  text-sm
+                                  font-bold
+                                  transition
+
+                                  ${
+                                    selected
+                                      ? 'border-rose-500 bg-rose-50 text-rose-800 dark:bg-rose-500/10 dark:text-rose-300'
+                                      : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900'
+                                  }
+                                `}
+                              >
+                                <span
+                                  className="
+                                    flex
+                                    h-8
+                                    w-8
+                                    shrink-0
+                                    items-center
+                                    justify-center
+                                    rounded-full
+                                    border
+                                    text-xs
+                                    font-black
+                                  "
+                                >
+                                  {String.fromCharCode(
+                                    65 +
+                                    optionIndex
+                                  )}
+                                </span>
+
+                                <span>
+                                  {getOptionText(
+                                    option
+                                  )}
+                                </span>
+
+                                {selected && (
+                                  <Check
+                                    className="
+                                      ml-auto
+                                      h-5
+                                      w-5
+                                    "
+                                  />
+                                )}
+                              </button>
+                            );
+                          }
+                        )}
+                      </div>
+
+                      {fixTestMessage && (
+                        <p
+                          className="
+                            mt-4
+                            text-sm
+                            font-bold
+                            text-amber-600
+                          "
+                        >
+                          {fixTestMessage}
+                        </p>
+                      )}
+
+                      <div
+                        className="
+                          mt-6
+                          flex
+                          flex-col
+                          gap-3
+                          sm:flex-row
+                          sm:items-center
+                          sm:justify-between
+                        "
+                      >
+                        <button
+                          type="button"
+                          disabled={
+                            fixTestIndex === 0
+                          }
+                          onClick={() =>
+                            setFixTestIndex(
+                              (previous) =>
+                                Math.max(
+                                  0,
+                                  previous - 1
+                                )
+                            )
+                          }
+                          className="
+                            inline-flex
+                            items-center
+                            justify-center
+                            gap-2
+                            rounded-xl
+                            border
+                            border-slate-200
+                            px-4
+                            py-3
+                            text-sm
+                            font-black
+                            disabled:opacity-40
+
+                            dark:border-slate-700
+                          "
+                        >
+                          <ChevronLeft
+                            className="h-4 w-4"
+                          />
+
+                          Previous
+                        </button>
+
+                        {fixTestIndex <
+                        fixTestQuestions.length -
+                          1 ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFixTestIndex(
+                                (previous) =>
+                                  Math.min(
+                                    fixTestQuestions.length -
+                                      1,
+                                    previous + 1
+                                  )
+                              )
+                            }
+                            className="
+                              inline-flex
+                              items-center
+                              justify-center
+                              gap-2
+                              rounded-xl
+                              bg-rose-600
+                              px-5
+                              py-3
+                              text-sm
+                              font-black
+                              text-white
+                            "
+                          >
+                            Next Question
+
+                            <ChevronRight
+                              className="h-4 w-4"
+                            />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              submitFixTest(
+                                false
+                              )
+                            }
+                            disabled={
+                              submittingFixTest ||
+                              fixTestAnsweredCount <
+                                fixTestQuestions.length
+                            }
+                            className="
+                              inline-flex
+                              items-center
+                              justify-center
+                              gap-2
+                              rounded-xl
+                              bg-emerald-600
+                              px-5
+                              py-3
+                              text-sm
+                              font-black
+                              text-white
+                              disabled:cursor-not-allowed
+                              disabled:opacity-50
+                            "
+                          >
+                            {submittingFixTest ? (
+                              <Loader2
+                                className="
+                                  h-4
+                                  w-4
+                                  animate-spin
+                                "
+                              />
+                            ) : (
+                              <Target
+                                className="h-4 w-4"
+                              />
+                            )}
+
+                            Submit Fix Test
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div
+                  className="
+                    mt-7
+                    rounded-[24px]
+                    border
+                    border-slate-200
+                    p-6
+                    text-center
+
+                    dark:border-slate-800
+                  "
+                >
+                  {fixTestResult.passed ? (
+                    <CheckCircle2
+                      className="
+                        mx-auto
+                        h-12
+                        w-12
+                        text-emerald-500
+                      "
+                    />
+                  ) : (
+                    <XCircle
+                      className="
+                        mx-auto
+                        h-12
+                        w-12
+                        text-rose-500
+                      "
+                    />
+                  )}
+
+                  <p
+                    className="
+                      mt-4
+                      text-xs
+                      font-black
+                      uppercase
+                      tracking-wider
+                      text-slate-400
+                    "
+                  >
+                    Fix Test Result
+                  </p>
+
+                  <h3
+                    className="
+                      mt-2
+                      text-4xl
+                      font-black
+                      text-slate-950
+
+                      dark:text-white
+                    "
+                  >
+                    {Number(
+                      fixTestResult.percentage ||
+                      0
+                    )}
+                    %
+                  </h3>
+
+                  <p
+                    className={`
+                      mt-3
+                      text-base
+                      font-black
+
+                      ${
+                        fixTestResult.passed
+                          ? 'text-emerald-600'
+                          : 'text-rose-600'
+                      }
+                    `}
+                  >
+                    {fixTestResult.passed
+                      ? 'Weakness Fixed 🎯'
+                      : 'Needs More Work'}
+                  </p>
+
+                  <p
+                    className="
+                      mt-2
+                      text-sm
+                      text-slate-500
+                    "
+                  >
+                    {Number(
+                      fixTestResult.correctAnswers ||
+                      0
+                    )}
+                    /
+                    {Number(
+                      fixTestResult.totalQuestions ||
+                      fixTestQuestions.length
+                    )}{' '}
+                    correct. You need 70% or
+                    more to fix this chapter.
+                  </p>
+
+                  {Array.isArray(
+                    fixTestResult.review
+                  ) &&
+                    fixTestResult.review.length >
+                      0 && (
+                      <div
+                        className="
+                          mt-7
+                          space-y-4
+                          text-left
+                        "
+                      >
+                        {fixTestResult.review.map(
+                          (
+                            item,
+                            index
+                          ) => (
+                            <div
+                              key={
+                                item.questionId ||
+                                index
+                              }
+                              className={`
+                                rounded-2xl
+                                border
+                                p-4
+
+                                ${
+                                  item.isCorrect
+                                    ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'
+                                    : 'border-rose-200 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10'
+                                }
+                              `}
+                            >
+                              <p
+                                className="
+                                  text-sm
+                                  font-black
+                                  text-slate-950
+
+                                  dark:text-white
+                                "
+                              >
+                                {index + 1}.{' '}
+                                {item.question}
+                              </p>
+
+                              <p
+                                className="
+                                  mt-2
+                                  text-xs
+                                  font-bold
+                                  text-slate-600
+
+                                  dark:text-slate-300
+                                "
+                              >
+                                Your answer:{' '}
+                                {item.selectedOption ===
+                                null ||
+                                item.selectedOption ===
+                                  undefined
+                                  ? 'Not answered'
+                                  : String.fromCharCode(
+                                      65 +
+                                      Number(
+                                        item.selectedOption
+                                      )
+                                    )}
+                                {' • '}
+                                Correct:{' '}
+                                {String.fromCharCode(
+                                  65 +
+                                  Number(
+                                    item.correctAnswer
+                                  )
+                                )}
+                              </p>
+
+                              {item.explanation && (
+                                <p
+                                  className="
+                                    mt-3
+                                    text-sm
+                                    leading-6
+                                    text-slate-600
+
+                                    dark:text-slate-300
+                                  "
+                                >
+                                  {item.explanation}
+                                </p>
+                              )}
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )}
+
+                  <div
+                    className="
+                      mt-7
+                      flex
+                      flex-col
+                      items-center
+                      justify-center
+                      gap-3
+                      sm:flex-row
+                    "
+                  >
+                    <button
+                      type="button"
+                      onClick={
+                        closeFixTest
+                      }
+                      className="
+                        inline-flex
+                        items-center
+                        gap-2
+                        rounded-xl
+                        bg-slate-900
+                        px-5
+                        py-3
+                        text-sm
+                        font-black
+                        text-white
+
+                        dark:bg-white
+                        dark:text-slate-950
+                      "
+                    >
+                      Return to Panic Plan
+
+                      <ArrowRight
+                        className="h-4 w-4"
+                      />
+                    </button>
+
+                    {!fixTestResult.passed && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          closeFixTest();
+
+                          window.setTimeout(
+                            () => {
+                              startFixTest();
+                            },
+                            0
+                          );
+                        }}
+                        className="
+                          inline-flex
+                          items-center
+                          gap-2
+                          rounded-xl
+                          bg-rose-600
+                          px-5
+                          py-3
+                          text-sm
+                          font-black
+                          text-white
+                        "
+                      >
+                        <RotateCcw
+                          className="h-4 w-4"
+                        />
+
+                        Retry Fix Test
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
