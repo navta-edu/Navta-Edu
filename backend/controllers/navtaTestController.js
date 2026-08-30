@@ -708,140 +708,6 @@ exports.deleteQuestion = async (req, res) => {
 };
 
 // ============================================
-// NAVTA AI - ANALYSE IMPORT FILE
-// ============================================
-//
-// This endpoint analyses an uploaded PDF/DOCX/TXT file.
-//
-// At the current stage:
-// - PDF visual analysis is connected.
-// - DOCX/TXT adapters can be connected separately.
-// - This endpoint does NOT save questions to MongoDB.
-// - Admin reviews accepted questions first.
-//
-// ============================================
-
-exports.importQuestionsWithAI = async (req, res) => {
-  try {
-    const {
-      analyseNavtaImport,
-    } = require("../services/navtaAIImportService");
-
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Please upload a PDF, DOCX or TXT file.",
-      });
-    }
-
-    const {
-      subject = "",
-      exam = "",
-      classLevel = "",
-    } = req.body || {};
-
-    console.log(
-      `NAVTA AI import started: ${req.file.originalname}`
-    );
-
-    const result =
-      await analyseNavtaImport({
-        file: req.file,
-        subject,
-        exam,
-        classLevel,
-      });
-
-    console.log(
-      `NAVTA AI import completed: ${req.file.originalname}`,
-      result.summary
-    );
-
-    return res.status(200).json({
-      success: true,
-
-      message:
-        result.acceptedQuestions.length > 0
-          ? `NAVTA AI found ${result.acceptedQuestions.length} question(s) ready for review.`
-          : "NAVTA AI analysed the document, but no questions were accepted.",
-
-      acceptedQuestions:
-        result.acceptedQuestions || [],
-
-      droppedQuestions:
-        result.droppedQuestions || [],
-
-      summary:
-        result.summary || {
-          detected: 0,
-          accepted: 0,
-          dropped: 0,
-        },
-
-      documentInfo:
-        result.documentInfo || null,
-    });
-  } catch (error) {
-    console.error(
-      "NAVTA AI IMPORT ERROR:",
-      error
-    );
-
-    const message =
-      error?.message ||
-      "NAVTA AI could not analyse this file.";
-
-    if (
-      message.includes(
-        "OPENAI_API_KEY"
-      )
-    ) {
-      return res.status(503).json({
-        success: false,
-        message:
-          "NAVTA AI is not configured on the server.",
-      });
-    }
-
-    if (
-      message.includes(
-        "DOCX NAVTA AI import"
-      ) ||
-      message.includes(
-        "TXT NAVTA AI import"
-      )
-    ) {
-      return res.status(501).json({
-        success: false,
-        message,
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message,
-    });
-  }
-};
-
-// ============================================
-// NAVTA AI - CONFIRM IMPORT
-// ============================================
-//
-// Keep database confirmation disabled until the
-// analysis/review flow has been tested successfully.
-// ============================================
-
-exports.confirmAIImport = async (req, res) => {
-  return res.status(503).json({
-    success: false,
-    message:
-      "NAVTA AI question confirmation is temporarily disabled until import analysis testing is complete.",
-  });
-};
-
-// ============================================
 // GENERATE STANDARD STUDENT TEST
 // ============================================
 
@@ -2013,6 +1879,72 @@ exports.generateRevengeBattle = async (req, res) => {
         correct: 0,
         total: 0,
         percentage: 0,
+      },
+    };
+
+    // ========================================
+    // CALCULATE PREVIOUS PERFORMANCE
+    // ========================================
+
+    previousQuestions.forEach(
+      (question) => {
+        const id =
+          String(
+            question._id
+          );
+
+        const selectedAnswer =
+          answerMap.get(id);
+
+        const isCorrect =
+          Number.isInteger(
+            selectedAnswer
+          ) &&
+          selectedAnswer ===
+            Number(
+              question.correctAnswer
+            );
+
+        if (
+          chapterPerformance[
+            question.chapter
+          ]
+        ) {
+          chapterPerformance[
+            question.chapter
+          ].total += 1;
+
+          if (isCorrect) {
+            chapterPerformance[
+              question.chapter
+            ].correct += 1;
+          }
+        }
+
+        if (
+          difficultyPerformance[
+            question.difficulty
+          ]
+        ) {
+          difficultyPerformance[
+            question.difficulty
+          ].total += 1;
+
+          if (isCorrect) {
+            difficultyPerformance[
+              question.difficulty
+            ].correct += 1;
+          }
+        }
+      }
+    );
+
+    // ========================================
+    // CALCULATE PERCENTAGES
+    // ========================================
+
+    Object.values(
+      chapterPerformance
       },
     };
 
