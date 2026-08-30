@@ -78,6 +78,156 @@ const navtaQuestionSchema = new mongoose.Schema(
     },
 
     // =====================================================
+    // QUESTION DIAGRAM / IMAGE
+    // =====================================================
+    //
+    // Used for:
+    // - Physics diagrams
+    // - Circuit diagrams
+    // - Graphs
+    // - Maths geometry
+    // - Chemistry structures
+    // - Biology diagrams
+    // - Any image attached to the original question
+    //
+    // The actual image should be stored outside MongoDB.
+    // MongoDB stores only its URL/reference.
+    // =====================================================
+
+    questionImage: {
+      url: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+
+      publicId: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+
+      altText: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+
+      sourcePage: {
+        type: Number,
+        min: 1,
+        default: undefined,
+      },
+
+      width: {
+        type: Number,
+        min: 1,
+        default: undefined,
+      },
+
+      height: {
+        type: Number,
+        min: 1,
+        default: undefined,
+      },
+    },
+
+    // =====================================================
+    // MULTIPLE QUESTION IMAGES
+    // =====================================================
+    //
+    // Some questions can contain:
+    // - More than one diagram
+    // - A graph + table
+    // - Multiple figures
+    //
+    // questionImage remains the main image.
+    // questionImages allows extra images.
+    // =====================================================
+
+    questionImages: {
+      type: [
+        {
+          url: {
+            type: String,
+            trim: true,
+            required: true,
+          },
+
+          publicId: {
+            type: String,
+            trim: true,
+            default: "",
+          },
+
+          altText: {
+            type: String,
+            trim: true,
+            default: "",
+          },
+
+          sourcePage: {
+            type: Number,
+            min: 1,
+            default: undefined,
+          },
+
+          width: {
+            type: Number,
+            min: 1,
+            default: undefined,
+          },
+
+          height: {
+            type: Number,
+            min: 1,
+            default: undefined,
+          },
+        },
+      ],
+
+      default: [],
+    },
+
+    // =====================================================
+    // SOURCE DOCUMENT INFORMATION
+    // =====================================================
+    //
+    // Helps NAVTA AI remember where the question came from.
+    // Useful for debugging and re-processing imported papers.
+    // =====================================================
+
+    sourceDocument: {
+      fileName: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+
+      fileType: {
+        type: String,
+        enum: [
+          "",
+          "pdf",
+          "docx",
+          "txt",
+        ],
+        default: "",
+      },
+
+      pageNumber: {
+        type: Number,
+        min: 1,
+        default: undefined,
+      },
+
+      importedByAI: {
+        type: Boolean,
+        default: false,
+      },
+    },
+
+    // =====================================================
     // MCQ ONLY
     // =====================================================
 
@@ -88,8 +238,6 @@ const navtaQuestionSchema = new mongoose.Schema(
 
       validate: {
         validator: function (value) {
-          // Short and Long Answer questions
-          // do not need MCQ options.
           if (this.questionType !== "mcq") {
             return true;
           }
@@ -142,8 +290,6 @@ const navtaQuestionSchema = new mongoose.Schema(
       default: "",
     },
 
-    // Important concepts that the AI should look for
-    // in the student's answer.
     keyPoints: {
       type: [String],
 
@@ -166,7 +312,6 @@ const navtaQuestionSchema = new mongoose.Schema(
       },
     },
 
-    // Maximum marks available for written answers.
     maxMarks: {
       type: Number,
 
@@ -188,8 +333,6 @@ const navtaQuestionSchema = new mongoose.Schema(
       },
     },
 
-    // Optional instructions that can later be given
-    // to the AI evaluator.
     evaluationInstructions: {
       type: String,
       trim: true,
@@ -246,6 +389,37 @@ navtaQuestionSchema.pre(
     }
 
     // ---------------------------------------------
+    // CLEAN MAIN QUESTION IMAGE
+    // ---------------------------------------------
+
+    if (
+      this.questionImage &&
+      !this.questionImage.url
+    ) {
+      this.questionImage = {
+        url: "",
+        publicId: "",
+        altText: "",
+      };
+    }
+
+    // ---------------------------------------------
+    // CLEAN EXTRA QUESTION IMAGES
+    // ---------------------------------------------
+
+    if (
+      Array.isArray(this.questionImages)
+    ) {
+      this.questionImages =
+        this.questionImages.filter(
+          (image) =>
+            image &&
+            typeof image.url === "string" &&
+            image.url.trim()
+        );
+    }
+
+    // ---------------------------------------------
     // MCQ
     // ---------------------------------------------
 
@@ -268,7 +442,6 @@ navtaQuestionSchema.pre(
 
     // ---------------------------------------------
     // SHORT / LONG
-    // Only available for Boards
     // ---------------------------------------------
 
     if (
@@ -283,7 +456,6 @@ navtaQuestionSchema.pre(
         );
       }
 
-      // Written questions do not use MCQ fields.
       this.options = [];
       this.correctAnswer = undefined;
 
@@ -313,7 +485,6 @@ navtaQuestionSchema.pre(
 
 // =====================================================
 // INDEXES
-// Faster question filtering when generating tests
 // =====================================================
 
 navtaQuestionSchema.index({
@@ -326,11 +497,18 @@ navtaQuestionSchema.index({
   isActive: 1,
 });
 
+navtaQuestionSchema.index({
+  "sourceDocument.importedByAI": 1,
+  createdAt: -1,
+});
+
 // =====================================================
 // EXPORT
 // =====================================================
 
-module.exports = mongoose.model(
-  "NavtaQuestion",
-  navtaQuestionSchema
-);
+module.exports =
+  mongoose.models.NavtaQuestion ||
+  mongoose.model(
+    "NavtaQuestion",
+    navtaQuestionSchema
+  );
