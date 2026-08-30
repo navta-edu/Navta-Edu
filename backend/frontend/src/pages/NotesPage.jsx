@@ -363,6 +363,13 @@ export default function NotesPage() {
   const panicChapter =
     panicState?.chapter || "";
 
+  const panicClassLevel =
+    CLASSES.includes(
+      panicState?.classLevel
+    )
+      ? panicState.classLevel
+      : "";
+
   const panicExam =
     normalizeExamName(
       panicState?.exam || ""
@@ -448,11 +455,16 @@ export default function NotesPage() {
           return true;
         }
 
+        const mathAliases =
+          new Set([
+            "math",
+            "maths",
+            "mathematics",
+          ]);
+
         return (
-          (a === "mathematics" &&
-            b === "maths") ||
-          (a === "maths" &&
-            b === "mathematics")
+          mathAliases.has(a) &&
+          mathAliases.has(b)
         );
       });
 
@@ -464,6 +476,7 @@ export default function NotesPage() {
       matchingSubject.name;
 
     const inferredClass =
+      panicClassLevel ||
       findClassForChapter(
         subjectName,
         panicChapter
@@ -508,6 +521,7 @@ export default function NotesPage() {
     panicState,
     panicSubject,
     panicChapter,
+    panicClassLevel,
     panicExam,
   ]);
 
@@ -941,7 +955,11 @@ export default function NotesPage() {
 
               <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white break-words">
                 {panicChapter
-                  ? `Revise: ${panicChapter}`
+                  ? `Revise: ${panicChapter}${
+                      panicClassLevel
+                        ? ` • ${panicClassLevel}`
+                        : ""
+                    }`
                   : "Revise your selected weak chapter"}
               </p>
 
@@ -1469,7 +1487,11 @@ export default function NotesPage() {
                             state={{
                               fromNotes: true,
                               panicChapterId,
+                              exam:
+                                panicState?.exam || "",
                               subject: panicSubject,
+                              classLevel:
+                                panicClassLevel,
                               chapter: panicChapter,
                             }}
                             className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition-colors hover:bg-emerald-700"
