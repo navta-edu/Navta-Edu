@@ -10,6 +10,7 @@ const { createCanvas } =
 // CommonJS backend.
 // =====================================================
 
+
 const loadPdfJs = async () => {
   const pdfjsLib =
     await import(
