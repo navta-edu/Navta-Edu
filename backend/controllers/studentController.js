@@ -1410,460 +1410,448 @@ exports.getResultDetail = async (
 // @desc    Get student performance analytics
 // @route   GET /api/student/analytics
 // @access  Private
-exports.getAnalytics = async (
-  req,
-  res
-) => {
+// @desc    Get NAVTA TEST analytics
+// @route   GET /api/student/analytics
+// @access  Private
+exports.getAnalytics = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    /*
-    |--------------------------------------------------------------------------
-    | Get all student results
-    |--------------------------------------------------------------------------
-    */
+    const results = await Result.find({
+      user: userId,
+      testType: {
+        $in: ['standard', 'boss', 'revenge']
+      }
+    })
+      .sort({ createdAt: 1 })
+      .lean();
 
-    const results =
-      await Result.find({
-        user: userId
-      })
-        .populate({
-          path: 'test',
+    // ============================================
+    // EMPTY STATE
+    // ============================================
 
-          populate: {
-            path: 'subject',
-            select: 'name'
-          }
-        })
-        .sort('createdAt');
-
-    /*
-    |--------------------------------------------------------------------------
-    | Subject performance
-    |--------------------------------------------------------------------------
-    */
-
-    const subjectStats = {};
-
-    results.forEach(
-      (result) => {
-        if (
-          !result.test ||
-          !result.test.subject
-        ) {
-          return;
-        }
-
-        const subName =
-          result.test.subject.name;
-
-        if (
-          !subjectStats[subName]
-        ) {
-          subjectStats[
-            subName
-          ] = {
-            totalScore: 0,
+    if (!results.length) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          summary: {
+            testsCompleted: 0,
+            averageScore: 0,
+            accuracy: 0,
+            bestScore: 0,
             totalQuestions: 0,
-            correctAnswers: 0,
-            testCount: 0,
-            passedCount: 0
-          };
+            correct: 0,
+            wrong: 0,
+            skipped: 0
+          },
+          performanceTrend: [],
+          subjectPerformance: [],
+          chapterPerformance: [],
+          recentTests: []
         }
-
-        subjectStats[
-          subName
-        ].testCount += 1;
-
-        subjectStats[
-          subName
-        ].totalQuestions +=
-          result.totalQuestions;
-
-        subjectStats[
-          subName
-        ].correctAnswers +=
-          result.correctAnswers;
-
-        if (result.isPassed) {
-          subjectStats[
-            subName
-          ].passedCount += 1;
-        }
-      }
-    );
-
-    /*
-    |--------------------------------------------------------------------------
-    | Parse subject statistics
-    |--------------------------------------------------------------------------
-    */
-
-    const parsedStats =
-      Object.keys(
-        subjectStats
-      ).map((name) => {
-        const stats =
-          subjectStats[name];
-
-        const avgPercentage =
-          stats.totalQuestions > 0
-            ? Math.round(
-                (
-                  stats.correctAnswers /
-                  stats.totalQuestions
-                ) * 100
-              )
-            : 0;
-
-        return {
-          subject: name,
-
-          avgPercentage,
-
-          testCount:
-            stats.testCount,
-
-          passedCount:
-            stats.passedCount,
-
-          failedCount:
-            stats.testCount -
-            stats.passedCount,
-
-          strength:
-            avgPercentage >= 75
-              ? 'Strong'
-              : avgPercentage >= 45
-                ? 'Average'
-                : 'Needs Focus'
-        };
       });
-
-    /*
-    |--------------------------------------------------------------------------
-    | DAILY Performance Overview
-    |--------------------------------------------------------------------------
-    |
-    | Example:
-    |
-    | 28 Aug:
-    |
-    | Test 1 = 70%
-    | Test 2 = 80%
-    | Test 3 = 90%
-    | Test 4 = 85%
-    | Test 5 = 75%
-    |
-    | Daily graph point = 80%
-    |
-    */
-
-    const dailyMap = {};
-
-    results.forEach(
-      (result) => {
-        const parts =
-          getDatePartsInTimeZone(
-            result.createdAt
-          );
-
-        if (
-          !dailyMap[parts.key]
-        ) {
-          dailyMap[
-            parts.key
-          ] = {
-            key: parts.key,
-
-            representativeDate:
-              result.createdAt,
-
-            totalPercentage: 0,
-
-            testCount: 0,
-
-            highestPercentage: 0,
-
-            lowestPercentage: 100
-          };
-        }
-
-        const percentage =
-          Number(
-            result.percentage
-          ) || 0;
-
-        const day =
-          dailyMap[
-            parts.key
-          ];
-
-        day.totalPercentage +=
-          percentage;
-
-        day.testCount += 1;
-
-        day.highestPercentage =
-          Math.max(
-            day.highestPercentage,
-            percentage
-          );
-
-        day.lowestPercentage =
-          Math.min(
-            day.lowestPercentage,
-            percentage
-          );
-      }
-    );
-
-    /*
-    |--------------------------------------------------------------------------
-    | Convert grouped dates to graph array
-    |--------------------------------------------------------------------------
-    */
-
-    const progression =
-      Object.values(
-        dailyMap
-      )
-        .sort(
-          (a, b) =>
-            a.key.localeCompare(
-              b.key
-            )
-        )
-
-        .map((day) => {
-          const averagePercentage =
-            Math.round(
-              day.totalPercentage /
-                day.testCount
-            );
-
-          return {
-            /*
-            |--------------------------------------------------------------------------
-            | Machine sortable date
-            |--------------------------------------------------------------------------
-            */
-
-            dateKey:
-              day.key,
-
-            /*
-            |--------------------------------------------------------------------------
-            | Short date for x-axis
-            |--------------------------------------------------------------------------
-            |
-            | Example:
-            | 28 Aug
-            |
-            */
-
-            date:
-              formatGraphDate(
-                day.representativeDate
-              ),
-
-            /*
-            |--------------------------------------------------------------------------
-            | Full tooltip date
-            |--------------------------------------------------------------------------
-            |
-            | Example:
-            | 28 Aug 2026
-            |
-            */
-
-            fullDate:
-              formatFullGraphDate(
-                day.representativeDate
-              ),
-
-            /*
-            |--------------------------------------------------------------------------
-            | Keep "score" for compatibility with existing graph
-            |--------------------------------------------------------------------------
-            */
-
-            score:
-              averagePercentage,
-
-            /*
-            |--------------------------------------------------------------------------
-            | New explicit field
-            |--------------------------------------------------------------------------
-            */
-
-            averagePercentage,
-
-            /*
-            |--------------------------------------------------------------------------
-            | Number of tests taken that day
-            |--------------------------------------------------------------------------
-            */
-
-            testCount:
-              day.testCount,
-
-            /*
-            |--------------------------------------------------------------------------
-            | Extra analytics
-            |--------------------------------------------------------------------------
-            */
-
-            highestPercentage:
-              day.highestPercentage,
-
-            lowestPercentage:
-              day.lowestPercentage
-          };
-        });
-
-    /*
-    |--------------------------------------------------------------------------
-    | Strength / weakness recommendations
-    |--------------------------------------------------------------------------
-    */
-
-    const strongAreas =
-      parsedStats
-        .filter(
-          (s) =>
-            s.strength ===
-            'Strong'
-        )
-        .map(
-          (s) =>
-            s.subject
-        );
-
-    const weakAreas =
-      parsedStats
-        .filter(
-          (s) =>
-            s.strength ===
-            'Needs Focus'
-        )
-        .map(
-          (s) =>
-            s.subject
-        );
-
-    const suggestions = [];
-
-    if (
-      weakAreas.length > 0
-    ) {
-      weakAreas.forEach(
-        (area) => {
-          suggestions.push(
-            `Spend an extra 30 minutes reading chapter notes for ${area}.`
-          );
-
-          suggestions.push(
-            `Attempt 5 more practice quizzes in ${area} to lift score levels.`
-          );
-        }
-      );
-    } else if (
-      parsedStats.length === 0
-    ) {
-      suggestions.push(
-        'Complete your first chapter quiz to generate tailored study recommendations.'
-      );
-    } else {
-      suggestions.push(
-        'Excellent work! Try taking Mock Tests under time constraints to test speed.'
-      );
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Current coin balance
-    |--------------------------------------------------------------------------
-    */
+    // ============================================
+    // OVERALL SUMMARY
+    // ============================================
 
-    const student =
-      await Student.findOne({
-        user: userId
-      }).select(
-        [
-          'coins',
-          'xp',
-          'level',
-          'currentStreak',
-          'longestStreak',
-          'lastNavtaTestDate',
-          'streakRecoveryActive',
-          'streakRecoveryRequired',
-          'streakRecoveryCompleted',
-          'streakLastUpdatedAt'
-        ].join(' ')
-      );
+    const testsCompleted =
+      results.length;
 
-    /*
-    |--------------------------------------------------------------------------
-    | Analytics response
-    |--------------------------------------------------------------------------
-    */
+    let totalPercentage = 0;
+    let bestScore = 0;
+
+    let totalQuestions = 0;
+    let totalCorrect = 0;
+    let totalWrong = 0;
+    let totalSkipped = 0;
+
+    results.forEach((result) => {
+      const percentage =
+        Number(result.percentage) || 0;
+
+      const questionCount =
+        Number(result.totalQuestions) || 0;
+
+      const correctCount =
+        Number(result.correctAnswers) || 0;
+
+      const answeredCount =
+        Array.isArray(result.answers)
+          ? result.answers.filter((answer) => {
+              return (
+                answer?.selectedOption !== undefined &&
+                answer?.selectedOption !== null
+              );
+            }).length
+          : questionCount;
+
+      const skippedCount =
+        Math.max(
+          0,
+          questionCount - answeredCount
+        );
+
+      const wrongCount =
+        Math.max(
+          0,
+          answeredCount - correctCount
+        );
+
+      totalPercentage += percentage;
+
+      bestScore =
+        Math.max(
+          bestScore,
+          percentage
+        );
+
+      totalQuestions += questionCount;
+      totalCorrect += correctCount;
+      totalWrong += wrongCount;
+      totalSkipped += skippedCount;
+    });
+
+    const averageScore =
+      testsCompleted > 0
+        ? Math.round(
+            totalPercentage /
+            testsCompleted
+          )
+        : 0;
+
+    const accuracy =
+      totalQuestions > 0
+        ? Math.round(
+            (
+              totalCorrect /
+              totalQuestions
+            ) * 100
+          )
+        : 0;
+
+    // ============================================
+    // PERFORMANCE TREND
+    // ============================================
+
+    const performanceTrend =
+      results.map((result, index) => ({
+        testNumber:
+          index + 1,
+
+        date:
+          result.createdAt,
+
+        score:
+          Number(
+            result.percentage
+          ) || 0,
+
+        testType:
+          result.testType ||
+          'standard',
+
+        subject:
+          result.subject ||
+          'Unknown'
+      }));
+
+    // ============================================
+    // SUBJECT PERFORMANCE
+    // ============================================
+
+    const subjectMap = {};
+
+    results.forEach((result) => {
+      const subject =
+        String(
+          result.subject ||
+          ''
+        ).trim();
+
+      if (!subject) {
+        return;
+      }
+
+      if (!subjectMap[subject]) {
+        subjectMap[subject] = {
+          subject,
+          tests: 0,
+          totalPercentage: 0,
+          totalQuestions: 0,
+          correctAnswers: 0
+        };
+      }
+
+      subjectMap[subject].tests += 1;
+
+      subjectMap[subject]
+        .totalPercentage +=
+        Number(
+          result.percentage
+        ) || 0;
+
+      subjectMap[subject]
+        .totalQuestions +=
+        Number(
+          result.totalQuestions
+        ) || 0;
+
+      subjectMap[subject]
+        .correctAnswers +=
+        Number(
+          result.correctAnswers
+        ) || 0;
+    });
+
+    const subjectPerformance =
+      Object.values(
+        subjectMap
+      ).map((item) => ({
+        subject:
+          item.subject,
+
+        tests:
+          item.tests,
+
+        averageScore:
+          item.tests > 0
+            ? Math.round(
+                item.totalPercentage /
+                item.tests
+              )
+            : 0,
+
+        accuracy:
+          item.totalQuestions > 0
+            ? Math.round(
+                (
+                  item.correctAnswers /
+                  item.totalQuestions
+                ) * 100
+              )
+            : 0
+      }));
+
+    // ============================================
+    // CHAPTER PERFORMANCE
+    // STANDARD TESTS ONLY
+    // ============================================
+
+    const chapterMap = {};
+
+    results.forEach((result) => {
+      if (
+        result.testType !==
+        'standard'
+      ) {
+        return;
+      }
+
+      const subject =
+        String(
+          result.subject ||
+          ''
+        ).trim();
+
+      const classLevel =
+        String(
+          result.classLevel ||
+          ''
+        ).trim();
+
+      const chapter =
+        String(
+          result.chapter ||
+          ''
+        ).trim();
+
+      if (
+        !subject ||
+        !chapter
+      ) {
+        return;
+      }
+
+      const key =
+        `${subject}|${classLevel}|${chapter}`;
+
+      if (!chapterMap[key]) {
+        chapterMap[key] = {
+          subject,
+          classLevel,
+          chapter,
+          attempts: 0,
+          totalPercentage: 0,
+          totalQuestions: 0,
+          correctAnswers: 0
+        };
+      }
+
+      chapterMap[key].attempts += 1;
+
+      chapterMap[key]
+        .totalPercentage +=
+        Number(
+          result.percentage
+        ) || 0;
+
+      chapterMap[key]
+        .totalQuestions +=
+        Number(
+          result.totalQuestions
+        ) || 0;
+
+      chapterMap[key]
+        .correctAnswers +=
+        Number(
+          result.correctAnswers
+        ) || 0;
+    });
+
+    const chapterPerformance =
+      Object.values(
+        chapterMap
+      ).map((item) => ({
+        subject:
+          item.subject,
+
+        classLevel:
+          item.classLevel,
+
+        chapter:
+          item.chapter,
+
+        attempts:
+          item.attempts,
+
+        averageScore:
+          item.attempts > 0
+            ? Math.round(
+                item.totalPercentage /
+                item.attempts
+              )
+            : 0,
+
+        accuracy:
+          item.totalQuestions > 0
+            ? Math.round(
+                (
+                  item.correctAnswers /
+                  item.totalQuestions
+                ) * 100
+              )
+            : 0
+      }));
+
+    // ============================================
+    // RECENT TESTS
+    // ============================================
+
+    const recentTests =
+      [...results]
+        .reverse()
+        .slice(0, 10)
+        .map((result) => ({
+          id:
+            result._id,
+
+          subject:
+            result.subject ||
+            'Unknown',
+
+          exam:
+            result.exam ||
+            '',
+
+          classLevel:
+            result.classLevel ||
+            '',
+
+          chapter:
+            result.chapter ||
+            '',
+
+          chapters:
+            Array.isArray(
+              result.chapters
+            )
+              ? result.chapters
+              : [],
+
+          testType:
+            result.testType ||
+            'standard',
+
+          percentage:
+            Number(
+              result.percentage
+            ) || 0,
+
+          correctAnswers:
+            Number(
+              result.correctAnswers
+            ) || 0,
+
+          totalQuestions:
+            Number(
+              result.totalQuestions
+            ) || 0,
+
+          timeTaken:
+            Number(
+              result.timeTaken
+            ) || 0,
+
+          createdAt:
+            result.createdAt
+        }));
+
+    // ============================================
+    // RESPONSE
+    // ============================================
 
     return res.status(200).json({
       success: true,
 
-      subjectStats:
-        parsedStats,
+      data: {
+        summary: {
+          testsCompleted,
+          averageScore,
+          accuracy,
+          bestScore,
+          totalQuestions,
+          correct:
+            totalCorrect,
+          wrong:
+            totalWrong,
+          skipped:
+            totalSkipped
+        },
 
-      /*
-      |--------------------------------------------------------------------------
-      | Performance Overview graph data
-      |--------------------------------------------------------------------------
-      */
+        performanceTrend,
 
-      progression,
+        subjectPerformance,
 
-      /*
-      |--------------------------------------------------------------------------
-      | Dashboard Coin Balance
-      |--------------------------------------------------------------------------
-      */
+        chapterPerformance,
 
-      coinBalance:
-        student
-          ? student.coins
-          : 0,
-
-      /*
-      |--------------------------------------------------------------------------
-      | NAVTA TEST streak
-      |--------------------------------------------------------------------------
-      */
-
-      streak:
-        getNavtaStreakSnapshot(
-          student
-        ),
-
-      summary: {
-        strong:
-          strongAreas,
-
-        weak:
-          weakAreas,
-
-        suggestions
+        recentTests
       }
     });
-  } catch (err) {
+  } catch (error) {
+    console.error(
+      'GET ANALYTICS ERROR:',
+      error
+    );
+
     return res.status(500).json({
       success: false,
-      message: err.message
+      message:
+        'Unable to load NAVTA TEST analytics.'
     });
   }
 };
-
 
 // ============================================================================
 // REDEEM REWARD
