@@ -1,25 +1,62 @@
 // =====================================================
 // NAVTA AI QUESTION SERVICE
-// Google AI Studio / Gemini
+// Ollama + Qwen2.5-VL
+// =====================================================
+//
+// Local AI model:
+// qwen2.5vl:3b
+//
+// Default Ollama server:
+// http://127.0.0.1:11434
+//
+// No Gemini API is used in this file.
 // =====================================================
 
-const GEMINI_API_KEY =
-  process.env.GEMINI_API_KEY;
+// =====================================================
+// CONFIG
+// =====================================================
 
-const GEMINI_MODEL =
-  process.env.GEMINI_MODEL ||
-  "gemini-2.5-flash";
+const OLLAMA_BASE_URL =
+  String(
+    process.env.OLLAMA_BASE_URL ||
+      "http://127.0.0.1:11434"
+  )
+    .trim()
+    .replace(/\/+$/, "");
+
+const OLLAMA_MODEL =
+  String(
+    process.env.OLLAMA_MODEL ||
+      "qwen2.5vl:3b"
+  ).trim();
+
+const OLLAMA_TIMEOUT_MS =
+  Math.max(
+    30000,
+    Number(
+      process.env.OLLAMA_TIMEOUT_MS ||
+        180000
+    ) || 180000
+  );
 
 // =====================================================
 // HELPERS
 // =====================================================
 
-const cleanString = (value = "") => {
-  return String(value || "").trim();
+const cleanString = (
+  value = ""
+) => {
+  return String(
+    value || ""
+  ).trim();
 };
 
-const safeArray = (value) => {
-  return Array.isArray(value)
+const safeArray = (
+  value
+) => {
+  return Array.isArray(
+    value
+  )
     ? value
     : [];
 };
@@ -28,46 +65,84 @@ const normalizeQuestionType = (
   value
 ) => {
   const type =
-    cleanString(value).toLowerCase();
+    cleanString(
+      value
+    ).toLowerCase();
 
-  if (type === "short") {
+  if (
+    type === "short"
+  ) {
     return "short";
   }
 
-  if (type === "long") {
+  if (
+    type === "long"
+  ) {
     return "long";
   }
 
-  return "mcq";
+  if (
+    type === "mcq"
+  ) {
+    return "mcq";
+  }
+
+  return "";
 };
 
 const normalizeDifficulty = (
   value
 ) => {
   const difficulty =
-    cleanString(value).toLowerCase();
+    cleanString(
+      value
+    ).toLowerCase();
 
-  if (difficulty === "easy") {
+  if (
+    difficulty === "easy"
+  ) {
     return "Easy";
   }
 
-  if (difficulty === "hard") {
+  if (
+    difficulty === "medium"
+  ) {
+    return "Medium";
+  }
+
+  if (
+    difficulty === "hard"
+  ) {
     return "Hard";
   }
 
-  return "Medium";
+  return "";
 };
 
 const imageBufferToBase64 = (
   buffer
 ) => {
-  if (!Buffer.isBuffer(buffer)) {
+  if (
+    !Buffer.isBuffer(
+      buffer
+    )
+  ) {
     throw new Error(
       "A valid page image buffer is required."
     );
   }
 
-  return buffer.toString("base64");
+  if (
+    buffer.length === 0
+  ) {
+    throw new Error(
+      "The page image buffer is empty."
+    );
+  }
+
+  return buffer.toString(
+    "base64"
+  );
 };
 
 // =====================================================
@@ -77,7 +152,7 @@ const imageBufferToBase64 = (
 const SYSTEM_PROMPT = `
 You are NAVTA AI, an educational question-paper analysis system.
 
-Your job is to analyse a rendered question-paper page and detect every complete academic question visible on the page.
+Your job is to analyse a rendered question-paper PAGE IMAGE and detect every complete academic question visible on that page.
 
 NAVTA supports:
 
@@ -108,44 +183,64 @@ Question types:
 
 IMPORTANT RULES:
 
-1. Preserve the original question wording as accurately as possible.
+1. The PAGE IMAGE is the primary source.
 
-2. Detect every complete question visible on the supplied page.
+2. Preserve the original question wording as accurately as possible.
 
-3. For MCQ questions:
-   - Return exactly four options whenever four options are visible.
-   - correctAnswer must be an integer:
-     0 = A
-     1 = B
-     2 = C
-     3 = D
-   - If the correct answer cannot be determined reliably, return null.
+3. Detect every COMPLETE academic question visible on the supplied page.
 
-4. NEET and JEE questions must be MCQ.
+4. Do not invent questions.
 
-5. Boards questions may be:
-   - mcq
-   - short
-   - long
+5. If a question starts on another page or continues onto another page and cannot be understood completely, mark it for dropping.
 
-6. Determine:
-   - subject
-   - exam
-   - classLevel
-   - chapter
-   - difficulty
-   - questionType
+6. For MCQ questions:
 
-7. Provide an educational explanation when it can be determined reliably.
+- Return exactly four options when four options are visible.
 
-8. For Boards written questions, provide:
-   - modelAnswer
-   - keyPoints
-   - maxMarks
+- Preserve mathematical expressions as readable text.
 
-9. DIAGRAMS AND VISUALS ARE VERY IMPORTANT.
+- correctAnswer must be:
+
+0 = A
+1 = B
+2 = C
+3 = D
+
+- If the correct answer cannot be determined reliably, return null.
+
+7. NEET and JEE questions must use questionType "mcq".
+
+8. Boards questions may use:
+
+- mcq
+- short
+- long
+
+9. Determine as accurately as possible:
+
+- subject
+- exam
+- classLevel
+- chapter
+- difficulty
+- questionType
+
+10. If administrator hints are supplied and they clearly match the page, use them.
+
+11. Do not blindly use hints if they clearly contradict the page.
+
+12. Provide an educational explanation when it can be determined reliably.
+
+13. For Boards written questions provide when possible:
+
+- modelAnswer
+- keyPoints
+- maxMarks
+
+14. DIAGRAMS AND VISUALS ARE VERY IMPORTANT.
 
 A visual includes:
+
 - circuit
 - graph
 - geometry figure
@@ -159,45 +254,56 @@ A visual includes:
 - labelled figure
 - mathematical figure
 
-If the question depends on a visual:
+If a question depends on a visual:
 
 hasVisual must be true.
 
 Return visualBoundingBox using NORMALIZED page coordinates:
 
 {
-  "x": 0.0 to 1.0,
-  "y": 0.0 to 1.0,
-  "width": 0.0 to 1.0,
-  "height": 0.0 to 1.0
+  "x": 0.0,
+  "y": 0.0,
+  "width": 0.0,
+  "height": 0.0
 }
 
-The bounding box should contain ONLY the required visual as tightly as practical.
+Each coordinate must be between 0 and 1.
 
-Do NOT include the entire question text inside the visual box unless it is actually part of the diagram.
+x is the horizontal starting position from the LEFT edge.
 
-10. If no visual exists:
+y is the vertical starting position from the TOP edge.
+
+width is the visual width divided by total page width.
+
+height is the visual height divided by total page height.
+
+The visualBoundingBox must contain the REQUIRED diagram, graph, circuit, figure, table or other visual as tightly as practical.
+
+Do not include the complete page.
+
+Do not include the entire question text unless that text is part of the required figure.
+
+15. If no visual is required:
 
 hasVisual = false
 visualDescription = ""
 visualBoundingBox = null
 
-11. Do not invent questions that are not visible.
-
-12. If a question is incomplete, unreadable, or cannot be classified safely:
+16. If a question is incomplete, unreadable, uncertain, or cannot safely be classified:
 
 drop = true
 
-and explain why in dropReason.
+and provide a clear dropReason.
 
-13. If the supplied subject/exam/class hints are clearly applicable, use them.
+17. Never make up an answer simply to make a question valid.
 
-14. Return ONLY valid JSON.
+18. Return ONLY valid JSON.
 
-Do not return markdown.
-Do not use code fences.
+19. Do not return Markdown.
 
-The response must have this exact top-level structure:
+20. Do not use code fences.
+
+The exact top-level response structure is:
 
 {
   "questions": []
@@ -216,22 +322,26 @@ const buildPagePrompt = ({
   const subjectHint =
     cleanString(
       hints.subject
-    ) || "Not provided";
+    ) ||
+    "Not provided";
 
   const examHint =
     cleanString(
       hints.exam
-    ) || "Not provided";
+    ) ||
+    "Not provided";
 
   const classHint =
     cleanString(
       hints.classLevel
-    ) || "Not provided";
+    ) ||
+    "Not provided";
 
   return `
 Analyse this NAVTA question-paper page.
 
-PAGE:
+PAGE NUMBER:
+
 ${pageNumber}
 
 ADMIN HINTS:
@@ -245,14 +355,22 @@ ${examHint}
 Class:
 ${classHint}
 
-Extracted document text is included only as supporting context.
-The IMAGE is the primary source for determining what appears on this page.
+The PAGE IMAGE supplied with this message is the PRIMARY SOURCE.
+
+Extracted document text below is SUPPORTING CONTEXT only.
+
+Do not extract questions from the text context unless they are actually visible on the supplied page image.
 
 TEXT CONTEXT:
 
-${String(text || "").slice(0, 12000)}
+${String(
+  text || ""
+).slice(
+  0,
+  12000
+)}
 
-For every detected question return:
+For EVERY detected question return an object using this exact structure:
 
 {
   "questionNumber": "",
@@ -276,38 +394,44 @@ For every detected question return:
   "dropReason": ""
 }
 
-Remember:
-
-visualBoundingBox uses normalized coordinates from 0 to 1.
-
-Return JSON only:
+Return:
 
 {
   "questions": [...]
 }
+
+Return JSON only.
 `;
 };
 
 // =====================================================
-// CLEAN GEMINI JSON
+// CLEAN MODEL JSON
 // =====================================================
 
 const cleanJsonResponse = (
   value
 ) => {
   let text =
-    cleanString(value);
-
-  if (text.startsWith("```")) {
-    text = text.replace(
-      /^```(?:json)?\s*/i,
-      ""
+    cleanString(
+      value
     );
 
-    text = text.replace(
-      /\s*```$/,
-      ""
-    );
+  if (
+    text.startsWith(
+      "```"
+    )
+  ) {
+    text =
+      text.replace(
+        /^```(?:json)?\s*/i,
+        ""
+      );
+
+    text =
+      text.replace(
+        /\s*```$/,
+        ""
+      );
   }
 
   return text.trim();
@@ -322,23 +446,45 @@ const normalizeVisualBoundingBox = (
 ) => {
   if (
     !value ||
-    typeof value !== "object"
+    typeof value !==
+      "object"
   ) {
     return null;
   }
 
-  const x = Number(value.x);
-  const y = Number(value.y);
+  const x =
+    Number(
+      value.x
+    );
+
+  const y =
+    Number(
+      value.y
+    );
+
   const width =
-    Number(value.width);
+    Number(
+      value.width
+    );
+
   const height =
-    Number(value.height);
+    Number(
+      value.height
+    );
 
   if (
-    !Number.isFinite(x) ||
-    !Number.isFinite(y) ||
-    !Number.isFinite(width) ||
-    !Number.isFinite(height)
+    !Number.isFinite(
+      x
+    ) ||
+    !Number.isFinite(
+      y
+    ) ||
+    !Number.isFinite(
+      width
+    ) ||
+    !Number.isFinite(
+      height
+    )
   ) {
     return null;
   }
@@ -353,42 +499,66 @@ const normalizeVisualBoundingBox = (
   const safeX =
     Math.min(
       1,
-      Math.max(0, x)
+      Math.max(
+        0,
+        x
+      )
     );
 
   const safeY =
     Math.min(
       1,
-      Math.max(0, y)
+      Math.max(
+        0,
+        y
+      )
     );
 
+  const safeWidth =
+    Math.min(
+      Math.max(
+        0,
+        1 -
+          safeX
+      ),
+      Math.max(
+        0,
+        width
+      )
+    );
+
+  const safeHeight =
+    Math.min(
+      Math.max(
+        0,
+        1 -
+          safeY
+      ),
+      Math.max(
+        0,
+        height
+      )
+    );
+
+  if (
+    safeWidth <= 0 ||
+    safeHeight <= 0
+  ) {
+    return null;
+  }
+
   return {
-    x: safeX,
-    y: safeY,
+    x:
+      safeX,
+
+    y:
+      safeY,
 
     width:
-      Math.min(
-        Math.max(
-          0,
-          1 - safeX
-        ),
-        Math.max(
-          0,
-          width
-        )
-      ),
+      safeWidth,
 
     height:
-      Math.min(
-        Math.max(
-          0,
-          1 - safeY
-        ),
-        Math.max(
-          0,
-          height
-        )
-      ),
+      safeHeight,
   };
 };
 
@@ -405,12 +575,16 @@ const normalizeDetectedQuestion = ({
       item?.questionType
     );
 
-  let correctAnswer = null;
+  let correctAnswer =
+    null;
 
   if (
-    item?.correctAnswer !== null &&
-    item?.correctAnswer !== undefined &&
-    item?.correctAnswer !== ""
+    item?.correctAnswer !==
+      null &&
+    item?.correctAnswer !==
+      undefined &&
+    item?.correctAnswer !==
+      ""
   ) {
     const numericAnswer =
       Number(
@@ -429,12 +603,16 @@ const normalizeDetectedQuestion = ({
     }
   }
 
-  let maxMarks = null;
+  let maxMarks =
+    null;
 
   if (
-    item?.maxMarks !== null &&
-    item?.maxMarks !== undefined &&
-    item?.maxMarks !== ""
+    item?.maxMarks !==
+      null &&
+    item?.maxMarks !==
+      undefined &&
+    item?.maxMarks !==
+      ""
   ) {
     const numericMarks =
       Number(
@@ -457,13 +635,35 @@ const normalizeDetectedQuestion = ({
       item?.visualBoundingBox
     );
 
-  const hasVisual =
+  const requestedVisual =
     Boolean(
       item?.hasVisual
-    ) &&
+    );
+
+  const hasVisual =
+    requestedVisual &&
     Boolean(
       visualBoundingBox
     );
+
+  const drop =
+    Boolean(
+      item?.drop
+    );
+
+  let dropReason =
+    cleanString(
+      item?.dropReason
+    );
+
+  if (
+    requestedVisual &&
+    !visualBoundingBox &&
+    !dropReason
+  ) {
+    dropReason =
+      "A required visual was detected but its bounding box could not be identified.";
+  }
 
   return {
     questionNumber:
@@ -507,8 +707,12 @@ const normalizeDetectedQuestion = ({
       safeArray(
         item?.options
       )
-        .map(cleanString)
-        .filter(Boolean),
+        .map(
+          cleanString
+        )
+        .filter(
+          Boolean
+        ),
 
     correctAnswer,
 
@@ -521,8 +725,12 @@ const normalizeDetectedQuestion = ({
       safeArray(
         item?.keyPoints
       )
-        .map(cleanString)
-        .filter(Boolean),
+        .map(
+          cleanString
+        )
+        .filter(
+          Boolean
+        ),
 
     maxMarks,
 
@@ -541,51 +749,144 @@ const normalizeDetectedQuestion = ({
     visualBoundingBox,
 
     drop:
-      Boolean(
-        item?.drop
+      drop ||
+      (
+        requestedVisual &&
+        !visualBoundingBox
       ),
 
-    dropReason:
-      cleanString(
-        item?.dropReason
-      ),
+    dropReason,
 
     sourcePage:
-      Number(pageNumber),
+      Number(
+        pageNumber
+      ),
   };
-};// =====================================================
-// EXTRACT GEMINI TEXT
+};
+
+// =====================================================
+// CHECK OLLAMA
 // =====================================================
 
-const extractGeminiText = (
-  data
-) => {
-  const candidates =
-    safeArray(
-      data?.candidates
-    );
+const checkOllamaConnection =
+  async () => {
+    const controller =
+      new AbortController();
 
-  for (
-    const candidate of
-    candidates
-  ) {
-    const parts =
-      safeArray(
-        candidate?.content?.parts
+    const timeout =
+      setTimeout(
+        () =>
+          controller.abort(),
+        10000
       );
 
-    for (
-      const part of
-      parts
-    ) {
+    try {
+      const response =
+        await fetch(
+          `${OLLAMA_BASE_URL}/api/tags`,
+          {
+            method:
+              "GET",
+
+            signal:
+              controller.signal,
+          }
+        );
+
       if (
-        typeof part?.text ===
-          "string" &&
-        part.text.trim()
+        !response.ok
       ) {
-        return part.text.trim();
+        throw new Error(
+          `Ollama returned status ${response.status}.`
+        );
       }
+
+      const data =
+        await response.json();
+
+      const models =
+        safeArray(
+          data?.models
+        );
+
+      const installed =
+        models.some(
+          (model) => {
+            const name =
+              cleanString(
+                model?.name
+              );
+
+            const modelName =
+              cleanString(
+                model?.model
+              );
+
+            return (
+              name ===
+                OLLAMA_MODEL ||
+              modelName ===
+                OLLAMA_MODEL ||
+              name.startsWith(
+                `${OLLAMA_MODEL}:`
+              )
+            );
+          }
+        );
+
+      if (
+        models.length > 0 &&
+        !installed
+      ) {
+        console.warn(
+          `NAVTA AI WARNING: Ollama is running, but ${OLLAMA_MODEL} was not found in /api/tags.`
+        );
+      }
+
+      return true;
+    } catch (error) {
+      if (
+        error?.name ===
+        "AbortError"
+      ) {
+        throw new Error(
+          `Ollama connection timed out at ${OLLAMA_BASE_URL}.`
+        );
+      }
+
+      throw new Error(
+        `NAVTA could not connect to Ollama at ${OLLAMA_BASE_URL}. ${error.message}`
+      );
+    } finally {
+      clearTimeout(
+        timeout
+      );
     }
+  };
+
+// =====================================================
+// EXTRACT OLLAMA RESPONSE TEXT
+// =====================================================
+
+const extractOllamaText = (
+  data
+) => {
+  if (
+    typeof data?.message
+      ?.content ===
+      "string"
+  ) {
+    return data.message
+      .content
+      .trim();
+  }
+
+  if (
+    typeof data?.response ===
+      "string"
+  ) {
+    return data.response
+      .trim();
   }
 
   return "";
@@ -604,17 +905,12 @@ const analyseNavtaPage =
     text = "",
     hints = {},
   }) => {
-    if (!GEMINI_API_KEY) {
-      throw new Error(
-        "GEMINI_API_KEY is not configured on the server."
-      );
-    }
-
     if (
       !Buffer.isBuffer(
         imageBuffer
       ) ||
-      imageBuffer.length === 0
+      imageBuffer.length ===
+        0
     ) {
       throw new Error(
         `Rendered image for page ${pageNumber} is missing.`
@@ -636,64 +932,90 @@ ${buildPagePrompt({
 })}
 `;
 
-    const endpoint =
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-        GEMINI_MODEL
-      )}:generateContent?key=${encodeURIComponent(
-        GEMINI_API_KEY
-      )}`;
+    const controller =
+      new AbortController();
 
-    const response =
-      await fetch(
-        endpoint,
-        {
-          method:
-            "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-
-          body:
-            JSON.stringify({
-              contents: [
-                {
-                  role:
-                    "user",
-
-                  parts: [
-                    {
-                      text:
-                        prompt,
-                    },
-
-                    {
-                      inlineData: {
-                        mimeType,
-                        data:
-                          imageBase64,
-                      },
-                    },
-                  ],
-                },
-              ],
-
-              generationConfig: {
-                temperature:
-                  0.1,
-
-                responseMimeType:
-                  "application/json",
-              },
-            }),
-        }
+    const timeout =
+      setTimeout(
+        () => {
+          controller.abort();
+        },
+        OLLAMA_TIMEOUT_MS
       );
+
+    let response;
+
+    try {
+      response =
+        await fetch(
+          `${OLLAMA_BASE_URL}/api/chat`,
+          {
+            method:
+              "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            signal:
+              controller.signal,
+
+            body:
+              JSON.stringify({
+                model:
+                  OLLAMA_MODEL,
+
+                stream:
+                  false,
+
+                format:
+                  "json",
+
+                messages: [
+                  {
+                    role:
+                      "user",
+
+                    content:
+                      prompt,
+
+                    images: [
+                      imageBase64,
+                    ],
+                  },
+                ],
+
+                options: {
+                  temperature:
+                    0.1,
+                },
+              }),
+          }
+        );
+    } catch (error) {
+      if (
+        error?.name ===
+        "AbortError"
+      ) {
+        throw new Error(
+          `NAVTA AI timed out while analysing page ${pageNumber}.`
+        );
+      }
+
+      throw new Error(
+        `NAVTA could not connect to Ollama. ${error.message}`
+      );
+    } finally {
+      clearTimeout(
+        timeout
+      );
+    }
 
     const responseText =
       await response.text();
 
-    let data;
+    let data = {};
 
     try {
       data =
@@ -704,43 +1026,40 @@ ${buildPagePrompt({
           : {};
     } catch (error) {
       console.error(
-        "NAVTA GEMINI RAW RESPONSE:",
+        "NAVTA OLLAMA RAW RESPONSE:",
         responseText
       );
 
       throw new Error(
-        `Gemini returned an invalid API response for page ${pageNumber}.`
+        `Ollama returned an invalid API response for page ${pageNumber}.`
       );
     }
 
-    if (!response.ok) {
+    if (
+      !response.ok
+    ) {
       const apiMessage =
-        data?.error?.message ||
-        `Gemini request failed with status ${response.status}.`;
+        data?.error ||
+        data?.message ||
+        `Ollama request failed with status ${response.status}.`;
 
       throw new Error(
-        apiMessage
+        cleanString(
+          apiMessage
+        )
       );
     }
 
     const outputText =
-      extractGeminiText(
+      extractOllamaText(
         data
       );
 
-    if (!outputText) {
-      const blockReason =
-        data?.promptFeedback
-          ?.blockReason;
-
-      if (blockReason) {
-        throw new Error(
-          `Gemini could not analyse page ${pageNumber}. Reason: ${blockReason}`
-        );
-      }
-
+    if (
+      !outputText
+    ) {
       throw new Error(
-        `Gemini returned no question data for page ${pageNumber}.`
+        `Ollama returned no question data for page ${pageNumber}.`
       );
     }
 
@@ -758,12 +1077,12 @@ ${buildPagePrompt({
         );
     } catch (error) {
       console.error(
-        "NAVTA GEMINI JSON PARSE ERROR:",
+        "NAVTA OLLAMA JSON PARSE ERROR:",
         cleanedOutput
       );
 
       throw new Error(
-        `NAVTA AI could not understand Gemini's JSON response for page ${pageNumber}.`
+        `NAVTA AI could not understand Ollama's JSON response for page ${pageNumber}.`
       );
     }
 
@@ -792,11 +1111,18 @@ const analyseRenderedPages =
     hints = {},
   }) => {
     if (
-      !Array.isArray(pages) ||
-      pages.length === 0
+      !Array.isArray(
+        pages
+      ) ||
+      pages.length ===
+        0
     ) {
       return [];
     }
+
+    // Check once before starting a potentially
+    // expensive multi-page import.
+    await checkOllamaConnection();
 
     const questions = [];
 
@@ -819,7 +1145,7 @@ const analyseRenderedPages =
       }
 
       console.log(
-        `NAVTA Gemini analysing PDF page ${pageNumber}...`
+        `NAVTA Ollama analysing PDF page ${pageNumber} with ${OLLAMA_MODEL}...`
       );
 
       const detected =
@@ -855,4 +1181,5 @@ const analyseRenderedPages =
 module.exports = {
   analyseNavtaPage,
   analyseRenderedPages,
+  checkOllamaConnection,
 };
