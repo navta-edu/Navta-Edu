@@ -2,49 +2,101 @@ const express = require("express");
 
 const router = express.Router();
 
-// ============================================
-// NAVTA AI CHAT
-// ============================================
-
 router.post("/chat", async (req, res) => {
   try {
-    const {
-      message
-    } = req.body;
+    const { message } = req.body;
 
-    if (
-      !message ||
-      typeof message !== "string" ||
-      !message.trim()
-    ) {
+    if (!message || !message.trim()) {
       return res.status(400).json({
         success: false,
         message: "Message is required",
       });
     }
 
-    // ========================================
-    // TEMPORARY TEST RESPONSE
-    // ========================================
-    //
-    // We are testing the frontend/backend
-    // connection first.
-    //
-    // After this works, we will connect
-    // Gemini / Groq / Hugging Face.
-    //
+    const response = await fetch(
+      process.env.AI_API_URL,
+      {
+        method: "POST",
 
-    const reply = `
-Hello 👋
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.AI_API_KEY}`,
+        },
 
-NAVTA AI received your message:
+        body: JSON.stringify({
+          model: process.env.AI_MODEL,
 
-"${message}"
+          messages: [
+            {
+              role: "system",
+              content: `
+You are NAVTA AI Tutor.
 
-The chatbot backend connection is working correctly.
+You help Class 11 and Class 12 students preparing for:
 
-Next, we will connect the actual AI model.
-    `.trim();
+- JEE
+- NEET
+- Boards
+
+Subjects:
+- Physics
+- Chemistry
+- Mathematics
+- Biology
+
+Rules:
+
+1. Explain concepts clearly.
+2. Use simple student-friendly language.
+3. Show formulas when needed.
+4. Solve numerical questions step by step.
+5. For Maths and Physics, show calculations clearly.
+6. For Biology, explain using NCERT-style terminology where appropriate.
+7. For Chemistry, explain reactions and concepts clearly.
+8. If a student asks for a hint, do not reveal the full answer immediately.
+9. Encourage understanding instead of memorisation.
+10. If you are unsure about an answer, say so instead of inventing information.
+
+You are part of the NAVTA learning platform.
+              `,
+            },
+
+            {
+              role: "user",
+              content: message,
+            },
+          ],
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+
+      console.error(
+        "AI Provider Error:",
+        errorText
+      );
+
+      return res.status(502).json({
+        success: false,
+        message:
+          "NAVTA AI provider is currently unavailable.",
+      });
+    }
+
+    const data = await response.json();
+
+    const reply =
+      data?.choices?.[0]?.message?.content;
+
+    if (!reply) {
+      return res.status(502).json({
+        success: false,
+        message:
+          "NAVTA AI returned an invalid response.",
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -52,7 +104,7 @@ Next, we will connect the actual AI model.
     });
   } catch (error) {
     console.error(
-      "NAVTA AI Chat Error:",
+      "NAVTA AI Error:",
       error
     );
 
