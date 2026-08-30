@@ -20,6 +20,7 @@ import {
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import Footer from './components/Footer';
+import NavtaAI from './components/NavtaAI';
 
 // =====================================================
 // PUBLIC PAGES
@@ -36,41 +37,91 @@ const Onboarding = lazy(() => import('./pages/Onboarding'));
 // STUDENT PAGES
 // =====================================================
 
-const StudentDashboard = lazy(() => import('./pages/StudentDashboard'));
-const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
-const RewardsPage = lazy(() => import('./pages/RewardsPage'));
-const ResultDetail = lazy(() => import('./pages/ResultDetail'));
-const MistakeNotebookPage = lazy(() => import('./pages/MistakeNotebookPage'));
-const StreakPage = lazy(() => import('./pages/StreakPage'));
-const PanicModePage = lazy(() => import('./pages/PanicModePage'));
+const StudentDashboard = lazy(() =>
+  import('./pages/StudentDashboard')
+);
+
+const AnalyticsPage = lazy(() =>
+  import('./pages/AnalyticsPage')
+);
+
+const RewardsPage = lazy(() =>
+  import('./pages/RewardsPage')
+);
+
+const ResultDetail = lazy(() =>
+  import('./pages/ResultDetail')
+);
+
+const MistakeNotebookPage = lazy(() =>
+  import('./pages/MistakeNotebookPage')
+);
+
+const StreakPage = lazy(() =>
+  import('./pages/StreakPage')
+);
+
+const PanicModePage = lazy(() =>
+  import('./pages/PanicModePage')
+);
 
 // =====================================================
 // TEACHER / EDUCATOR PAGES
 // =====================================================
 
-const TeacherDashboard = lazy(() => import('./pages/TeacherDashboard'));
-const ExternalTeacherDashboard = lazy(() => import('./pages/ExternalTeacherDashboard'));
+const TeacherDashboard = lazy(() =>
+  import('./pages/TeacherDashboard')
+);
+
+const ExternalTeacherDashboard = lazy(() =>
+  import('./pages/ExternalTeacherDashboard')
+);
 
 // NEW QUESTION PAPER BUILDER
-const QuestionPaperBuilder = lazy(() => import('./pages/QuestionPaperBuilder'));
+
+const QuestionPaperBuilder = lazy(() =>
+  import('./pages/QuestionPaperBuilder')
+);
 
 // =====================================================
 // ADMIN PAGES
 // =====================================================
 
-const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
-const AdminNavtaTest = lazy(() => import('./pages/AdminNavtaTest'));
+const AdminDashboard = lazy(() =>
+  import('./pages/AdminDashboard')
+);
+
+const AdminNavtaTest = lazy(() =>
+  import('./pages/AdminNavtaTest')
+);
 
 // =====================================================
 // SHARED PAGES
 // =====================================================
 
-const NavtaTestPage = lazy(() => import('./pages/NavtaTestPage'));
-const NotesPage = lazy(() => import('./pages/NotesPage'));
-const PYQPage = lazy(() => import('./pages/PYQPage'));
-const AssessmentPage = lazy(() => import('./pages/AssessmentPage'));
-const ProfilePage = lazy(() => import('./pages/ProfilePage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const NavtaTestPage = lazy(() =>
+  import('./pages/NavtaTestPage')
+);
+
+const NotesPage = lazy(() =>
+  import('./pages/NotesPage')
+);
+
+const PYQPage = lazy(() =>
+  import('./pages/PYQPage')
+);
+
+const AssessmentPage = lazy(() =>
+  import('./pages/AssessmentPage')
+);
+
+const ProfilePage = lazy(() =>
+  import('./pages/ProfilePage')
+);
+
+const SettingsPage = lazy(() =>
+  import('./pages/SettingsPage')
+);
 
 // =====================================================
 // PUBLIC LAYOUT
@@ -305,320 +356,330 @@ export default function App() {
   return (
     <AuthProvider>
       <Router>
+
         <Suspense fallback={<RouteLoader />}>
           <Routes>
 
-          {/* =================================================
-              PUBLIC ROUTES
-          ================================================= */}
-
-          <Route
-            element={
-              <PublicLayout />
-            }
-          >
-            <Route
-              path="/"
-              element={
-                <Home />
-              }
-            />
-
-            <Route
-              path="/about"
-              element={
-                <About />
-              }
-            />
-
-            <Route
-              path="/login"
-              element={
-                <Login />
-              }
-            />
-
-            <Route
-              path="/signup"
-              element={
-                <Signup />
-              }
-            />
-
-            <Route
-              path="/unauthorized"
-              element={
-                <Unauthorized />
-              }
-            />
-
-            <Route
-              path="/onboarding"
-              element={
-                <Onboarding />
-              }
-            />
-          </Route>
-
-          {/* =================================================
-              SECURE DASHBOARD LAYOUT
-          ================================================= */}
-
-          <Route
-            element={
-              <DashboardLayout />
-            }
-          >
-
             {/* =================================================
-                STUDENT ONLY
+                PUBLIC ROUTES
             ================================================= */}
 
             <Route
               element={
-                <RoleGuard
-                  allowedRoles={[
-                    'student'
-                  ]}
-                />
+                <PublicLayout />
               }
             >
               <Route
-                path="/dashboard"
+                path="/"
                 element={
-                  <StudentDashboard />
+                  <Home />
                 }
               />
 
               <Route
-                path="/mistake-notebook"
+                path="/about"
                 element={
-                  <MistakeNotebookPage />
+                  <About />
                 }
               />
 
               <Route
-                path="/streak"
+                path="/login"
                 element={
-                  <StreakPage />
+                  <Login />
                 }
               />
 
               <Route
-                path="/panic-mode"
+                path="/signup"
                 element={
-                  <PanicModePage />
+                  <Signup />
                 }
               />
 
               <Route
-                path="/analytics"
+                path="/unauthorized"
                 element={
-                  <AnalyticsPage />
+                  <Unauthorized />
                 }
               />
 
               <Route
-                path="/rewards"
+                path="/onboarding"
                 element={
-                  <RewardsPage />
-                }
-              />
-
-              <Route
-                path="/results/:resultId"
-                element={
-                  <ResultDetail />
+                  <Onboarding />
                 }
               />
             </Route>
 
             {/* =================================================
-                TEACHER ONLY
+                SECURE DASHBOARD LAYOUT
             ================================================= */}
 
             <Route
               element={
-                <RoleGuard
-                  allowedRoles={[
-                    'teacher'
-                  ]}
-                />
+                <DashboardLayout />
               }
             >
+
+              {/* =================================================
+                  STUDENT ONLY
+              ================================================= */}
+
               <Route
-                path="/teacher"
                 element={
-                  <TeacherDashboard />
+                  <RoleGuard
+                    allowedRoles={[
+                      'student'
+                    ]}
+                  />
                 }
-              />
+              >
+                <Route
+                  path="/dashboard"
+                  element={
+                    <StudentDashboard />
+                  }
+                />
+
+                <Route
+                  path="/mistake-notebook"
+                  element={
+                    <MistakeNotebookPage />
+                  }
+                />
+
+                <Route
+                  path="/streak"
+                  element={
+                    <StreakPage />
+                  }
+                />
+
+                <Route
+                  path="/panic-mode"
+                  element={
+                    <PanicModePage />
+                  }
+                />
+
+                <Route
+                  path="/analytics"
+                  element={
+                    <AnalyticsPage />
+                  }
+                />
+
+                <Route
+                  path="/rewards"
+                  element={
+                    <RewardsPage />
+                  }
+                />
+
+                <Route
+                  path="/results/:resultId"
+                  element={
+                    <ResultDetail />
+                  }
+                />
+              </Route>
+
+              {/* =================================================
+                  TEACHER ONLY
+              ================================================= */}
+
+              <Route
+                element={
+                  <RoleGuard
+                    allowedRoles={[
+                      'teacher'
+                    ]}
+                  />
+                }
+              >
+                <Route
+                  path="/teacher"
+                  element={
+                    <TeacherDashboard />
+                  }
+                />
+              </Route>
+
+              {/* =================================================
+                  EXTERNAL TEACHER ONLY
+              ================================================= */}
+
+              <Route
+                element={
+                  <RoleGuard
+                    allowedRoles={[
+                      'external_teacher'
+                    ]}
+                  />
+                }
+              >
+                <Route
+                  path="/external-teacher"
+                  element={
+                    <ExternalTeacherDashboard />
+                  }
+                />
+              </Route>
+
+              {/* =================================================
+                  QUESTION PAPER BUILDER
+                  TEACHER + EXTERNAL TEACHER + ADMIN
+              ================================================= */}
+
+              <Route
+                element={
+                  <RoleGuard
+                    allowedRoles={[
+                      'teacher',
+                      'external_teacher',
+                      'admin'
+                    ]}
+                  />
+                }
+              >
+                <Route
+                  path="/teacher/question-paper-builder"
+                  element={
+                    <QuestionPaperBuilder />
+                  }
+                />
+
+                <Route
+                  path="/educator/question-paper-builder"
+                  element={
+                    <QuestionPaperBuilder />
+                  }
+                />
+              </Route>
+
+              {/* =================================================
+                  ADMIN ONLY
+              ================================================= */}
+
+              <Route
+                element={
+                  <RoleGuard
+                    allowedRoles={[
+                      'admin'
+                    ]}
+                  />
+                }
+              >
+                <Route
+                  path="/admin"
+                  element={
+                    <AdminDashboard />
+                  }
+                />
+
+                <Route
+                  path="/admin/navta-test"
+                  element={
+                    <AdminNavtaTest />
+                  }
+                />
+
+                {/* Admin can also open Question Paper Builder */}
+
+                <Route
+                  path="/admin/question-paper-builder"
+                  element={
+                    <QuestionPaperBuilder />
+                  }
+                />
+              </Route>
+
+              {/* =================================================
+                  SHARED SECURE PAGES
+              ================================================= */}
+
+              <Route
+                element={
+                  <RoleGuard
+                    allowedRoles={[
+                      'student',
+                      'teacher',
+                      'admin',
+                      'external_teacher'
+                    ]}
+                  />
+                }
+              >
+                <Route
+                  path="/notes"
+                  element={
+                    <NotesPage />
+                  }
+                />
+
+                <Route
+                  path="/pyqs"
+                  element={
+                    <PYQPage />
+                  }
+                />
+
+                <Route
+                  path="/navta-test"
+                  element={
+                    <NavtaTestPage />
+                  }
+                />
+
+                <Route
+                  path="/assessments"
+                  element={
+                    <AssessmentPage />
+                  }
+                />
+
+                <Route
+                  path="/profile"
+                  element={
+                    <ProfilePage />
+                  }
+                />
+
+                <Route
+                  path="/settings"
+                  element={
+                    <SettingsPage />
+                  }
+                />
+              </Route>
+
             </Route>
 
             {/* =================================================
-                EXTERNAL TEACHER ONLY
+                CATCH ALL
             ================================================= */}
 
             <Route
+              path="*"
               element={
-                <RoleGuard
-                  allowedRoles={[
-                    'external_teacher'
-                  ]}
+                <Navigate
+                  to="/"
+                  replace
                 />
               }
-            >
-              <Route
-                path="/external-teacher"
-                element={
-                  <ExternalTeacherDashboard />
-                }
-              />
-            </Route>
-
-            {/* =================================================
-                QUESTION PAPER BUILDER
-                TEACHER + EXTERNAL TEACHER + ADMIN
-            ================================================= */}
-
-            <Route
-              element={
-                <RoleGuard
-                  allowedRoles={[
-                    'teacher',
-                    'external_teacher',
-                    'admin'
-                  ]}
-                />
-              }
-            >
-              <Route
-                path="/teacher/question-paper-builder"
-                element={
-                  <QuestionPaperBuilder />
-                }
-              />
-
-              <Route
-                path="/educator/question-paper-builder"
-                element={
-                  <QuestionPaperBuilder />
-                }
-              />
-            </Route>
-
-            {/* =================================================
-                ADMIN ONLY
-            ================================================= */}
-
-            <Route
-              element={
-                <RoleGuard
-                  allowedRoles={[
-                    'admin'
-                  ]}
-                />
-              }
-            >
-              <Route
-                path="/admin"
-                element={
-                  <AdminDashboard />
-                }
-              />
-
-              <Route
-                path="/admin/navta-test"
-                element={
-                  <AdminNavtaTest />
-                }
-              />
-
-              {/* Admin can also open Question Paper Builder */}
-              <Route
-                path="/admin/question-paper-builder"
-                element={
-                  <QuestionPaperBuilder />
-                }
-              />
-            </Route>
-
-            {/* =================================================
-                SHARED SECURE PAGES
-            ================================================= */}
-
-            <Route
-              element={
-                <RoleGuard
-                  allowedRoles={[
-                    'student',
-                    'teacher',
-                    'admin',
-                    'external_teacher'
-                  ]}
-                />
-              }
-            >
-              <Route
-                path="/notes"
-                element={
-                  <NotesPage />
-                }
-              />
-
-              <Route
-                path="/pyqs"
-                element={
-                  <PYQPage />
-                }
-              />
-
-              <Route
-                path="/navta-test"
-                element={
-                  <NavtaTestPage />
-                }
-              />
-
-              <Route
-                path="/assessments"
-                element={
-                  <AssessmentPage />
-                }
-              />
-
-              <Route
-                path="/profile"
-                element={
-                  <ProfilePage />
-                }
-              />
-
-              <Route
-                path="/settings"
-                element={
-                  <SettingsPage />
-                }
-              />
-            </Route>
-
-          </Route>
-
-          {/* =================================================
-              CATCH ALL
-          ================================================= */}
-
-          <Route
-            path="*"
-            element={
-              <Navigate
-                to="/"
-                replace
-              />
-            }
-          />
+            />
 
           </Routes>
         </Suspense>
+
+        {/* =====================================================
+            NAVTA AI TUTOR
+            Visible throughout the website
+        ===================================================== */}
+
+        <NavtaAI />
+
       </Router>
     </AuthProvider>
   );
