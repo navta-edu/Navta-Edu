@@ -7,6 +7,7 @@ const {
 // SETTINGS
 // =====================================================
 
+
 // Small padding around diagrams so lines/text at the
 // edge are not accidentally cut off.
 const DEFAULT_PADDING = 18;
