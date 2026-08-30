@@ -1845,7 +1845,7 @@ const mockAPI = {
       if (
         userIndex !== -1
       ) {
-        db.users[
+        db.users[          
           userIndex
         ] = {
           ...db.users[
@@ -2576,8 +2576,9 @@ const mockAPI = {
         };
       }
   }
+};
 
-  // ============================================
+// ============================================
 // REAL API REQUEST HELPER
 // ============================================
 
@@ -3693,4 +3694,5 @@ export const panicModeAPI = {
 // ============================================
 
 export default api;
-};
+
+      
