@@ -640,7 +640,9 @@ const buildImportQuestion = ({
   }
 
   return result;
-};// =====================================================
+};
+
+// =====================================================
 // PROCESS PDF IMPORT
 // =====================================================
 
@@ -679,7 +681,7 @@ const processPdfImport =
     }
 
     // =========================================
-    // GEMINI / NAVTA AI ANALYSIS
+    // NAVTA AI GATEWAY ANALYSIS
     // =========================================
 
     const detectedQuestions =
@@ -889,18 +891,6 @@ const analyseNavtaImport =
     if (!file) {
       throw new Error(
         "Please upload a PDF, DOCX or TXT file."
-      );
-    }
-
-    // =========================================
-    // GOOGLE AI STUDIO / GEMINI CHECK
-    // =========================================
-
-    if (
-      !process.env.GEMINI_API_KEY
-    ) {
-      throw new Error(
-        "GEMINI_API_KEY is not configured on the server."
       );
     }
 
