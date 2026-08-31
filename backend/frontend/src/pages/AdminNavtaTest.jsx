@@ -920,71 +920,292 @@ export default function AdminNavtaTest() {
       );
     };
 
-  // ===================================================
-  // APPROVE ACCEPTED QUESTIONS
-  // ===================================================
+// ===================================================
+// APPROVE ACCEPTED QUESTIONS
+// ===================================================
+//
+// IMPORTANT:
+//
+// This function does NOT affect NAVTA AI.
+//
+// It only changes the FINAL database import.
+//
+// AI flow remains:
+//
+// PDF
+// -> Gemini
+// -> 5-page analysis batches
+// -> question detection
+// -> classification
+// -> answers
+// -> diagrams
+// -> admin review
+//
+// Only the final /import/confirm request is split into
+// small batches to avoid Hostinger 403 blocking.
+//
+// ===================================================
 
-  const approveAcceptedQuestions =
-    async () => {
-      if (
-        acceptedQuestions.length ===
-        0
+const approveAcceptedQuestions =
+  async () => {
+    if (
+      acceptedQuestions.length ===
+      0
+    ) {
+      setImportMessage(
+        "There are no accepted questions to approve."
+      );
+
+      setImportMessageType(
+        "error"
+      );
+
+      return;
+    }
+
+    setApproveLoading(
+      true
+    );
+
+    setImportMessage(
+      ""
+    );
+
+    setImportMessageType(
+      ""
+    );
+
+    // =============================================
+    // HOSTINGER-SAFE IMPORT BATCH SIZE
+    // =============================================
+    //
+    // Only 3 questions are sent in each request.
+    //
+    // Example:
+    //
+    // 37 questions:
+    //
+    // 1-3
+    // 4-6
+    // 7-9
+    // ...
+    //
+    // This does NOT affect Gemini's 5-page batching.
+    //
+    // =============================================
+
+    const CONFIRM_BATCH_SIZE =
+      3;
+
+    // =============================================
+    // SPLIT QUESTIONS INTO SMALL BATCHES
+    // =============================================
+
+    const batches =
+      [];
+
+    for (
+      let index = 0;
+      index <
+        acceptedQuestions.length;
+      index +=
+        CONFIRM_BATCH_SIZE
+    ) {
+      batches.push(
+        acceptedQuestions.slice(
+          index,
+          index +
+            CONFIRM_BATCH_SIZE
+        )
+      );
+    }
+
+    let totalImported =
+      0;
+
+    const allRejected =
+      [];
+
+    const failedBatches =
+      [];
+
+    try {
+      // ===========================================
+      // PROCESS BATCHES SEQUENTIALLY
+      // ===========================================
+      //
+      // We intentionally use await inside the loop.
+      //
+      // Batch 1 finishes first.
+      // Then Batch 2.
+      // Then Batch 3.
+      // ...
+      //
+      // ===========================================
+
+      for (
+        let batchIndex = 0;
+        batchIndex <
+          batches.length;
+        batchIndex += 1
       ) {
+        const batch =
+          batches[
+            batchIndex
+          ];
+
         setImportMessage(
-          "There are no accepted questions to approve."
+          `Importing questions... batch ${
+            batchIndex + 1
+          } of ${
+            batches.length
+          }.`
         );
 
         setImportMessageType(
-          "error"
+          "success"
         );
 
-        return;
-      }
+        console.log(
+          `NAVTA importing batch ${
+            batchIndex + 1
+          }/${batches.length} with ${
+            batch.length
+          } question(s).`
+        );
 
-      setApproveLoading(
-        true
-      );
+        let response;
 
-      setImportMessage(
-        ""
-      );
+        try {
+          response =
+            await fetch(
+              "/api/navta-test/import/confirm",
+              {
+                method:
+                  "POST",
 
-      try {
-        const response =
-          await fetch(
-            "/api/navta-test/import/confirm",
-            {
-              method:
-                "POST",
+                headers: {
+                  "Content-Type":
+                    "application/json",
+                },
 
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-
-              body:
-                JSON.stringify({
-                  questions:
-                    acceptedQuestions,
-                }),
-            }
+                body:
+                  JSON.stringify({
+                    questions:
+                      batch,
+                  }),
+              }
+            );
+        } catch (error) {
+          console.error(
+            `NAVTA batch ${
+              batchIndex + 1
+            } network error:`,
+            error
           );
+
+          failedBatches.push({
+            batchIndex:
+              batchIndex + 1,
+
+            questions:
+              batch,
+
+            reason:
+              error.message ||
+              "Network request failed.",
+          });
+
+          continue;
+        }
+
+        // =========================================
+        // READ RESPONSE
+        // =========================================
 
         let data = {};
 
-        try {
-          data =
-            await response.json();
-        } catch {
-          data = {};
+        const responseText =
+          await response.text();
+
+        if (
+          responseText
+        ) {
+          try {
+            data =
+              JSON.parse(
+                responseText
+              );
+          } catch {
+            data = {};
+          }
         }
 
-        if (!response.ok) {
-          throw new Error(
-            data.message ||
-              "Failed to import approved questions."
+        // =========================================
+        // FAILED HOSTINGER / BACKEND REQUEST
+        // =========================================
+
+        if (
+          !response.ok
+        ) {
+          console.error(
+            `NAVTA import batch ${
+              batchIndex + 1
+            } failed.`,
+            {
+              status:
+                response.status,
+
+              response:
+                responseText,
+
+              batch,
+            }
           );
+
+          failedBatches.push({
+            batchIndex:
+              batchIndex + 1,
+
+            questions:
+              batch,
+
+            status:
+              response.status,
+
+            reason:
+              data.message ||
+              responseText ||
+              `Import failed with status ${response.status}.`,
+          });
+
+          continue;
         }
+
+        // =========================================
+        // COUNT IMPORTED QUESTIONS
+        // =========================================
+
+        const importedCount =
+          Number(
+            data.imported
+          );
+
+        if (
+          Number.isFinite(
+            importedCount
+          )
+        ) {
+          totalImported +=
+            importedCount;
+        } else {
+          totalImported +=
+            batch.length;
+        }
+
+        // =========================================
+        // COLLECT BACKEND REJECTIONS
+        // =========================================
 
         const rejected =
           Array.isArray(
@@ -994,30 +1215,83 @@ export default function AdminNavtaTest() {
             : [];
 
         if (
-          rejected.length > 0
+          rejected.length >
+          0
         ) {
-          setDroppedQuestions(
-            (previous) => [
-              ...previous,
-              ...rejected.map(
-                (item) => ({
-                  question:
-                    item.question ||
-                    "",
-
-                  drop: true,
-
-                  dropReason:
-                    item.reason ||
-                    "Rejected during final validation.",
-                })
-              ),
-            ]
+          allRejected.push(
+            ...rejected
           );
         }
 
+        console.log(
+          `NAVTA import batch ${
+            batchIndex + 1
+          } completed.`,
+          {
+            imported:
+              data.imported ??
+              batch.length,
+
+            rejected:
+              rejected.length,
+          }
+        );
+      }
+
+      // =============================================
+      // CONVERT BACKEND REJECTIONS TO DROPPED ITEMS
+      // =============================================
+
+      if (
+        allRejected.length >
+        0
+      ) {
+        setDroppedQuestions(
+          (previous) => [
+            ...previous,
+
+            ...allRejected.map(
+              (item) => ({
+                question:
+                  item.question ||
+                  "",
+
+                drop:
+                  true,
+
+                dropReason:
+                  Array.isArray(
+                    item.reasons
+                  )
+                    ? item.reasons.join(
+                        " "
+                      )
+                    : item.reason ||
+                      "Rejected during final database validation.",
+              })
+            ),
+          ]
+        );
+      }
+
+      // =============================================
+      // HANDLE FAILED BATCHES
+      // =============================================
+
+      if (
+        failedBatches.length >
+        0
+      ) {
+        const failedQuestions =
+          failedBatches.flatMap(
+            (item) =>
+              item.questions
+          );
+
+        // Keep failed questions in Accepted Questions
+        // so admin can retry them.
         setAcceptedQuestions(
-          []
+          failedQuestions
         );
 
         setImportSummary(
@@ -1025,42 +1299,105 @@ export default function AdminNavtaTest() {
             detected:
               previous.detected,
 
-            accepted: 0,
+            accepted:
+              failedQuestions.length,
 
             dropped:
               previous.dropped +
-              rejected.length,
+              allRejected.length,
           })
         );
 
-        setImportMessage(
-          data.message ||
-            "Questions imported successfully."
-        );
-
-        setImportMessageType(
-          "success"
-        );
-      } catch (error) {
-        console.error(
-          "NAVTA AI confirm error:",
-          error
-        );
+        const failedBatchNumbers =
+          failedBatches
+            .map(
+              (item) =>
+                item.batchIndex
+            )
+            .join(
+              ", "
+            );
 
         setImportMessage(
-          error.message ||
-            "Unable to import approved questions."
+          `${totalImported} question(s) imported successfully. ${failedQuestions.length} question(s) could not be imported. Failed batch(es): ${failedBatchNumbers}. You can click Approve & Import again to retry only the remaining questions.`
         );
 
         setImportMessageType(
           "error"
         );
-      } finally {
-        setApproveLoading(
-          false
-        );
+
+        return;
       }
-    };
+
+      // =============================================
+      // COMPLETE SUCCESS
+      // =============================================
+
+      setAcceptedQuestions(
+        []
+      );
+
+      setImportSummary(
+        (previous) => ({
+          detected:
+            previous.detected,
+
+          accepted:
+            0,
+
+          dropped:
+            previous.dropped +
+            allRejected.length,
+        })
+      );
+
+      setImportMessage(
+        `${totalImported} approved question(s) imported successfully.`
+      );
+
+      setImportMessageType(
+        "success"
+      );
+
+      console.log(
+        "============================================"
+      );
+
+      console.log(
+        "NAVTA QUESTION IMPORT COMPLETED"
+      );
+
+      console.log(
+        `Total imported: ${totalImported}`
+      );
+
+      console.log(
+        `Total rejected: ${allRejected.length}`
+      );
+
+      console.log(
+        "============================================"
+      );
+    } catch (error) {
+      console.error(
+        "NAVTA AI confirm error:",
+        error
+      );
+
+      setImportMessage(
+        error.message ||
+          "Unable to import approved questions."
+      );
+
+      setImportMessageType(
+        "error"
+      );
+    } finally {
+      setApproveLoading(
+        false
+      );
+    }
+  };
 
   // ===================================================
   // RESET AI IMPORT
