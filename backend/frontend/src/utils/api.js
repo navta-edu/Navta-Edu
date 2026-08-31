@@ -3265,6 +3265,27 @@ export const adminAPI = {
       throw error;
     }
   },
+    createUser: async (data) => {
+    try {
+      const response = await api.post(
+        '/admin/users',
+        data
+      );
+
+      return response.data;
+    } catch (error) {
+      if (
+        import.meta.env.DEV &&
+        !error.response
+      ) {
+        return mockAPI.admin.createUser(
+          data
+        );
+      }
+
+      throw error;
+    }
+  },
 
   updateUser: async (
     userId,
