@@ -1748,6 +1748,23 @@ const processNavtaAIImport =
 // =====================================================
 // ALIASES FOR CONTROLLER COMPATIBILITY
 // =====================================================
+//
+// IMPORTANT:
+//
+// The existing NAVTA controller calls:
+//
+// analyseNavtaImport(...)
+//
+// Therefore this alias MUST remain available.
+//
+// All aliases point to the same main import function so
+// older NAVTA controller/service code remains compatible.
+//
+// =====================================================
+
+const analyseNavtaImport =
+  processNavtaAIImport;
+
 
 const importNavtaQuestions =
   processNavtaAIImport;
@@ -1766,14 +1783,20 @@ const processAIImport =
 // =====================================================
 
 module.exports = {
+  // Existing NAVTA controller expects this:
+  analyseNavtaImport,
+
+  // Main import function:
   processNavtaAIImport,
 
+  // Backward compatibility:
   importNavtaQuestions,
 
   analyseNavtaDocument,
 
   processAIImport,
 
+  // Internal helpers:
   processPdfImport,
 
   validateDetectedQuestion,
