@@ -1,41 +1,47 @@
 // =====================================================
 // NAVTA AI QUESTION SERVICE
-// NAVTA AI Gateway + Ollama + Qwen2.5-VL
+// Google Gemini Vision API
 // =====================================================
 //
 // Production flow:
 //
 // Hostinger backend
-// -> NAVTA AI Gateway (Cloudflare HTTPS)
-// -> Local Ollama
-// -> qwen2.5vl:3b
+// -> Google Gemini API
+// -> Gemini Vision model
 //
-// No Gemini API is used in this file.
+// PDF pages are rendered elsewhere in NAVTA.
+// This service receives those rendered page images,
+// sends them to Gemini, extracts structured questions,
+// and returns them to the existing NAVTA import pipeline.
+//
+// IMPORTANT:
+// GEMINI_API_KEY must exist only in backend environment
+// variables. Never expose it in frontend code.
 // =====================================================
+
 
 // =====================================================
 // CONFIG
 // =====================================================
 
-const NAVTA_AI_GATEWAY_URL =
+const GEMINI_API_KEY =
   String(
-    process.env.NAVTA_AI_GATEWAY_URL ||
-      "http://127.0.0.1:5050"
+    process.env.GEMINI_API_KEY || ""
+  ).trim();
+
+const GEMINI_MODEL =
+  String(
+    process.env.GEMINI_MODEL ||
+      "gemini-2.5-flash"
+  ).trim();
+
+const GEMINI_API_BASE =
+  String(
+    process.env.GEMINI_API_BASE ||
+      "https://generativelanguage.googleapis.com/v1beta"
   )
     .trim()
     .replace(/\/+$/, "");
-
-const NAVTA_AI_SECRET =
-  String(
-    process.env.NAVTA_AI_SECRET ||
-      ""
-  ).trim();
-
-const OLLAMA_MODEL =
-  String(
-    process.env.OLLAMA_MODEL ||
-      "qwen2.5vl:3b"
-  ).trim();
 
 const NAVTA_AI_TIMEOUT_MS =
   Math.max(
@@ -45,6 +51,25 @@ const NAVTA_AI_TIMEOUT_MS =
         180000
     ) || 180000
   );
+
+// Number of rendered PDF pages sent in one Gemini request.
+//
+// Start conservatively.
+// This reduces API request count compared with
+// one-request-per-page processing while avoiding
+// extremely large multimodal requests.
+const NAVTA_AI_BATCH_SIZE =
+  Math.max(
+    1,
+    Math.min(
+      4,
+      Number(
+        process.env.NAVTA_AI_BATCH_SIZE ||
+          3
+      ) || 3
+    )
+  );
+
 
 // =====================================================
 // HELPERS
@@ -58,6 +83,7 @@ const cleanString = (
   ).trim();
 };
 
+
 const safeArray = (
   value
 ) => {
@@ -67,6 +93,7 @@ const safeArray = (
     ? value
     : [];
 };
+
 
 const normalizeQuestionType = (
   value
@@ -97,6 +124,7 @@ const normalizeQuestionType = (
   return "";
 };
 
+
 const normalizeDifficulty = (
   value
 ) => {
@@ -126,6 +154,7 @@ const normalizeDifficulty = (
   return "";
 };
 
+
 const imageBufferToBase64 = (
   buffer
 ) => {
@@ -152,6 +181,7 @@ const imageBufferToBase64 = (
   );
 };
 
+
 // =====================================================
 // SYSTEM INSTRUCTIONS
 // =====================================================
@@ -159,7 +189,7 @@ const imageBufferToBase64 = (
 const SYSTEM_PROMPT = `
 You are NAVTA AI, an educational question-paper analysis system.
 
-Your job is to analyse a rendered question-paper PAGE IMAGE and detect every complete academic question visible on that page.
+Your job is to analyse rendered question-paper PAGE IMAGES and detect every complete academic question visible on those pages.
 
 NAVTA supports:
 
@@ -190,15 +220,19 @@ Question types:
 
 IMPORTANT RULES:
 
-1. The PAGE IMAGE is the primary source.
+1. The PAGE IMAGES are the primary source.
 
 2. Preserve the original question wording as accurately as possible.
 
-3. Detect every COMPLETE academic question visible on the supplied page.
+3. Detect every COMPLETE academic question visible on the supplied pages.
 
 4. Do not invent questions.
 
-5. If a question starts on another page or continues onto another page and cannot be understood completely, mark it for dropping.
+5. A question may continue from one supplied page to the next supplied page.
+
+If adjacent supplied pages clearly contain different parts of the same question, combine them into one complete question.
+
+If a question cannot be understood completely because the required continuation is not present in the supplied pages, mark it for dropping.
 
 6. For MCQ questions:
 
@@ -232,7 +266,7 @@ IMPORTANT RULES:
 - difficulty
 - questionType
 
-10. If administrator hints are supplied and they clearly match the page, use them.
+10. If administrator hints are supplied and they clearly match the pages, use them.
 
 11. Do not blindly use hints if they clearly contradict the page.
 
@@ -265,7 +299,7 @@ If a question depends on a visual:
 
 hasVisual must be true.
 
-Return visualBoundingBox using NORMALIZED page coordinates:
+Return visualBoundingBox using NORMALIZED coordinates for the page identified by sourcePage:
 
 {
   "x": 0.0,
@@ -304,11 +338,19 @@ and provide a clear dropReason.
 
 17. Never make up an answer simply to make a question valid.
 
-18. Return ONLY valid JSON.
+18. sourcePage is REQUIRED.
 
-19. Do not return Markdown.
+sourcePage must be the actual PDF page number containing the question.
 
-20. Do not use code fences.
+If a question spans multiple supplied pages, use the page where the question begins.
+
+If a visual belongs to the question, sourcePage must identify the page containing the visual because NAVTA uses that page to crop the diagram.
+
+19. Return ONLY valid JSON.
+
+20. Do not return Markdown.
+
+21. Do not use code fences.
 
 The exact top-level response structure is:
 
@@ -317,12 +359,13 @@ The exact top-level response structure is:
 }
 `;
 
+
 // =====================================================
-// PAGE PROMPT
+// BATCH PROMPT
 // =====================================================
 
-const buildPagePrompt = ({
-  pageNumber,
+const buildBatchPrompt = ({
+  pages = [],
   text = "",
   hints = {},
 }) => {
@@ -344,12 +387,52 @@ const buildPagePrompt = ({
     ) ||
     "Not provided";
 
+  const pageNumbers =
+    pages
+      .map(
+        (page) =>
+          Number(
+            page?.pageNumber
+          )
+      )
+      .filter(
+        Boolean
+      );
+
+  const pageContext =
+    pages
+      .map(
+        (page) => {
+          const pageNumber =
+            Number(
+              page?.pageNumber
+            );
+
+          const pageText =
+            cleanString(
+              page?.text
+            );
+
+          return `
+PAGE ${pageNumber} TEXT CONTEXT:
+
+${pageText.slice(
+  0,
+  5000
+)}
+`;
+        }
+      )
+      .join(
+        "\n"
+      );
+
   return `
-Analyse this NAVTA question-paper page.
+Analyse this NAVTA question-paper page batch.
 
-PAGE NUMBER:
+SUPPLIED PDF PAGE NUMBERS:
 
-${pageNumber}
+${pageNumbers.join(", ")}
 
 ADMIN HINTS:
 
@@ -362,19 +445,23 @@ ${examHint}
 Class:
 ${classHint}
 
-The PAGE IMAGE supplied with this message is the PRIMARY SOURCE.
+The PAGE IMAGES supplied with this request are the PRIMARY SOURCE.
 
-Extracted document text below is SUPPORTING CONTEXT only.
+Each image is preceded by a text label identifying its PDF page number.
 
-Do not extract questions from the text context unless they are actually visible on the supplied page image.
+Extracted document text is SUPPORTING CONTEXT only.
 
-TEXT CONTEXT:
+Do not extract questions from supporting text unless they are actually visible on one or more supplied page images.
+
+${pageContext}
+
+GENERAL DOCUMENT TEXT CONTEXT:
 
 ${String(
   text || ""
 ).slice(
   0,
-  12000
+  6000
 )}
 
 For EVERY detected question return an object using this exact structure:
@@ -397,9 +484,16 @@ For EVERY detected question return an object using this exact structure:
   "hasVisual": false,
   "visualDescription": "",
   "visualBoundingBox": null,
+  "sourcePage": null,
   "drop": false,
   "dropReason": ""
 }
+
+IMPORTANT:
+
+sourcePage must be one of these supplied PDF page numbers:
+
+${pageNumbers.join(", ")}
 
 Return:
 
@@ -410,6 +504,7 @@ Return:
 Return JSON only.
 `;
 };
+
 
 // =====================================================
 // CLEAN MODEL JSON
@@ -443,6 +538,7 @@ const cleanJsonResponse = (
 
   return text.trim();
 };
+
 
 // =====================================================
 // NORMALIZE VISUAL BOX
@@ -569,13 +665,15 @@ const normalizeVisualBoundingBox = (
   };
 };
 
+
 // =====================================================
 // NORMALIZE AI QUESTION
 // =====================================================
 
 const normalizeDetectedQuestion = ({
   item,
-  pageNumber,
+  fallbackPageNumber,
+  validPageNumbers = [],
 }) => {
   const questionType =
     normalizeQuestionType(
@@ -672,6 +770,45 @@ const normalizeDetectedQuestion = ({
       "A required visual was detected but its bounding box could not be identified.";
   }
 
+  const requestedSourcePage =
+    Number(
+      item?.sourcePage
+    );
+
+  const safeValidPages =
+    safeArray(
+      validPageNumbers
+    )
+      .map(
+        Number
+      )
+      .filter(
+        (value) =>
+          Number.isInteger(
+            value
+          ) &&
+          value > 0
+      );
+
+  let sourcePage =
+    Number(
+      fallbackPageNumber
+    ) ||
+    safeValidPages[0] ||
+    null;
+
+  if (
+    Number.isInteger(
+      requestedSourcePage
+    ) &&
+    safeValidPages.includes(
+      requestedSourcePage
+    )
+  ) {
+    sourcePage =
+      requestedSourcePage;
+  }
+
   return {
     questionNumber:
       cleanString(
@@ -764,32 +901,205 @@ const normalizeDetectedQuestion = ({
 
     dropReason,
 
-    sourcePage:
-      Number(
-        pageNumber
-      ),
+    sourcePage,
   };
 };
+
+
 // =====================================================
-// CHECK NAVTA AI GATEWAY
+// GEMINI CONFIG CHECK
 // =====================================================
 
-const checkNavtaAIGatewayConnection =
+const checkGeminiConnection =
   async () => {
     if (
-      !NAVTA_AI_GATEWAY_URL
+      !GEMINI_API_KEY
     ) {
       throw new Error(
-        "NAVTA_AI_GATEWAY_URL is not configured."
+        "GEMINI_API_KEY is not configured."
       );
     }
 
     if (
-      !NAVTA_AI_SECRET
+      !GEMINI_MODEL
     ) {
       throw new Error(
-        "NAVTA_AI_SECRET is not configured."
+        "GEMINI_MODEL is not configured."
       );
+    }
+
+    return true;
+  };
+
+
+// =====================================================
+// EXTRACT GEMINI ERROR
+// =====================================================
+
+const extractGeminiError = (
+  data,
+  fallbackMessage
+) => {
+  const message =
+    cleanString(
+      data?.error?.message
+    );
+
+  if (
+    message
+  ) {
+    return message;
+  }
+
+  return fallbackMessage;
+};
+
+
+// =====================================================
+// EXTRACT GEMINI RESPONSE TEXT
+// =====================================================
+
+const extractGeminiText = (
+  data
+) => {
+  const candidates =
+    safeArray(
+      data?.candidates
+    );
+
+  for (
+    const candidate of
+    candidates
+  ) {
+    const parts =
+      safeArray(
+        candidate?.content?.parts
+      );
+
+    const text =
+      parts
+        .map(
+          (part) =>
+            typeof part?.text ===
+            "string"
+              ? part.text
+              : ""
+        )
+        .filter(
+          Boolean
+        )
+        .join(
+          "\n"
+        )
+        .trim();
+
+    if (
+      text
+    ) {
+      return text;
+    }
+  }
+
+  return "";
+};
+
+
+// =====================================================
+// GEMINI REQUEST
+// =====================================================
+
+const requestGeminiAnalysis =
+  async ({
+    pages = [],
+    text = "",
+    hints = {},
+  }) => {
+    await checkGeminiConnection();
+
+    if (
+      !Array.isArray(
+        pages
+      ) ||
+      pages.length ===
+        0
+    ) {
+      return [];
+    }
+
+    const validPages =
+      pages.filter(
+        (page) =>
+          Number(
+            page?.pageNumber
+          ) > 0 &&
+          Buffer.isBuffer(
+            page?.buffer
+          ) &&
+          page.buffer.length >
+            0
+      );
+
+    if (
+      validPages.length ===
+        0
+    ) {
+      return [];
+    }
+
+    const validPageNumbers =
+      validPages.map(
+        (page) =>
+          Number(
+            page.pageNumber
+          )
+      );
+
+    const prompt =
+      `${SYSTEM_PROMPT}\n\n${buildBatchPrompt({
+        pages:
+          validPages,
+        text,
+        hints,
+      })}`;
+
+    const parts = [
+      {
+        text:
+          prompt,
+      },
+    ];
+
+    for (
+      const page of
+      validPages
+    ) {
+      const pageNumber =
+        Number(
+          page.pageNumber
+        );
+
+      const mimeType =
+        cleanString(
+          page?.mimeType
+        ) ||
+        "image/png";
+
+      parts.push({
+        text:
+          `The next image is PDF PAGE ${pageNumber}.`,
+      });
+
+      parts.push({
+        inline_data: {
+          mime_type:
+            mimeType,
+
+          data:
+            imageBufferToBase64(
+              page.buffer
+            ),
+        },
+      });
     }
 
     const controller =
@@ -800,100 +1110,211 @@ const checkNavtaAIGatewayConnection =
         () => {
           controller.abort();
         },
-        10000
+        NAVTA_AI_TIMEOUT_MS
       );
 
+    let response;
+
     try {
-      const response =
+      const endpoint =
+        `${GEMINI_API_BASE}/models/${encodeURIComponent(
+          GEMINI_MODEL
+        )}:generateContent?key=${encodeURIComponent(
+          GEMINI_API_KEY
+        )}`;
+
+      response =
         await fetch(
-          `${NAVTA_AI_GATEWAY_URL}/health`,
+          endpoint,
           {
             method:
-              "GET",
+              "POST",
 
             headers: {
+              "Content-Type":
+                "application/json",
+
               Accept:
                 "application/json",
             },
 
             signal:
               controller.signal,
+
+            body:
+              JSON.stringify({
+                contents: [
+                  {
+                    role:
+                      "user",
+
+                    parts,
+                  },
+                ],
+
+                generationConfig: {
+                  temperature:
+                    0.1,
+
+                  responseMimeType:
+                    "application/json",
+                },
+              }),
           }
         );
-
-      const responseText =
-        await response.text();
-
-      let data = {};
-
-      try {
-        data =
-          responseText
-            ? JSON.parse(
-                responseText
-              )
-            : {};
-      } catch (error) {
-        throw new Error(
-          "NAVTA AI Gateway returned an invalid health response."
-        );
-      }
-
-      if (
-        !response.ok
-      ) {
-        throw new Error(
-          data?.message ||
-            `NAVTA AI Gateway returned status ${response.status}.`
-        );
-      }
-
-      if (
-        data?.success !==
-          true
-      ) {
-        throw new Error(
-          "NAVTA AI Gateway health check failed."
-        );
-      }
-
-      return true;
     } catch (error) {
       if (
         error?.name ===
           "AbortError"
       ) {
         throw new Error(
-          `NAVTA AI Gateway connection timed out at ${NAVTA_AI_GATEWAY_URL}.`
+          `Gemini timed out while analysing PDF pages ${validPageNumbers.join(
+            ", "
+          )}.`
         );
       }
 
       throw new Error(
-        `NAVTA could not connect to the AI Gateway at ${NAVTA_AI_GATEWAY_URL}. ${error.message}`
+        `NAVTA could not connect to Gemini. ${error.message}`
       );
     } finally {
       clearTimeout(
         timeout
       );
     }
+
+    const responseText =
+      await response.text();
+
+    let data = {};
+
+    try {
+      data =
+        responseText
+          ? JSON.parse(
+              responseText
+            )
+          : {};
+    } catch (error) {
+      console.error(
+        "NAVTA GEMINI RAW RESPONSE:",
+        responseText
+      );
+
+      throw new Error(
+        `Gemini returned an invalid API response while analysing pages ${validPageNumbers.join(
+          ", "
+        )}.`
+      );
+    }
+
+    if (
+      !response.ok
+    ) {
+      const apiMessage =
+        extractGeminiError(
+          data,
+          `Gemini request failed with status ${response.status}.`
+        );
+
+      console.error(
+        "NAVTA GEMINI API ERROR:",
+        apiMessage
+      );
+
+      throw new Error(
+        apiMessage
+      );
+    }
+
+    const outputText =
+      extractGeminiText(
+        data
+      );
+
+    if (
+      !outputText
+    ) {
+      const finishReason =
+        cleanString(
+          data?.candidates?.[0]
+            ?.finishReason
+        );
+
+      const blockReason =
+        cleanString(
+          data?.promptFeedback
+            ?.blockReason
+        );
+
+      if (
+        blockReason
+      ) {
+        throw new Error(
+          `Gemini blocked the PDF analysis request: ${blockReason}.`
+        );
+      }
+
+      if (
+        finishReason
+      ) {
+        throw new Error(
+          `Gemini returned no question data. Finish reason: ${finishReason}.`
+        );
+      }
+
+      throw new Error(
+        `Gemini returned no question data for pages ${validPageNumbers.join(
+          ", "
+        )}.`
+      );
+    }
+
+    const cleanedOutput =
+      cleanJsonResponse(
+        outputText
+      );
+
+    let parsed;
+
+    try {
+      parsed =
+        JSON.parse(
+          cleanedOutput
+        );
+    } catch (error) {
+      console.error(
+        "NAVTA GEMINI JSON PARSE ERROR:",
+        cleanedOutput
+      );
+
+      throw new Error(
+        `NAVTA could not understand the Gemini JSON response for pages ${validPageNumbers.join(
+          ", "
+        )}.`
+      );
+    }
+
+    const questions =
+      safeArray(
+        parsed?.questions
+      );
+
+    const fallbackPageNumber =
+      validPageNumbers[0];
+
+    return questions.map(
+      (item) =>
+        normalizeDetectedQuestion({
+          item,
+
+          fallbackPageNumber,
+
+          validPageNumbers,
+        })
+    );
   };
 
-// =====================================================
-// EXTRACT GATEWAY RESPONSE TEXT
-// =====================================================
-
-const extractGatewayText = (
-  data
-) => {
-  if (
-    typeof data?.content ===
-      "string"
-  ) {
-    return data.content.trim();
-  }
-
-  return "";
-};
 
 // =====================================================
 // ANALYSE ONE RENDERED PAGE
@@ -920,198 +1341,62 @@ const analyseNavtaPage =
       );
     }
 
-    if (
-      !NAVTA_AI_SECRET
-    ) {
-      throw new Error(
-        "NAVTA_AI_SECRET is not configured."
-      );
-    }
-
-    const imageBase64 =
-      imageBufferToBase64(
-        imageBuffer
-      );
-
-    const prompt = `
-${SYSTEM_PROMPT}
-
-${buildPagePrompt({
-  pageNumber,
-  text,
-  hints,
-})}
-`;
-
-    const controller =
-      new AbortController();
-
-    const timeout =
-      setTimeout(
-        () => {
-          controller.abort();
-        },
-        NAVTA_AI_TIMEOUT_MS
-      );
-
-    let response;
-
-    try {
-      response =
-        await fetch(
-          `${NAVTA_AI_GATEWAY_URL}/api/navta/analyse`,
-          {
-            method:
-              "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json",
-
-              Accept:
-                "application/json",
-
-              "x-navta-ai-key":
-                NAVTA_AI_SECRET,
-            },
-
-            signal:
-              controller.signal,
-
-            body:
-              JSON.stringify({
-                prompt,
-
-                image:
-                  imageBase64,
-
-                mimeType,
-
-                pageNumber,
-
-                model:
-                  OLLAMA_MODEL,
-              }),
-          }
-        );
-    } catch (error) {
-      if (
-        error?.name ===
-          "AbortError"
-      ) {
-        throw new Error(
-          `NAVTA AI timed out while analysing page ${pageNumber}.`
-        );
-      }
-
-      throw new Error(
-        `NAVTA could not connect to the AI Gateway. ${error.message}`
-      );
-    } finally {
-      clearTimeout(
-        timeout
-      );
-    }
-
-    const responseText =
-      await response.text();
-
-    let data = {};
-
-    try {
-      data =
-        responseText
-          ? JSON.parse(
-              responseText
-            )
-          : {};
-    } catch (error) {
-      console.error(
-        "NAVTA AI GATEWAY RAW RESPONSE:",
-        responseText
-      );
-
-      throw new Error(
-        `NAVTA AI Gateway returned an invalid API response for page ${pageNumber}.`
-      );
-    }
-
-    if (
-      !response.ok
-    ) {
-      const apiMessage =
-        data?.message ||
-        data?.error ||
-        `NAVTA AI Gateway request failed with status ${response.status}.`;
-
-      throw new Error(
-        cleanString(
-          apiMessage
-        )
-      );
-    }
-
-    if (
-      data?.success !==
-        true
-    ) {
-      throw new Error(
-        cleanString(
-          data?.message ||
-            `NAVTA AI Gateway failed while analysing page ${pageNumber}.`
-        )
-      );
-    }
-
-    const outputText =
-      extractGatewayText(
-        data
-      );
-
-    if (
-      !outputText
-    ) {
-      throw new Error(
-        `NAVTA AI Gateway returned no question data for page ${pageNumber}.`
-      );
-    }
-
-    const cleanedOutput =
-      cleanJsonResponse(
-        outputText
-      );
-
-    let parsed;
-
-    try {
-      parsed =
-        JSON.parse(
-          cleanedOutput
-        );
-    } catch (error) {
-      console.error(
-        "NAVTA AI JSON PARSE ERROR:",
-        cleanedOutput
-      );
-
-      throw new Error(
-        `NAVTA AI could not understand the model JSON response for page ${pageNumber}.`
-      );
-    }
-
-    const questions =
-      safeArray(
-        parsed?.questions
-      );
-
-    return questions.map(
-      (item) =>
-        normalizeDetectedQuestion({
-          item,
-          pageNumber,
-        })
+    console.log(
+      `NAVTA AI analysing PDF page ${pageNumber} with Gemini ${GEMINI_MODEL}...`
     );
+
+    return requestGeminiAnalysis({
+      pages: [
+        {
+          pageNumber:
+            Number(
+              pageNumber
+            ),
+
+          buffer:
+            imageBuffer,
+
+          mimeType,
+
+          text,
+        },
+      ],
+
+      text,
+
+      hints,
+    });
   };
+
+
+// =====================================================
+// SPLIT INTO BATCHES
+// =====================================================
+
+const createPageBatches = (
+  pages = [],
+  batchSize =
+    NAVTA_AI_BATCH_SIZE
+) => {
+  const batches = [];
+
+  for (
+    let index = 0;
+    index < pages.length;
+    index += batchSize
+  ) {
+    batches.push(
+      pages.slice(
+        index,
+        index +
+          batchSize
+      )
+    );
+  }
+
+  return batches;
+};
+
 
 // =====================================================
 // ANALYSE MULTIPLE RENDERED PAGES
@@ -1133,48 +1418,78 @@ const analyseRenderedPages =
       return [];
     }
 
-    // Check the gateway once before starting
-    // a potentially expensive multi-page import.
-    await checkNavtaAIGatewayConnection();
+    await checkGeminiConnection();
+
+    const validPages =
+      pages.filter(
+        (page) => {
+          const pageNumber =
+            Number(
+              page?.pageNumber
+            );
+
+          return (
+            pageNumber >
+              0 &&
+            Buffer.isBuffer(
+              page?.buffer
+            ) &&
+            page.buffer.length >
+              0
+          );
+        }
+      );
+
+    if (
+      validPages.length ===
+        0
+    ) {
+      return [];
+    }
+
+    const batches =
+      createPageBatches(
+        validPages,
+        NAVTA_AI_BATCH_SIZE
+      );
 
     const questions = [];
 
+    console.log(
+      `NAVTA Gemini PDF analysis starting: ${validPages.length} page(s), ${batches.length} request batch(es), batch size ${NAVTA_AI_BATCH_SIZE}.`
+    );
+
     for (
-      const page of
-        pages
+      let batchIndex = 0;
+      batchIndex <
+        batches.length;
+      batchIndex += 1
     ) {
-      const pageNumber =
-        Number(
-          page?.pageNumber
+      const batch =
+        batches[
+          batchIndex
+        ];
+
+      const pageNumbers =
+        batch.map(
+          (page) =>
+            Number(
+              page.pageNumber
+            )
         );
 
-      if (
-        !pageNumber ||
-        !Buffer.isBuffer(
-          page?.buffer
-        )
-      ) {
-        continue;
-      }
-
       console.log(
-        `NAVTA AI analysing PDF page ${pageNumber} through the AI Gateway with ${OLLAMA_MODEL}...`
+        `NAVTA Gemini analysing batch ${batchIndex + 1}/${batches.length}: PDF page(s) ${pageNumbers.join(
+          ", "
+        )}...`
       );
 
       const detected =
-        await analyseNavtaPage({
-          pageNumber,
+        await requestGeminiAnalysis({
+          pages:
+            batch,
 
-          imageBuffer:
-            page.buffer,
-
-          mimeType:
-            page.mimeType ||
-            "image/png",
-
-          text:
-            page.text ||
-            text,
+          text,
 
           hints,
         });
@@ -1184,8 +1499,13 @@ const analyseRenderedPages =
       );
     }
 
+    console.log(
+      `NAVTA Gemini PDF analysis completed. Detected ${questions.length} question(s).`
+    );
+
     return questions;
   };
+
 
 // =====================================================
 // EXPORT
@@ -1194,11 +1514,16 @@ const analyseRenderedPages =
 module.exports = {
   analyseNavtaPage,
   analyseRenderedPages,
-  checkNavtaAIGatewayConnection,
+  checkGeminiConnection,
 
-  // Backward-compatible export.
-  // Any older NAVTA code that still imports
-  // checkOllamaConnection will continue to work.
+  // Backward-compatible exports.
+  //
+  // These aliases prevent older NAVTA code from
+  // crashing if it still imports one of the old
+  // connection-check function names.
+  checkNavtaAIGatewayConnection:
+    checkGeminiConnection,
+
   checkOllamaConnection:
-    checkNavtaAIGatewayConnection,
+    checkGeminiConnection,
 };
