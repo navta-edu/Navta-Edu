@@ -14,7 +14,7 @@ const OLLAMA_MODEL =
   "qwen2.5vl:3b";
 
 const NAVTA_AI_SECRET =
-  process.env.NAVTA_AI_SECRET;
+  process.env.9fe19ffe79e856af9450d1aa03099f88ec3581230583b8465bdf6a43c7ca1c7b;
 
 // Increase Qwen context window.
 // The previous 4096-token context was too small
