@@ -11,8 +11,18 @@
 //
 // PDF pages are rendered elsewhere in NAVTA.
 // This service receives those rendered page images,
-// sends them to Gemini, extracts structured questions,
-// and returns them to the existing NAVTA import pipeline.
+// sends them to Gemini in batches of EXACTLY 5 pages,
+// extracts structured questions, and returns them to
+// the existing NAVTA import pipeline.
+//
+// Processing:
+//
+// Pages 1-5
+// Pages 6-10
+// Pages 11-15
+// Pages 16-20
+// ...
+// until the final page.
 //
 // IMPORTANT:
 // GEMINI_API_KEY must exist only in backend environment
@@ -29,11 +39,13 @@ const GEMINI_API_KEY =
     process.env.GEMINI_API_KEY || ""
   ).trim();
 
+
 const GEMINI_MODEL =
   String(
     process.env.GEMINI_MODEL ||
-      "gemini-2.5-flash"
+      "gemini-3.5-flash-lite"
   ).trim();
+
 
 const GEMINI_API_BASE =
   String(
@@ -42,6 +54,7 @@ const GEMINI_API_BASE =
   )
     .trim()
     .replace(/\/+$/, "");
+
 
 const NAVTA_AI_TIMEOUT_MS =
   Math.max(
@@ -52,23 +65,24 @@ const NAVTA_AI_TIMEOUT_MS =
     ) || 180000
   );
 
-// Number of rendered PDF pages sent in one Gemini request.
+
+// =====================================================
+// FIXED 5-PAGE BATCH
+// =====================================================
 //
-// Start conservatively.
-// This reduces API request count compared with
-// one-request-per-page processing while avoiding
-// extremely large multimodal requests.
-const NAVTA_AI_BATCH_SIZE =
-  Math.max(
-    1,
-    Math.min(
-      4,
-      Number(
-        process.env.NAVTA_AI_BATCH_SIZE ||
-          3
-      ) || 3
-    )
-  );
+// NAVTA intentionally processes 5 PDF pages at a time.
+//
+// Example:
+//
+// Request 1 -> pages 1,2,3,4,5
+// Request 2 -> pages 6,7,8,9,10
+// Request 3 -> pages 11,12,13,14,15
+//
+// The final request can contain fewer than 5 pages.
+//
+// =====================================================
+
+const NAVTA_AI_BATCH_SIZE = 5;
 
 
 // =====================================================
@@ -94,6 +108,10 @@ const safeArray = (
     : [];
 };
 
+
+// =====================================================
+// NORMALIZE QUESTION TYPE
+// =====================================================
 
 const normalizeQuestionType = (
   value
@@ -125,6 +143,10 @@ const normalizeQuestionType = (
 };
 
 
+// =====================================================
+// NORMALIZE DIFFICULTY
+// =====================================================
+
 const normalizeDifficulty = (
   value
 ) => {
@@ -154,6 +176,10 @@ const normalizeDifficulty = (
   return "";
 };
 
+
+// =====================================================
+// IMAGE BUFFER -> BASE64
+// =====================================================
 
 const imageBufferToBase64 = (
   buffer
@@ -189,7 +215,7 @@ const imageBufferToBase64 = (
 const SYSTEM_PROMPT = `
 You are NAVTA AI, an educational question-paper analysis system.
 
-Your job is to analyse rendered question-paper PAGE IMAGES and detect every complete academic question visible on those pages.
+Your job is to analyse rendered question-paper PAGE IMAGES and detect every academic question visible on those pages.
 
 NAVTA supports:
 
@@ -218,46 +244,151 @@ Question types:
 - short
 - long
 
-IMPORTANT RULES:
 
-1. The PAGE IMAGES are the primary source.
+=====================================================
+CRITICAL QUESTION DETECTION RULES
+=====================================================
 
-2. Preserve the original question wording as accurately as possible.
+1. The PAGE IMAGES are the PRIMARY source.
 
-3. Detect every COMPLETE academic question visible on the supplied pages.
+2. You MUST analyse EVERY supplied page.
 
-4. Do not invent questions.
+3. You MUST scan every supplied page from TOP to BOTTOM.
 
-5. A question may continue from one supplied page to the next supplied page.
+4. Detect EVERY academic question visible on ALL supplied pages.
+
+5. DO NOT stop after detecting only the first few questions.
+
+6. If five pages are supplied, you must inspect ALL FIVE pages completely.
+
+For example:
+
+If pages 1, 2, 3, 4 and 5 are supplied:
+
+- fully inspect page 1
+- fully inspect page 2
+- fully inspect page 3
+- fully inspect page 4
+- fully inspect page 5
+
+Do not return early.
+
+7. If pages 6, 7, 8, 9 and 10 are supplied:
+
+inspect every one of those pages completely.
+
+Continue this behaviour for every later page batch.
+
+8. Your goal is MAXIMUM QUESTION RECALL without inventing questions.
+
+9. Preserve the printed question number whenever visible.
+
+10. A page may contain many questions.
+
+Do not assume one page contains only one question.
+
+If a page contains:
+
+Q1
+Q2
+Q3
+Q4
+Q5
+Q6
+Q7
+
+then return all seven questions if they are readable.
+
+11. Questions may be arranged:
+
+- vertically
+- in columns
+- in sections
+- across multiple areas of the page
+
+Inspect the COMPLETE page.
+
+12. Pay special attention to two-column question papers.
+
+If the page contains a left column and right column,
+scan BOTH columns.
+
+13. Preserve the original question wording as accurately as possible.
+
+14. Do not invent questions.
+
+
+=====================================================
+QUESTIONS CONTINUING BETWEEN PAGES
+=====================================================
+
+15. A question may continue from one supplied page to the next supplied page.
 
 If adjacent supplied pages clearly contain different parts of the same question, combine them into one complete question.
 
-If a question cannot be understood completely because the required continuation is not present in the supplied pages, mark it for dropping.
+16. Do not duplicate a question simply because it appears across two pages.
 
-6. For MCQ questions:
+17. If a question begins near the bottom of one page and continues on the next supplied page, combine it.
 
-- Return exactly four options when four options are visible.
+18. If a question cannot be understood completely because the required continuation is NOT present in the supplied batch:
 
-- Preserve mathematical expressions as readable text.
+drop = true
 
-- correctAnswer must be:
+and explain why using dropReason.
+
+
+=====================================================
+MCQ RULES
+=====================================================
+
+19. For MCQ questions:
+
+Return exactly four options when four options are visible.
+
+20. Preserve options accurately.
+
+21. Preserve mathematical expressions as readable text.
+
+22. correctAnswer must be:
 
 0 = A
 1 = B
 2 = C
 3 = D
 
-- If the correct answer cannot be determined reliably, return null.
+23. If the correct answer cannot be determined reliably:
 
-7. NEET and JEE questions must use questionType "mcq".
+correctAnswer = null
 
-8. Boards questions may use:
+24. Never guess a correct answer just to make a question valid.
+
+25. NEET and JEE questions must use:
+
+questionType = "mcq"
+
+
+=====================================================
+BOARD QUESTION RULES
+=====================================================
+
+26. Boards questions may use:
 
 - mcq
 - short
 - long
 
-9. Determine as accurately as possible:
+27. For Boards written questions provide when possible:
+
+- modelAnswer
+- keyPoints
+- maxMarks
+
+
+=====================================================
+CLASSIFICATION
+=====================================================
+
+28. Determine as accurately as possible:
 
 - subject
 - exam
@@ -266,19 +397,27 @@ If a question cannot be understood completely because the required continuation 
 - difficulty
 - questionType
 
-10. If administrator hints are supplied and they clearly match the pages, use them.
+29. If administrator hints are supplied and they clearly match the pages, use them.
 
-11. Do not blindly use hints if they clearly contradict the page.
+30. Do not blindly use hints if they clearly contradict the question.
 
-12. Provide an educational explanation when it can be determined reliably.
 
-13. For Boards written questions provide when possible:
+=====================================================
+EXPLANATIONS
+=====================================================
 
-- modelAnswer
-- keyPoints
-- maxMarks
+31. Provide an educational explanation when it can be determined reliably.
 
-14. DIAGRAMS AND VISUALS ARE VERY IMPORTANT.
+32. The explanation should help a student understand the answer.
+
+33. Do not reject an otherwise readable question merely because a long explanation is unavailable.
+
+
+=====================================================
+DIAGRAMS AND VISUALS
+=====================================================
+
+34. DIAGRAMS AND VISUALS ARE VERY IMPORTANT.
 
 A visual includes:
 
@@ -295,11 +434,11 @@ A visual includes:
 - labelled figure
 - mathematical figure
 
-If a question depends on a visual:
+35. If a question depends on a visual:
 
-hasVisual must be true.
+hasVisual = true
 
-Return visualBoundingBox using NORMALIZED coordinates for the page identified by sourcePage:
+36. Return visualBoundingBox using NORMALIZED coordinates for the page identified by sourcePage:
 
 {
   "x": 0.0,
@@ -308,49 +447,80 @@ Return visualBoundingBox using NORMALIZED coordinates for the page identified by
   "height": 0.0
 }
 
-Each coordinate must be between 0 and 1.
+37. Each coordinate must be between 0 and 1.
 
-x is the horizontal starting position from the LEFT edge.
+38. x is the horizontal starting position from the LEFT edge.
 
-y is the vertical starting position from the TOP edge.
+39. y is the vertical starting position from the TOP edge.
 
-width is the visual width divided by total page width.
+40. width is the visual width divided by total page width.
 
-height is the visual height divided by total page height.
+41. height is the visual height divided by total page height.
 
-The visualBoundingBox must contain the REQUIRED diagram, graph, circuit, figure, table or other visual as tightly as practical.
+42. The visualBoundingBox must contain the REQUIRED diagram, graph, circuit, figure, table or other visual as tightly as practical.
 
-Do not include the complete page.
+43. Do not include the complete page.
 
-Do not include the entire question text unless that text is part of the required figure.
+44. Do not include the entire question text unless that text is part of the required figure.
 
-15. If no visual is required:
+45. If no visual is required:
 
 hasVisual = false
 visualDescription = ""
 visualBoundingBox = null
 
-16. If a question is incomplete, unreadable, uncertain, or cannot safely be classified:
+
+=====================================================
+DROP RULES
+=====================================================
+
+46. Do NOT drop a readable question simply because classification is difficult.
+
+Make your best reliable classification.
+
+47. Only use:
 
 drop = true
 
-and provide a clear dropReason.
+when the actual question itself is:
 
-17. Never make up an answer simply to make a question valid.
+- incomplete
+- unreadable
+- genuinely uncertain
+- missing essential continuation
+- impossible to reconstruct safely
 
-18. sourcePage is REQUIRED.
+48. Never invent missing question text.
 
-sourcePage must be the actual PDF page number containing the question.
+49. Never make up an answer simply to make a question valid.
 
-If a question spans multiple supplied pages, use the page where the question begins.
 
-If a visual belongs to the question, sourcePage must identify the page containing the visual because NAVTA uses that page to crop the diagram.
+=====================================================
+SOURCE PAGE
+=====================================================
 
-19. Return ONLY valid JSON.
+50. sourcePage is REQUIRED.
 
-20. Do not return Markdown.
+51. sourcePage must be the actual PDF page number containing the question.
 
-21. Do not use code fences.
+52. If a question spans multiple supplied pages, use the page where the question begins.
+
+53. If a visual belongs to the question, sourcePage must identify the page containing the visual because NAVTA uses that page to crop the diagram.
+
+
+=====================================================
+OUTPUT
+=====================================================
+
+54. Return ONLY valid JSON.
+
+55. Do not return Markdown.
+
+56. Do not use code fences.
+
+57. Return EVERY question you detected.
+
+58. Before producing the final JSON, mentally verify that you inspected every supplied page from top to bottom.
 
 The exact top-level response structure is:
 
@@ -387,6 +557,7 @@ const buildBatchPrompt = ({
     ) ||
     "Not provided";
 
+
   const pageNumbers =
     pages
       .map(
@@ -398,6 +569,7 @@ const buildBatchPrompt = ({
       .filter(
         Boolean
       );
+
 
   const pageContext =
     pages
@@ -414,11 +586,15 @@ const buildBatchPrompt = ({
             );
 
           return `
-PAGE ${pageNumber} TEXT CONTEXT:
+=====================================================
+PDF PAGE ${pageNumber}
+=====================================================
+
+Extracted text context for page ${pageNumber}:
 
 ${pageText.slice(
   0,
-  5000
+  7000
 )}
 `;
         }
@@ -427,14 +603,46 @@ ${pageText.slice(
         "\n"
       );
 
+
   return `
 Analyse this NAVTA question-paper page batch.
 
-SUPPLIED PDF PAGE NUMBERS:
+
+=====================================================
+SUPPLIED PDF PAGES
+=====================================================
 
 ${pageNumbers.join(", ")}
 
-ADMIN HINTS:
+
+You MUST analyse these pages in this order:
+
+${pageNumbers
+  .map(
+    (number) =>
+      `PDF Page ${number}`
+  )
+  .join("\n")}
+
+
+IMPORTANT:
+
+You MUST inspect EVERY supplied page.
+
+Do not analyse only the first page.
+
+Do not stop after finding the first few questions.
+
+Scan every page completely from top to bottom.
+
+If a page contains two columns, inspect both columns.
+
+Detect every readable academic question.
+
+
+=====================================================
+ADMIN HINTS
+=====================================================
 
 Subject:
 ${subjectHint}
@@ -445,24 +653,42 @@ ${examHint}
 Class:
 ${classHint}
 
+
+=====================================================
+SOURCE PRIORITY
+=====================================================
+
 The PAGE IMAGES supplied with this request are the PRIMARY SOURCE.
 
 Each image is preceded by a text label identifying its PDF page number.
 
 Extracted document text is SUPPORTING CONTEXT only.
 
-Do not extract questions from supporting text unless they are actually visible on one or more supplied page images.
+Do not create questions that are not visible on one or more supplied page images.
+
+
+=====================================================
+PAGE TEXT CONTEXT
+=====================================================
 
 ${pageContext}
 
-GENERAL DOCUMENT TEXT CONTEXT:
+
+=====================================================
+GENERAL DOCUMENT TEXT CONTEXT
+=====================================================
 
 ${String(
   text || ""
 ).slice(
   0,
-  6000
+  8000
 )}
+
+
+=====================================================
+REQUIRED QUESTION FORMAT
+=====================================================
 
 For EVERY detected question return an object using this exact structure:
 
@@ -489,11 +715,29 @@ For EVERY detected question return an object using this exact structure:
   "dropReason": ""
 }
 
-IMPORTANT:
 
-sourcePage must be one of these supplied PDF page numbers:
+=====================================================
+FINAL CHECK BEFORE RETURNING JSON
+=====================================================
+
+Before returning:
+
+1. Confirm you inspected ALL of these pages:
 
 ${pageNumbers.join(", ")}
+
+2. Confirm you scanned each page completely.
+
+3. Confirm you did not stop after only a few questions.
+
+4. Confirm every visible readable academic question has been included.
+
+5. Confirm question numbers were preserved whenever visible.
+
+6. Confirm sourcePage is one of these supplied PDF page numbers:
+
+${pageNumbers.join(", ")}
+
 
 Return:
 
@@ -555,6 +799,7 @@ const normalizeVisualBoundingBox = (
     return null;
   }
 
+
   const x =
     Number(
       value.x
@@ -575,6 +820,7 @@ const normalizeVisualBoundingBox = (
       value.height
     );
 
+
   if (
     !Number.isFinite(
       x
@@ -592,12 +838,14 @@ const normalizeVisualBoundingBox = (
     return null;
   }
 
+
   if (
     width <= 0 ||
     height <= 0
   ) {
     return null;
   }
+
 
   const safeX =
     Math.min(
@@ -608,6 +856,7 @@ const normalizeVisualBoundingBox = (
       )
     );
 
+
   const safeY =
     Math.min(
       1,
@@ -616,6 +865,7 @@ const normalizeVisualBoundingBox = (
         y
       )
     );
+
 
   const safeWidth =
     Math.min(
@@ -630,6 +880,7 @@ const normalizeVisualBoundingBox = (
       )
     );
 
+
   const safeHeight =
     Math.min(
       Math.max(
@@ -643,12 +894,14 @@ const normalizeVisualBoundingBox = (
       )
     );
 
+
   if (
     safeWidth <= 0 ||
     safeHeight <= 0
   ) {
     return null;
   }
+
 
   return {
     x:
@@ -680,8 +933,10 @@ const normalizeDetectedQuestion = ({
       item?.questionType
     );
 
+
   let correctAnswer =
     null;
+
 
   if (
     item?.correctAnswer !==
@@ -708,8 +963,10 @@ const normalizeDetectedQuestion = ({
     }
   }
 
+
   let maxMarks =
     null;
+
 
   if (
     item?.maxMarks !==
@@ -735,15 +992,18 @@ const normalizeDetectedQuestion = ({
     }
   }
 
+
   const visualBoundingBox =
     normalizeVisualBoundingBox(
       item?.visualBoundingBox
     );
 
+
   const requestedVisual =
     Boolean(
       item?.hasVisual
     );
+
 
   const hasVisual =
     requestedVisual &&
@@ -751,15 +1011,18 @@ const normalizeDetectedQuestion = ({
       visualBoundingBox
     );
 
+
   const drop =
     Boolean(
       item?.drop
     );
 
+
   let dropReason =
     cleanString(
       item?.dropReason
     );
+
 
   if (
     requestedVisual &&
@@ -770,10 +1033,12 @@ const normalizeDetectedQuestion = ({
       "A required visual was detected but its bounding box could not be identified.";
   }
 
+
   const requestedSourcePage =
     Number(
       item?.sourcePage
     );
+
 
   const safeValidPages =
     safeArray(
@@ -790,12 +1055,14 @@ const normalizeDetectedQuestion = ({
           value > 0
       );
 
+
   let sourcePage =
     Number(
       fallbackPageNumber
     ) ||
     safeValidPages[0] ||
     null;
+
 
   if (
     Number.isInteger(
@@ -808,6 +1075,7 @@ const normalizeDetectedQuestion = ({
     sourcePage =
       requestedSourcePage;
   }
+
 
   return {
     questionNumber:
@@ -981,7 +1249,7 @@ const extractGeminiText = (
         .map(
           (part) =>
             typeof part?.text ===
-            "string"
+              "string"
               ? part.text
               : ""
         )
@@ -1016,6 +1284,7 @@ const requestGeminiAnalysis =
   }) => {
     await checkGeminiConnection();
 
+
     if (
       !Array.isArray(
         pages
@@ -1025,6 +1294,7 @@ const requestGeminiAnalysis =
     ) {
       return [];
     }
+
 
     const validPages =
       pages.filter(
@@ -1039,12 +1309,14 @@ const requestGeminiAnalysis =
             0
       );
 
+
     if (
       validPages.length ===
         0
     ) {
       return [];
     }
+
 
     const validPageNumbers =
       validPages.map(
@@ -1054,13 +1326,17 @@ const requestGeminiAnalysis =
           )
       );
 
+
     const prompt =
       `${SYSTEM_PROMPT}\n\n${buildBatchPrompt({
         pages:
           validPages,
+
         text,
+
         hints,
       })}`;
+
 
     const parts = [
       {
@@ -1068,6 +1344,11 @@ const requestGeminiAnalysis =
           prompt,
       },
     ];
+
+
+    // =================================================
+    // ADD EACH PAGE IMAGE
+    // =================================================
 
     for (
       const page of
@@ -1084,10 +1365,12 @@ const requestGeminiAnalysis =
         ) ||
         "image/png";
 
+
       parts.push({
         text:
-          `The next image is PDF PAGE ${pageNumber}.`,
+          `The next image is PDF PAGE ${pageNumber}. Analyse this entire page from top to bottom.`,
       });
+
 
       parts.push({
         inline_data: {
@@ -1102,8 +1385,10 @@ const requestGeminiAnalysis =
       });
     }
 
+
     const controller =
       new AbortController();
+
 
     const timeout =
       setTimeout(
@@ -1113,7 +1398,9 @@ const requestGeminiAnalysis =
         NAVTA_AI_TIMEOUT_MS
       );
 
+
     let response;
+
 
     try {
       const endpoint =
@@ -1122,6 +1409,14 @@ const requestGeminiAnalysis =
         )}:generateContent?key=${encodeURIComponent(
           GEMINI_API_KEY
         )}`;
+
+
+      console.log(
+        `NAVTA Gemini request: analysing PDF pages ${validPageNumbers.join(
+          ", "
+        )} using ${GEMINI_MODEL}.`
+      );
+
 
       response =
         await fetch(
@@ -1174,6 +1469,7 @@ const requestGeminiAnalysis =
         );
       }
 
+
       throw new Error(
         `NAVTA could not connect to Gemini. ${error.message}`
       );
@@ -1183,10 +1479,13 @@ const requestGeminiAnalysis =
       );
     }
 
+
     const responseText =
       await response.text();
 
+
     let data = {};
+
 
     try {
       data =
@@ -1208,6 +1507,7 @@ const requestGeminiAnalysis =
       );
     }
 
+
     if (
       !response.ok
     ) {
@@ -1217,20 +1517,24 @@ const requestGeminiAnalysis =
           `Gemini request failed with status ${response.status}.`
         );
 
+
       console.error(
         "NAVTA GEMINI API ERROR:",
         apiMessage
       );
+
 
       throw new Error(
         apiMessage
       );
     }
 
+
     const outputText =
       extractGeminiText(
         data
       );
+
 
     if (
       !outputText
@@ -1241,11 +1545,13 @@ const requestGeminiAnalysis =
             ?.finishReason
         );
 
+
       const blockReason =
         cleanString(
           data?.promptFeedback
             ?.blockReason
         );
+
 
       if (
         blockReason
@@ -1255,6 +1561,7 @@ const requestGeminiAnalysis =
         );
       }
 
+
       if (
         finishReason
       ) {
@@ -1263,6 +1570,7 @@ const requestGeminiAnalysis =
         );
       }
 
+
       throw new Error(
         `Gemini returned no question data for pages ${validPageNumbers.join(
           ", "
@@ -1270,12 +1578,15 @@ const requestGeminiAnalysis =
       );
     }
 
+
     const cleanedOutput =
       cleanJsonResponse(
         outputText
       );
 
+
     let parsed;
+
 
     try {
       parsed =
@@ -1288,6 +1599,7 @@ const requestGeminiAnalysis =
         cleanedOutput
       );
 
+
       throw new Error(
         `NAVTA could not understand the Gemini JSON response for pages ${validPageNumbers.join(
           ", "
@@ -1295,24 +1607,38 @@ const requestGeminiAnalysis =
       );
     }
 
+
     const questions =
       safeArray(
         parsed?.questions
       );
 
+
     const fallbackPageNumber =
       validPageNumbers[0];
 
-    return questions.map(
-      (item) =>
-        normalizeDetectedQuestion({
-          item,
 
-          fallbackPageNumber,
+    const normalized =
+      questions.map(
+        (item) =>
+          normalizeDetectedQuestion({
+            item,
 
-          validPageNumbers,
-        })
+            fallbackPageNumber,
+
+            validPageNumbers,
+          })
+      );
+
+
+    console.log(
+      `NAVTA Gemini pages ${validPageNumbers.join(
+        ", "
+      )}: detected ${normalized.length} question(s).`
     );
+
+
+    return normalized;
   };
 
 
@@ -1341,9 +1667,11 @@ const analyseNavtaPage =
       );
     }
 
+
     console.log(
       `NAVTA AI analysing PDF page ${pageNumber} with Gemini ${GEMINI_MODEL}...`
     );
+
 
     return requestGeminiAnalysis({
       pages: [
@@ -1370,29 +1698,31 @@ const analyseNavtaPage =
 
 
 // =====================================================
-// SPLIT INTO BATCHES
+// SPLIT PAGES INTO EXACT 5-PAGE BATCHES
 // =====================================================
 
 const createPageBatches = (
-  pages = [],
-  batchSize =
-    NAVTA_AI_BATCH_SIZE
+  pages = []
 ) => {
-  const batches = [];
+  const batches =
+    [];
+
 
   for (
     let index = 0;
     index < pages.length;
-    index += batchSize
+    index +=
+      NAVTA_AI_BATCH_SIZE
   ) {
     batches.push(
       pages.slice(
         index,
         index +
-          batchSize
+          NAVTA_AI_BATCH_SIZE
       )
     );
   }
+
 
   return batches;
 };
@@ -1418,7 +1748,13 @@ const analyseRenderedPages =
       return [];
     }
 
+
     await checkGeminiConnection();
+
+
+    // =================================================
+    // VALID PAGES
+    // =================================================
 
     const validPages =
       pages.filter(
@@ -1427,6 +1763,7 @@ const analyseRenderedPages =
             Number(
               page?.pageNumber
             );
+
 
           return (
             pageNumber >
@@ -1440,6 +1777,7 @@ const analyseRenderedPages =
         }
       );
 
+
     if (
       validPages.length ===
         0
@@ -1447,17 +1785,95 @@ const analyseRenderedPages =
       return [];
     }
 
+
+    // =================================================
+    // SORT PAGES
+    // =================================================
+    //
+    // Guarantees:
+    //
+    // 1,2,3,4,5
+    // then
+    // 6,7,8,9,10
+    // etc.
+    //
+    // =================================================
+
+    validPages.sort(
+      (
+        first,
+        second
+      ) =>
+        Number(
+          first.pageNumber
+        ) -
+        Number(
+          second.pageNumber
+        )
+    );
+
+
+    // =================================================
+    // CREATE 5-PAGE BATCHES
+    // =================================================
+
     const batches =
       createPageBatches(
-        validPages,
-        NAVTA_AI_BATCH_SIZE
+        validPages
       );
 
-    const questions = [];
+
+    const questions =
+      [];
+
 
     console.log(
-      `NAVTA Gemini PDF analysis starting: ${validPages.length} page(s), ${batches.length} request batch(es), batch size ${NAVTA_AI_BATCH_SIZE}.`
+      "====================================================="
     );
+
+    console.log(
+      "NAVTA GEMINI PDF ANALYSIS STARTING"
+    );
+
+    console.log(
+      `Total rendered pages: ${validPages.length}`
+    );
+
+    console.log(
+      `Batch size: ${NAVTA_AI_BATCH_SIZE} pages`
+    );
+
+    console.log(
+      `Total Gemini requests: ${batches.length}`
+    );
+
+    console.log(
+      "====================================================="
+    );
+
+
+    // =================================================
+    // PROCESS EACH BATCH SEQUENTIALLY
+    // =================================================
+    //
+    // IMPORTANT:
+    //
+    // We intentionally use await inside this loop.
+    //
+    // This means:
+    //
+    // FIRST:
+    // pages 1-5 finish
+    //
+    // THEN:
+    // pages 6-10 begin
+    //
+    // THEN:
+    // pages 11-15
+    //
+    // etc.
+    //
+    // =================================================
 
     for (
       let batchIndex = 0;
@@ -1470,6 +1886,7 @@ const analyseRenderedPages =
           batchIndex
         ];
 
+
       const pageNumbers =
         batch.map(
           (page) =>
@@ -1478,11 +1895,25 @@ const analyseRenderedPages =
             )
         );
 
+
       console.log(
-        `NAVTA Gemini analysing batch ${batchIndex + 1}/${batches.length}: PDF page(s) ${pageNumbers.join(
-          ", "
-        )}...`
+        "-----------------------------------------------------"
       );
+
+      console.log(
+        `NAVTA Gemini batch ${batchIndex + 1}/${batches.length}`
+      );
+
+      console.log(
+        `Processing PDF pages: ${pageNumbers.join(
+          ", "
+        )}`
+      );
+
+      console.log(
+        "-----------------------------------------------------"
+      );
+
 
       const detected =
         await requestGeminiAnalysis({
@@ -1494,14 +1925,46 @@ const analyseRenderedPages =
           hints,
         });
 
+
       questions.push(
         ...detected
       );
+
+
+      console.log(
+        `Batch ${batchIndex + 1} completed.`
+      );
+
+      console.log(
+        `Questions found in this batch: ${detected.length}`
+      );
+
+      console.log(
+        `Total questions detected so far: ${questions.length}`
+      );
     }
 
+
     console.log(
-      `NAVTA Gemini PDF analysis completed. Detected ${questions.length} question(s).`
+      "====================================================="
     );
+
+    console.log(
+      "NAVTA GEMINI PDF ANALYSIS COMPLETED"
+    );
+
+    console.log(
+      `Pages analysed: ${validPages.length}`
+    );
+
+    console.log(
+      `Total detected questions: ${questions.length}`
+    );
+
+    console.log(
+      "====================================================="
+    );
+
 
     return questions;
   };
@@ -1513,14 +1976,22 @@ const analyseRenderedPages =
 
 module.exports = {
   analyseNavtaPage,
+
   analyseRenderedPages,
+
   checkGeminiConnection,
 
-  // Backward-compatible exports.
+
+  // ===================================================
+  // BACKWARD COMPATIBILITY
+  // ===================================================
   //
   // These aliases prevent older NAVTA code from
-  // crashing if it still imports one of the old
-  // connection-check function names.
+  // crashing if it still imports the old connection
+  // check function names.
+  //
+  // ===================================================
+
   checkNavtaAIGatewayConnection:
     checkGeminiConnection,
 
