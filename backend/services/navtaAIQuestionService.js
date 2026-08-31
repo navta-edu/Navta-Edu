@@ -1,13 +1,14 @@
 // =====================================================
 // NAVTA AI QUESTION SERVICE
-// Ollama + Qwen2.5-VL
+// NAVTA AI Gateway + Ollama + Qwen2.5-VL
 // =====================================================
 //
-// Local AI model:
-// qwen2.5vl:3b
+// Production flow:
 //
-// Default Ollama server:
-// http://127.0.0.1:11434
+// Hostinger backend
+// -> NAVTA AI Gateway (Cloudflare HTTPS)
+// -> Local Ollama
+// -> qwen2.5vl:3b
 //
 // No Gemini API is used in this file.
 // =====================================================
@@ -16,13 +17,19 @@
 // CONFIG
 // =====================================================
 
-const OLLAMA_BASE_URL =
+const NAVTA_AI_GATEWAY_URL =
   String(
-    process.env.OLLAMA_BASE_URL ||
-      "http://127.0.0.1:11434"
+    process.env.NAVTA_AI_GATEWAY_URL ||
+      "http://127.0.0.1:5050"
   )
     .trim()
     .replace(/\/+$/, "");
+
+const NAVTA_AI_SECRET =
+  String(
+    process.env.NAVTA_AI_SECRET ||
+      ""
+  ).trim();
 
 const OLLAMA_MODEL =
   String(
@@ -30,11 +37,11 @@ const OLLAMA_MODEL =
       "qwen2.5vl:3b"
   ).trim();
 
-const OLLAMA_TIMEOUT_MS =
+const NAVTA_AI_TIMEOUT_MS =
   Math.max(
     30000,
     Number(
-      process.env.OLLAMA_TIMEOUT_MS ||
+      process.env.NAVTA_AI_TIMEOUT_MS ||
         180000
     ) || 180000
   );
@@ -763,83 +770,90 @@ const normalizeDetectedQuestion = ({
       ),
   };
 };
-
 // =====================================================
-// CHECK OLLAMA
+// CHECK NAVTA AI GATEWAY
 // =====================================================
 
-const checkOllamaConnection =
+const checkNavtaAIGatewayConnection =
   async () => {
+    if (
+      !NAVTA_AI_GATEWAY_URL
+    ) {
+      throw new Error(
+        "NAVTA_AI_GATEWAY_URL is not configured."
+      );
+    }
+
+    if (
+      !NAVTA_AI_SECRET
+    ) {
+      throw new Error(
+        "NAVTA_AI_SECRET is not configured."
+      );
+    }
+
     const controller =
       new AbortController();
 
     const timeout =
       setTimeout(
-        () =>
-          controller.abort(),
+        () => {
+          controller.abort();
+        },
         10000
       );
 
     try {
       const response =
         await fetch(
-          `${OLLAMA_BASE_URL}/api/tags`,
+          `${NAVTA_AI_GATEWAY_URL}/health`,
           {
             method:
               "GET",
+
+            headers: {
+              Accept:
+                "application/json",
+            },
 
             signal:
               controller.signal,
           }
         );
 
+      const responseText =
+        await response.text();
+
+      let data = {};
+
+      try {
+        data =
+          responseText
+            ? JSON.parse(
+                responseText
+              )
+            : {};
+      } catch (error) {
+        throw new Error(
+          "NAVTA AI Gateway returned an invalid health response."
+        );
+      }
+
       if (
         !response.ok
       ) {
         throw new Error(
-          `Ollama returned status ${response.status}.`
+          data?.message ||
+            `NAVTA AI Gateway returned status ${response.status}.`
         );
       }
 
-      const data =
-        await response.json();
-
-      const models =
-        safeArray(
-          data?.models
-        );
-
-      const installed =
-        models.some(
-          (model) => {
-            const name =
-              cleanString(
-                model?.name
-              );
-
-            const modelName =
-              cleanString(
-                model?.model
-              );
-
-            return (
-              name ===
-                OLLAMA_MODEL ||
-              modelName ===
-                OLLAMA_MODEL ||
-              name.startsWith(
-                `${OLLAMA_MODEL}:`
-              )
-            );
-          }
-        );
-
       if (
-        models.length > 0 &&
-        !installed
+        data?.success !==
+          true
       ) {
-        console.warn(
-          `NAVTA AI WARNING: Ollama is running, but ${OLLAMA_MODEL} was not found in /api/tags.`
+        throw new Error(
+          "NAVTA AI Gateway health check failed."
         );
       }
 
@@ -847,15 +861,15 @@ const checkOllamaConnection =
     } catch (error) {
       if (
         error?.name ===
-        "AbortError"
+          "AbortError"
       ) {
         throw new Error(
-          `Ollama connection timed out at ${OLLAMA_BASE_URL}.`
+          `NAVTA AI Gateway connection timed out at ${NAVTA_AI_GATEWAY_URL}.`
         );
       }
 
       throw new Error(
-        `NAVTA could not connect to Ollama at ${OLLAMA_BASE_URL}. ${error.message}`
+        `NAVTA could not connect to the AI Gateway at ${NAVTA_AI_GATEWAY_URL}. ${error.message}`
       );
     } finally {
       clearTimeout(
@@ -865,28 +879,17 @@ const checkOllamaConnection =
   };
 
 // =====================================================
-// EXTRACT OLLAMA RESPONSE TEXT
+// EXTRACT GATEWAY RESPONSE TEXT
 // =====================================================
 
-const extractOllamaText = (
+const extractGatewayText = (
   data
 ) => {
   if (
-    typeof data?.message
-      ?.content ===
+    typeof data?.content ===
       "string"
   ) {
-    return data.message
-      .content
-      .trim();
-  }
-
-  if (
-    typeof data?.response ===
-      "string"
-  ) {
-    return data.response
-      .trim();
+    return data.content.trim();
   }
 
   return "";
@@ -917,6 +920,14 @@ const analyseNavtaPage =
       );
     }
 
+    if (
+      !NAVTA_AI_SECRET
+    ) {
+      throw new Error(
+        "NAVTA_AI_SECRET is not configured."
+      );
+    }
+
     const imageBase64 =
       imageBufferToBase64(
         imageBuffer
@@ -940,7 +951,7 @@ ${buildPagePrompt({
         () => {
           controller.abort();
         },
-        OLLAMA_TIMEOUT_MS
+        NAVTA_AI_TIMEOUT_MS
       );
 
     let response;
@@ -948,7 +959,7 @@ ${buildPagePrompt({
     try {
       response =
         await fetch(
-          `${OLLAMA_BASE_URL}/api/chat`,
+          `${NAVTA_AI_GATEWAY_URL}/api/navta/analyse`,
           {
             method:
               "POST",
@@ -956,6 +967,12 @@ ${buildPagePrompt({
             headers: {
               "Content-Type":
                 "application/json",
+
+              Accept:
+                "application/json",
+
+              "x-navta-ai-key":
+                NAVTA_AI_SECRET,
             },
 
             signal:
@@ -963,40 +980,24 @@ ${buildPagePrompt({
 
             body:
               JSON.stringify({
+                prompt,
+
+                image:
+                  imageBase64,
+
+                mimeType,
+
+                pageNumber,
+
                 model:
                   OLLAMA_MODEL,
-
-                stream:
-                  false,
-
-                format:
-                  "json",
-
-                messages: [
-                  {
-                    role:
-                      "user",
-
-                    content:
-                      prompt,
-
-                    images: [
-                      imageBase64,
-                    ],
-                  },
-                ],
-
-                options: {
-                  temperature:
-                    0.1,
-                },
               }),
           }
         );
     } catch (error) {
       if (
         error?.name ===
-        "AbortError"
+          "AbortError"
       ) {
         throw new Error(
           `NAVTA AI timed out while analysing page ${pageNumber}.`
@@ -1004,7 +1005,7 @@ ${buildPagePrompt({
       }
 
       throw new Error(
-        `NAVTA could not connect to Ollama. ${error.message}`
+        `NAVTA could not connect to the AI Gateway. ${error.message}`
       );
     } finally {
       clearTimeout(
@@ -1026,12 +1027,12 @@ ${buildPagePrompt({
           : {};
     } catch (error) {
       console.error(
-        "NAVTA OLLAMA RAW RESPONSE:",
+        "NAVTA AI GATEWAY RAW RESPONSE:",
         responseText
       );
 
       throw new Error(
-        `Ollama returned an invalid API response for page ${pageNumber}.`
+        `NAVTA AI Gateway returned an invalid API response for page ${pageNumber}.`
       );
     }
 
@@ -1039,9 +1040,9 @@ ${buildPagePrompt({
       !response.ok
     ) {
       const apiMessage =
-        data?.error ||
         data?.message ||
-        `Ollama request failed with status ${response.status}.`;
+        data?.error ||
+        `NAVTA AI Gateway request failed with status ${response.status}.`;
 
       throw new Error(
         cleanString(
@@ -1050,8 +1051,20 @@ ${buildPagePrompt({
       );
     }
 
+    if (
+      data?.success !==
+        true
+    ) {
+      throw new Error(
+        cleanString(
+          data?.message ||
+            `NAVTA AI Gateway failed while analysing page ${pageNumber}.`
+        )
+      );
+    }
+
     const outputText =
-      extractOllamaText(
+      extractGatewayText(
         data
       );
 
@@ -1059,7 +1072,7 @@ ${buildPagePrompt({
       !outputText
     ) {
       throw new Error(
-        `Ollama returned no question data for page ${pageNumber}.`
+        `NAVTA AI Gateway returned no question data for page ${pageNumber}.`
       );
     }
 
@@ -1077,12 +1090,12 @@ ${buildPagePrompt({
         );
     } catch (error) {
       console.error(
-        "NAVTA OLLAMA JSON PARSE ERROR:",
+        "NAVTA AI JSON PARSE ERROR:",
         cleanedOutput
       );
 
       throw new Error(
-        `NAVTA AI could not understand Ollama's JSON response for page ${pageNumber}.`
+        `NAVTA AI could not understand the model JSON response for page ${pageNumber}.`
       );
     }
 
@@ -1120,15 +1133,15 @@ const analyseRenderedPages =
       return [];
     }
 
-    // Check once before starting a potentially
-    // expensive multi-page import.
-    await checkOllamaConnection();
+    // Check the gateway once before starting
+    // a potentially expensive multi-page import.
+    await checkNavtaAIGatewayConnection();
 
     const questions = [];
 
     for (
       const page of
-      pages
+        pages
     ) {
       const pageNumber =
         Number(
@@ -1145,7 +1158,7 @@ const analyseRenderedPages =
       }
 
       console.log(
-        `NAVTA Ollama analysing PDF page ${pageNumber} with ${OLLAMA_MODEL}...`
+        `NAVTA AI analysing PDF page ${pageNumber} through the AI Gateway with ${OLLAMA_MODEL}...`
       );
 
       const detected =
@@ -1181,5 +1194,11 @@ const analyseRenderedPages =
 module.exports = {
   analyseNavtaPage,
   analyseRenderedPages,
-  checkOllamaConnection,
+  checkNavtaAIGatewayConnection,
+
+  // Backward-compatible export.
+  // Any older NAVTA code that still imports
+  // checkOllamaConnection will continue to work.
+  checkOllamaConnection:
+    checkNavtaAIGatewayConnection,
 };
