@@ -833,12 +833,775 @@ exports.importQuestionsWithAI = async (req, res) => {
 // analysis/review flow has been tested successfully.
 // ============================================
 
+// ============================================
+// NAVTA AI - CONFIRM IMPORT
+// ============================================
+//
+// IMPORTANT:
+//
+// This endpoint DOES NOT run AI.
+//
+// AI analysis has already happened before this
+// endpoint is called.
+//
+// This endpoint only:
+//
+// 1. Receives administrator-approved questions.
+// 2. Validates them again for safety.
+// 3. Preserves AI-generated metadata.
+// 4. Preserves question diagrams/images.
+// 5. Saves valid questions to MongoDB.
+//
+// It does NOT change:
+// - Gemini
+// - AI model
+// - AI prompts
+// - 5-page batching
+// - question extraction
+// - AI classification
+// - AI answer generation
+// - AI diagram detection
+//
+// ============================================
+
 exports.confirmAIImport = async (req, res) => {
-  return res.status(503).json({
-    success: false,
-    message:
-      "NAVTA AI question confirmation is temporarily disabled until import analysis testing is complete.",
-  });
+  try {
+    // ========================================
+    // READ APPROVED QUESTIONS
+    // ========================================
+
+    const {
+      questions,
+    } = req.body || {};
+
+    if (
+      !Array.isArray(questions)
+    ) {
+      return res.status(400).json({
+        success: false,
+
+        message:
+          "Approved questions must be provided as a list.",
+      });
+    }
+
+    if (
+      questions.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+
+        message:
+          "There are no approved questions to import.",
+      });
+    }
+
+    // ========================================
+    // SAFETY LIMIT
+    // ========================================
+    //
+    // This protects MongoDB from accidentally
+    // receiving an abnormally large request.
+    //
+    // It does NOT affect AI analysis.
+    // ========================================
+
+    if (
+      questions.length > 1000
+    ) {
+      return res.status(400).json({
+        success: false,
+
+        message:
+          "A maximum of 1000 approved questions can be imported at one time.",
+      });
+    }
+
+    const questionsToSave = [];
+
+    const rejectedQuestions = [];
+
+    // ========================================
+    // VALIDATE EVERY APPROVED QUESTION
+    // ========================================
+
+    for (
+      let index = 0;
+      index < questions.length;
+      index += 1
+    ) {
+      const rawQuestion =
+        questions[index] || {};
+
+      // ======================================
+      // CLEAN BASIC VALUES
+      // ======================================
+
+      const subject =
+        String(
+          rawQuestion.subject || ""
+        ).trim();
+
+      const exam =
+        String(
+          rawQuestion.exam || ""
+        ).trim();
+
+      const classLevel =
+        String(
+          rawQuestion.classLevel || ""
+        ).trim();
+
+      const chapter =
+        String(
+          rawQuestion.chapter || ""
+        ).trim();
+
+      const difficulty =
+        String(
+          rawQuestion.difficulty || ""
+        ).trim();
+
+      const questionText =
+        String(
+          rawQuestion.question || ""
+        ).trim();
+
+      const explanation =
+        String(
+          rawQuestion.explanation || ""
+        ).trim();
+
+      const questionType =
+        normaliseQuestionType(
+          exam,
+          String(
+            rawQuestion.questionType ||
+              "mcq"
+          )
+            .trim()
+            .toLowerCase()
+        );
+
+      const reasons = [];
+
+      // ======================================
+      // BASIC REQUIRED VALUES
+      // ======================================
+
+      if (!subject) {
+        reasons.push(
+          "Subject is required."
+        );
+      }
+
+      if (!exam) {
+        reasons.push(
+          "Preparation is required."
+        );
+      }
+
+      if (!classLevel) {
+        reasons.push(
+          "Class is required."
+        );
+      }
+
+      if (!chapter) {
+        reasons.push(
+          "Chapter is required."
+        );
+      }
+
+      if (!difficulty) {
+        reasons.push(
+          "Difficulty is required."
+        );
+      }
+
+      if (!questionText) {
+        reasons.push(
+          "Question text is required."
+        );
+      }
+
+      // ======================================
+      // SUBJECT / EXAM
+      // ======================================
+
+      if (
+        subject &&
+        !allowedExams[subject]
+      ) {
+        reasons.push(
+          "Invalid subject."
+        );
+      }
+
+      if (
+        subject &&
+        exam &&
+        allowedExams[subject] &&
+        !allowedExams[
+          subject
+        ].includes(exam)
+      ) {
+        reasons.push(
+          `${exam} is not available for ${subject}.`
+        );
+      }
+
+      // ======================================
+      // CLASS
+      // ======================================
+
+      if (
+        classLevel &&
+        classLevel !== "Class 11" &&
+        classLevel !== "Class 12"
+      ) {
+        reasons.push(
+          "Invalid class."
+        );
+      }
+
+      // ======================================
+      // DIFFICULTY
+      // ======================================
+
+      if (
+        difficulty &&
+        !validDifficulties.includes(
+          difficulty
+        )
+      ) {
+        reasons.push(
+          "Invalid difficulty."
+        );
+      }
+
+      // ======================================
+      // QUESTION TYPE
+      // ======================================
+
+      if (
+        !validQuestionTypes.includes(
+          questionType
+        )
+      ) {
+        reasons.push(
+          "Invalid question type."
+        );
+      }
+
+      // ======================================
+      // START DATABASE PAYLOAD
+      // ======================================
+
+      const payload = {
+        subject,
+
+        exam,
+
+        classLevel,
+
+        chapter,
+
+        difficulty,
+
+        questionType,
+
+        question:
+          questionText,
+
+        explanation,
+
+        isActive:
+          true,
+      };
+
+      // ======================================
+      // OPTIONAL ORIGINAL QUESTION NUMBER
+      // ======================================
+
+      const questionNumber =
+        String(
+          rawQuestion.questionNumber ||
+            ""
+        ).trim();
+
+      if (questionNumber) {
+        payload.questionNumber =
+          questionNumber;
+      }
+
+      // ======================================
+      // MCQ VALIDATION
+      // ======================================
+
+      if (
+        questionType === "mcq"
+      ) {
+        const options =
+          Array.isArray(
+            rawQuestion.options
+          )
+            ? rawQuestion.options.map(
+                (option) =>
+                  String(
+                    option || ""
+                  ).trim()
+              )
+            : [];
+
+        if (
+          options.length !== 4
+        ) {
+          reasons.push(
+            "MCQ must contain exactly 4 options."
+          );
+        }
+
+        if (
+          options.length === 4 &&
+          options.some(
+            (option) => !option
+          )
+        ) {
+          reasons.push(
+            "All 4 MCQ options must contain text."
+          );
+        }
+
+        const answerIndex =
+          Number(
+            rawQuestion.correctAnswer
+          );
+
+        if (
+          !Number.isInteger(
+            answerIndex
+          ) ||
+          answerIndex < 0 ||
+          answerIndex > 3
+        ) {
+          reasons.push(
+            "Correct answer must be Option A, B, C or D."
+          );
+        }
+
+        payload.options =
+          options;
+
+        if (
+          Number.isInteger(
+            answerIndex
+          ) &&
+          answerIndex >= 0 &&
+          answerIndex <= 3
+        ) {
+          payload.correctAnswer =
+            answerIndex;
+        }
+
+        payload.modelAnswer =
+          "";
+
+        payload.keyPoints =
+          [];
+
+        payload.evaluationInstructions =
+          "";
+
+        payload.maxMarks =
+          Number(
+            rawQuestion.maxMarks
+          ) > 0
+            ? Number(
+                rawQuestion.maxMarks
+              )
+            : 1;
+      }
+
+      // ======================================
+      // BOARD WRITTEN QUESTIONS
+      // ======================================
+
+      if (
+        questionType === "short" ||
+        questionType === "long"
+      ) {
+        if (
+          exam !== "Boards"
+        ) {
+          reasons.push(
+            "Short and long questions are only available for Boards."
+          );
+        }
+
+        const modelAnswer =
+          String(
+            rawQuestion.modelAnswer ||
+              ""
+          ).trim();
+
+        const keyPoints =
+          Array.isArray(
+            rawQuestion.keyPoints
+          )
+            ? rawQuestion.keyPoints
+                .map(
+                  (item) =>
+                    String(
+                      item || ""
+                    ).trim()
+                )
+                .filter(Boolean)
+            : [];
+
+        const maxMarks =
+          Number(
+            rawQuestion.maxMarks
+          );
+
+        if (!modelAnswer) {
+          reasons.push(
+            "Model answer is required for written questions."
+          );
+        }
+
+        if (
+          keyPoints.length === 0
+        ) {
+          reasons.push(
+            "At least one key point is required for written questions."
+          );
+        }
+
+        if (
+          !Number.isFinite(
+            maxMarks
+          ) ||
+          maxMarks < 1
+        ) {
+          reasons.push(
+            "Maximum marks must be at least 1."
+          );
+        }
+
+        payload.options =
+          [];
+
+        payload.correctAnswer =
+          undefined;
+
+        payload.modelAnswer =
+          modelAnswer;
+
+        payload.keyPoints =
+          keyPoints;
+
+        payload.maxMarks =
+          maxMarks;
+
+        payload.evaluationInstructions =
+          String(
+            rawQuestion
+              .evaluationInstructions ||
+              ""
+          ).trim();
+      }
+
+      // ======================================
+      // PRESERVE AI QUESTION IMAGE
+      // ======================================
+
+      if (
+        rawQuestion.questionImage &&
+        typeof rawQuestion
+          .questionImage ===
+          "object" &&
+        rawQuestion.questionImage.url
+      ) {
+        payload.questionImage = {
+          url:
+            String(
+              rawQuestion
+                .questionImage
+                .url || ""
+            ).trim(),
+
+          publicId:
+            String(
+              rawQuestion
+                .questionImage
+                .publicId || ""
+            ).trim(),
+
+          altText:
+            String(
+              rawQuestion
+                .questionImage
+                .altText ||
+                "Question diagram"
+            ).trim(),
+
+          sourcePage:
+            Number(
+              rawQuestion
+                .questionImage
+                .sourcePage
+            ) || null,
+
+          width:
+            Number(
+              rawQuestion
+                .questionImage
+                .width
+            ) || null,
+
+          height:
+            Number(
+              rawQuestion
+                .questionImage
+                .height
+            ) || null,
+        };
+      }
+
+      // ======================================
+      // PRESERVE MULTIPLE AI IMAGES
+      // ======================================
+
+      if (
+        Array.isArray(
+          rawQuestion.questionImages
+        )
+      ) {
+        payload.questionImages =
+          rawQuestion
+            .questionImages
+            .filter(
+              (image) =>
+                image &&
+                typeof image ===
+                  "object" &&
+                image.url
+            )
+            .map(
+              (image) => ({
+                url:
+                  String(
+                    image.url || ""
+                  ).trim(),
+
+                publicId:
+                  String(
+                    image.publicId ||
+                      ""
+                  ).trim(),
+
+                altText:
+                  String(
+                    image.altText ||
+                      "Question diagram"
+                  ).trim(),
+
+                sourcePage:
+                  Number(
+                    image.sourcePage
+                  ) || null,
+
+                width:
+                  Number(
+                    image.width
+                  ) || null,
+
+                height:
+                  Number(
+                    image.height
+                  ) || null,
+              })
+            );
+      } else if (
+        payload.questionImage?.url
+      ) {
+        payload.questionImages = [
+          payload.questionImage,
+        ];
+      }
+
+      // ======================================
+      // PRESERVE AI SOURCE DOCUMENT
+      // ======================================
+
+      if (
+        rawQuestion.sourceDocument &&
+        typeof rawQuestion
+          .sourceDocument ===
+          "object"
+      ) {
+        payload.sourceDocument = {
+          fileName:
+            String(
+              rawQuestion
+                .sourceDocument
+                .fileName || ""
+            ).trim(),
+
+          fileType:
+            String(
+              rawQuestion
+                .sourceDocument
+                .fileType || ""
+            ).trim(),
+
+          pageNumber:
+            Number(
+              rawQuestion
+                .sourceDocument
+                .pageNumber
+            ) || null,
+
+          importedByAI:
+            true,
+        };
+      }
+
+      // ======================================
+      // REJECT INVALID ADMIN-APPROVED ITEM
+      // ======================================
+
+      if (
+        reasons.length > 0
+      ) {
+        rejectedQuestions.push({
+          index,
+
+          questionNumber:
+            questionNumber ||
+            String(
+              index + 1
+            ),
+
+          question:
+            questionText,
+
+          reasons,
+        });
+
+        continue;
+      }
+
+      // ======================================
+      // READY FOR MONGODB
+      // ======================================
+
+      questionsToSave.push(
+        payload
+      );
+    }
+
+    // ========================================
+    // NOTHING VALID TO SAVE
+    // ========================================
+
+    if (
+      questionsToSave.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+
+        message:
+          "None of the approved questions passed the final database validation.",
+
+        imported:
+          0,
+
+        rejected:
+          rejectedQuestions.length,
+
+        rejectedQuestions,
+      });
+    }
+
+    // ========================================
+    // SAVE APPROVED QUESTIONS
+    // ========================================
+
+    const savedQuestions =
+      await NavtaQuestion.insertMany(
+        questionsToSave,
+        {
+          ordered:
+            true,
+        }
+      );
+
+    // ========================================
+    // SUCCESS
+    // ========================================
+
+    console.log(
+      "============================================"
+    );
+
+    console.log(
+      "NAVTA AI QUESTION IMPORT CONFIRMED"
+    );
+
+    console.log(
+      `Received: ${questions.length}`
+    );
+
+    console.log(
+      `Saved: ${savedQuestions.length}`
+    );
+
+    console.log(
+      `Rejected: ${rejectedQuestions.length}`
+    );
+
+    console.log(
+      "============================================"
+    );
+
+    return res.status(201).json({
+      success: true,
+
+      message:
+        `${savedQuestions.length} approved question(s) imported successfully.`,
+
+      imported:
+        savedQuestions.length,
+
+      rejected:
+        rejectedQuestions.length,
+
+      totalReceived:
+        questions.length,
+
+      questions:
+        savedQuestions,
+
+      rejectedQuestions,
+    });
+  } catch (error) {
+    console.error(
+      "CONFIRM NAVTA AI IMPORT ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+
+      message:
+        "Failed to import approved questions.",
+
+      error:
+        error.message,
+    });
+  }
 };
 
 // ============================================
