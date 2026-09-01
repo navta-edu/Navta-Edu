@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import {
+  InlineMath,
+  BlockMath,
+} from "react-katex";
+
+import "katex/dist/katex.min.css";
 
 const PREPARATION_OPTIONS = {
   Physics: {
@@ -286,6 +292,182 @@ function formatSolveTime(totalSeconds) {
 
   if (minutes === 0) return `${remaining}s`;
   return `${minutes}m ${String(remaining).padStart(2, "0")}s`;
+}
+
+// =====================================================
+// UNIVERSAL NAVTA SCIENCE + MATH RENDERER
+// =====================================================
+//
+// Works for:
+//
+// Physics
+// Chemistry
+// Maths
+// Biology
+//
+// Normal text remains normal text.
+//
+// $ ... $        -> inline mathematics
+// $$ ... $$      -> block mathematics
+//
+// Large matrix / determinant environments are
+// automatically shown as block mathematics.
+//
+// =====================================================
+
+function renderNavtaContent(
+  text = ""
+) {
+  const value =
+    String(
+      text || ""
+    );
+
+  if (!value) {
+    return null;
+  }
+
+  // ---------------------------------------------------
+  // NORMALISE COMMON AI LATEX DELIMITERS
+  // ---------------------------------------------------
+
+  const normalised =
+    value
+      .replace(
+        /\\\(([\s\S]*?)\\\)/g,
+        (_, math) =>
+          `$${math}$`
+      )
+      .replace(
+        /\\\[([\s\S]*?)\\\]/g,
+        (_, math) =>
+          `$$${math}$$`
+      );
+
+  // ---------------------------------------------------
+  // SPLIT NORMAL TEXT FROM MATH
+  // ---------------------------------------------------
+
+  const parts =
+    normalised.split(
+      /(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/
+    );
+
+  return parts.map(
+    (
+      part,
+      index
+    ) => {
+      if (!part) {
+        return null;
+      }
+
+      // ===============================================
+      // BLOCK MATH
+      // ===============================================
+
+      if (
+        part.startsWith(
+          "$$"
+        ) &&
+        part.endsWith(
+          "$$"
+        )
+      ) {
+        const math =
+          part.slice(
+            2,
+            -2
+          );
+
+        return (
+          <span
+            key={index}
+            className="navta-math-block"
+          >
+            <BlockMath
+              math={math}
+              renderError={() => (
+                <span>
+                  {part}
+                </span>
+              )}
+            />
+          </span>
+        );
+      }
+
+      // ===============================================
+      // INLINE MATH
+      // ===============================================
+
+      if (
+        part.startsWith(
+          "$"
+        ) &&
+        part.endsWith(
+          "$"
+        )
+      ) {
+        const math =
+          part.slice(
+            1,
+            -1
+          );
+
+        // Large mathematical structures should not be
+        // squeezed into a normal inline sentence.
+        const needsBlock =
+          /\\begin\{(?:vmatrix|Vmatrix|matrix|bmatrix|Bmatrix|pmatrix|cases|array|aligned|align)\}/.test(
+            math
+          );
+
+        if (
+          needsBlock
+        ) {
+          return (
+            <span
+              key={index}
+              className="navta-math-block"
+            >
+              <BlockMath
+                math={math}
+                renderError={() => (
+                  <span>
+                    {part}
+                  </span>
+                )}
+              />
+            </span>
+          );
+        }
+
+        return (
+          <InlineMath
+            key={index}
+            math={math}
+            renderError={() => (
+              <span>
+                {part}
+              </span>
+            )}
+          />
+        );
+      }
+
+      // ===============================================
+      // NORMAL TEXT
+      // ===============================================
+
+      return (
+        <React.Fragment
+          key={index}
+        >
+          {part}
+        </React.Fragment>
+      );
+    }
+  );
 }
 
 export default function NavtaTestPage() {
@@ -2456,6 +2638,64 @@ export default function NavtaTestPage() {
           font-size: 18px;
         }
 
+        /* ===================================================
+   NAVTA UNIVERSAL SCIENCE / MATH RENDERING
+=================================================== */
+
+.navta-question {
+  overflow-wrap: anywhere;
+}
+
+.navta-question .katex {
+  font-size: 1.04em;
+}
+
+.navta-option-content {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.navta-option-content .katex {
+  font-size: 1em;
+}
+
+.navta-math-block {
+  display: block;
+  width: 100%;
+  margin: 14px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 6px 2px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.navta-math-block .katex-display {
+  margin: 0;
+  text-align: left;
+}
+
+.navta-question-card .katex,
+.navta-answer-feedback .katex {
+  color: inherit;
+}
+
+@media (max-width: 700px) {
+  .navta-question .katex {
+    font-size: 0.96em;
+  }
+
+  .navta-option-content .katex {
+    font-size: 0.94em;
+  }
+
+  .navta-math-block {
+    margin: 10px 0;
+    padding-bottom: 8px;
+  }
+}
+
         @media (max-width: 768px) {
           .navta-test-page {
             padding: 20px 14px;
@@ -3533,7 +3773,9 @@ export default function NavtaTestPage() {
               <>
                 <div className="navta-question-card">
                   <h2 className="navta-question">
-                    {currentTestQuestion.question}
+                    {renderNavtaContent(
+                      currentTestQuestion.question
+                    )}
                   </h2>
 
                   <div>
@@ -3583,7 +3825,11 @@ export default function NavtaTestPage() {
                               {String.fromCharCode(65 + index)}
                             </span>
 
-                            <span>{option}</span>
+                            <span className="navta-option-content">
+                                {renderNavtaContent(
+                                   option
+                             )}
+                          </span>
                           </button>
                         );
                       }
@@ -3616,12 +3862,12 @@ export default function NavtaTestPage() {
                               .correctAnswer
                         )}
                         .{" "}
-                        {
+                        {renderNavtaContent(
                           currentTestQuestion.options[
                             answerFeedback[currentQuestion]
                               .correctAnswer
                           ]
-                        }
+                        )}
                       </p>
 
                       <p
@@ -3630,9 +3876,14 @@ export default function NavtaTestPage() {
                           lineHeight: 1.65,
                         }}
                       >
-                        <strong>Explanation: </strong>
-                        {currentTestQuestion.explanation ||
-                          "Explanation is not available for this question yet."}
+                       <strong>
+                         Explanation:{" "}
+                           </strong>
+
+                        {renderNavtaContent(
+                          currentTestQuestion.explanation ||
+                            "Explanation is not available for this question yet."
+                        )}
                       </p>
 
                       <div className="navta-mistake-box">
@@ -3749,7 +4000,9 @@ export default function NavtaTestPage() {
                   </span>
 
                   <h2 className="navta-question">
-                    {currentTestQuestion.question}
+                    {renderNavtaContent(
+                       currentTestQuestion.question
+                    )}
                   </h2>
 
                   <p
