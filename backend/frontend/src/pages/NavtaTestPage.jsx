@@ -315,6 +315,36 @@ function formatSolveTime(totalSeconds) {
 //
 // =====================================================
 
+function normaliseNavtaLatex(math = "") {
+  let value = String(math || "");
+
+  /*
+   * Some AI-imported questions arrive with LaTeX commands
+   * double-escaped in MongoDB/API output, for example:
+   *
+   *   \\alpha
+   *   \\beta
+   *   \\gamma
+   *   \\neq
+   *
+   * KaTeX expects:
+   *
+   *   \alpha
+   *   \beta
+   *   \gamma
+   *   \neq
+   *
+   * Only known LaTeX command names are repaired here so that
+   * legitimate matrix row separators (\\) are not destroyed.
+   */
+  value = value.replace(
+    /\\\\(alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|neq|ne|leq|geq|le|ge|approx|equiv|pm|mp|times|div|cdot|sqrt|frac|dfrac|tfrac|sum|prod|int|iint|iiint|lim|infty|sin|cos|tan|cot|sec|csc|log|ln|exp|left|right|begin|end|text|mathrm|mathbf|mathit|mathbb|mathcal|vec|overrightarrow|overline|underline|hat|bar|dot|ddot|partial|nabla|therefore|because|implies|Rightarrow|rightarrow|leftarrow|leftrightarrow|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel)\b/g,
+    "\\$1"
+  );
+
+  return value.trim();
+}
+
 function renderNavtaContent(
   text = ""
 ) {
@@ -375,9 +405,11 @@ function renderNavtaContent(
         )
       ) {
         const math =
-          part.slice(
-            2,
-            -2
+          normaliseNavtaLatex(
+            part.slice(
+              2,
+              -2
+            )
           );
 
         return (
@@ -388,8 +420,8 @@ function renderNavtaContent(
             <BlockMath
               math={math}
               renderError={() => (
-                <span>
-                  {part}
+                <span className="navta-math-fallback">
+                  {part.slice(2, -2)}
                 </span>
               )}
             />
@@ -410,18 +442,13 @@ function renderNavtaContent(
         )
       ) {
         const math =
-          part.slice(
-            1,
-            -1
+          normaliseNavtaLatex(
+            part.slice(
+              1,
+              -1
+            )
           );
 
-        // Anything wrapped in single $...$ stays INLINE.
-        // This applies equally to Physics, Chemistry, Maths
-        // and Biology, including fractions, vectors, matrices,
-        // determinants, equations, symbols and units.
-        //
-        // Only explicit $$...$$ or \\[...\\] content is
-        // rendered as a separate block.
         return (
           <span
             key={index}
@@ -430,8 +457,8 @@ function renderNavtaContent(
             <InlineMath
               math={math}
               renderError={() => (
-                <span>
-                  {part}
+                <span className="navta-math-fallback">
+                  {part.slice(1, -1)}
                 </span>
               )}
             />
