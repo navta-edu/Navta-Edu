@@ -415,43 +415,27 @@ function renderNavtaContent(
             -1
           );
 
-        // Large mathematical structures should not be
-        // squeezed into a normal inline sentence.
-        const needsBlock =
-          /\\begin\{(?:vmatrix|Vmatrix|matrix|bmatrix|Bmatrix|pmatrix|cases|array|aligned|align)\}/.test(
-            math
-          );
-
-        if (
-          needsBlock
-        ) {
-          return (
-            <span
-              key={index}
-              className="navta-math-block"
-            >
-              <BlockMath
-                math={math}
-                renderError={() => (
-                  <span>
-                    {part}
-                  </span>
-                )}
-              />
-            </span>
-          );
-        }
-
+        // Anything wrapped in single $...$ stays INLINE.
+        // This applies equally to Physics, Chemistry, Maths
+        // and Biology, including fractions, vectors, matrices,
+        // determinants, equations, symbols and units.
+        //
+        // Only explicit $$...$$ or \\[...\\] content is
+        // rendered as a separate block.
         return (
-          <InlineMath
+          <span
             key={index}
-            math={math}
-            renderError={() => (
-              <span>
-                {part}
-              </span>
-            )}
-          />
+            className="navta-math-inline"
+          >
+            <InlineMath
+              math={math}
+              renderError={() => (
+                <span>
+                  {part}
+                </span>
+              )}
+            />
+          </span>
         );
       }
 
@@ -2639,6 +2623,38 @@ export default function NavtaTestPage() {
         }
 
         /* ===================================================
+   NAVTA UNIVERSAL QUESTION ALIGNMENT
+   Physics • Chemistry • Maths • Biology
+=================================================== */
+
+.navta-math-inline {
+  display: inline;
+  max-width: 100%;
+  vertical-align: baseline;
+}
+
+.navta-math-inline .katex {
+  display: inline;
+  white-space: normal;
+}
+
+.navta-math-inline .katex-html {
+  white-space: nowrap;
+}
+
+.navta-question .navta-math-inline,
+.navta-option-content .navta-math-inline,
+.navta-answer-feedback .navta-math-inline,
+.navta-written-feedback .navta-math-inline {
+  display: inline;
+}
+
+.navta-question .katex-display,
+.navta-option-content .katex-display {
+  margin: 0;
+}
+
+        /* ===================================================
    NAVTA QUESTION ALIGNMENT
 =================================================== */
 
@@ -2718,7 +2734,7 @@ export default function NavtaTestPage() {
   color: var(--nt-text);
 
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: flex-start;
 
   gap: 14px;
@@ -2737,9 +2753,10 @@ export default function NavtaTestPage() {
   min-width: 0;
   width: 100%;
 
-  display: block;
+  display: inline;
 
   text-align: left;
+  line-height: 1.6;
 
   overflow-wrap: anywhere;
   word-break: normal;
@@ -2783,6 +2800,40 @@ export default function NavtaTestPage() {
 
 .navta-answer-feedback .katex {
   font-size: 1em;
+}
+
+/* Keep imported question text, equations and options inside the card. */
+.navta-question,
+.navta-option-content,
+.navta-answer-feedback,
+.navta-written-feedback {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.navta-question img,
+.navta-option-content img,
+.navta-answer-feedback img,
+.navta-written-feedback img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  margin: 14px auto;
+}
+
+.navta-question .katex,
+.navta-option-content .katex,
+.navta-answer-feedback .katex,
+.navta-written-feedback .katex {
+  max-width: 100%;
+}
+
+/* Explicit block equations remain scrollable instead of breaking layout. */
+.navta-math-block {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 /* ===================================================
