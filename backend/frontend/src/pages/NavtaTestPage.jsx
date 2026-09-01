@@ -2639,60 +2639,201 @@ export default function NavtaTestPage() {
         }
 
         /* ===================================================
-   NAVTA UNIVERSAL SCIENCE / MATH RENDERING
+   NAVTA QUESTION ALIGNMENT
 =================================================== */
 
-.navta-question {
-  overflow-wrap: anywhere;
+.navta-question-card {
+  max-width: 1000px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 32px;
+  border-radius: 18px;
+  background: var(--nt-card-bg);
+  border: 1px solid var(--nt-border);
+  overflow: hidden;
 }
+
+.navta-question {
+  width: 100%;
+  margin: 0 0 28px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1.65;
+  text-align: left;
+  color: var(--nt-text);
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.navta-question > * {
+  max-width: 100%;
+}
+
+/* ===================================================
+   UNIVERSAL KATEX ALIGNMENT
+=================================================== */
 
 .navta-question .katex {
-  font-size: 1.04em;
-}
-
-.navta-option-content {
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-  overflow-wrap: anywhere;
-}
-
-.navta-option-content .katex {
   font-size: 1em;
 }
 
 .navta-math-block {
   display: block;
   width: 100%;
-  margin: 14px 0;
+  max-width: 100%;
+  margin: 18px 0;
+  padding: 10px 0;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 6px 2px;
+  text-align: left;
   -webkit-overflow-scrolling: touch;
 }
 
 .navta-math-block .katex-display {
+  width: 100%;
   margin: 0;
   text-align: left;
 }
 
-.navta-question-card .katex,
-.navta-answer-feedback .katex {
-  color: inherit;
+.navta-math-block .katex-display > .katex {
+  display: inline-block;
+  text-align: left;
 }
 
-@media (max-width: 700px) {
-  .navta-question .katex {
-    font-size: 0.96em;
+/* ===================================================
+   OPTIONS
+=================================================== */
+
+.navta-option {
+  width: 100%;
+  min-width: 0;
+  min-height: 54px;
+  padding: 15px 18px;
+  margin-bottom: 12px;
+
+  border-radius: 10px;
+  border: 1px solid var(--nt-border-strong);
+
+  background: var(--nt-surface);
+  color: var(--nt-text);
+
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+
+  gap: 14px;
+
+  text-align: left;
+  font-size: 16px;
+  line-height: 1.55;
+
+  cursor: pointer;
+
+  overflow: hidden;
+}
+
+.navta-option-content {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+
+  display: block;
+
+  text-align: left;
+
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.navta-option-content .katex {
+  font-size: 1em;
+}
+
+/* A / B / C / D */
+
+.navta-option > span:first-child {
+  flex: 0 0 26px;
+  width: 26px;
+  min-width: 26px;
+
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+
+  font-weight: 800;
+  line-height: 1.55;
+}
+
+/* ===================================================
+   ANSWER FEEDBACK
+=================================================== */
+
+.navta-answer-feedback {
+  width: 100%;
+  max-width: 1000px;
+  margin: 18px auto 0;
+
+  text-align: left;
+}
+
+.navta-answer-feedback p {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.navta-answer-feedback .katex {
+  font-size: 1em;
+}
+
+/* ===================================================
+   MOBILE
+=================================================== */
+
+@media (max-width: 768px) {
+  .navta-question-card {
+    padding: 22px 18px;
   }
 
-  .navta-option-content .katex {
-    font-size: 0.94em;
+  .navta-question {
+    font-size: 19px;
+    line-height: 1.6;
+    margin-bottom: 22px;
+  }
+
+  .navta-option {
+    padding: 14px;
+    gap: 11px;
+    font-size: 15px;
   }
 
   .navta-math-block {
-    margin: 10px 0;
-    padding-bottom: 8px;
+    margin: 14px 0;
+    padding: 8px 0;
+  }
+
+  .navta-question .katex,
+  .navta-option-content .katex {
+    font-size: 0.96em;
+  }
+}
+
+@media (max-width: 420px) {
+  .navta-question-card {
+    padding: 18px 14px;
+  }
+
+  .navta-question {
+    font-size: 18px;
+  }
+
+  .navta-option {
+    padding: 12px;
+  }
+
+  .navta-option > span:first-child {
+    flex-basis: 22px;
+    width: 22px;
+    min-width: 22px;
   }
 }
 
