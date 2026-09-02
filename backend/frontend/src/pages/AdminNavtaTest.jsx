@@ -1,4 +1,5 @@
 import React, {
+  useEffect,
   useMemo,
   useState
 } from "react";
@@ -200,6 +201,36 @@ const emptyImportHints = {
 };
 
 // =====================================================
+// ADMIN AUTH HELPERS
+// =====================================================
+
+function getAdminAuthToken() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return (
+    window.localStorage.getItem("token") ||
+    window.localStorage.getItem("authToken") ||
+    window.localStorage.getItem("accessToken") ||
+    ""
+  );
+}
+
+function buildAdminHeaders(extraHeaders = {}) {
+  const token = getAdminAuthToken();
+
+  return {
+    ...extraHeaders,
+    ...(token
+      ? {
+          Authorization: `Bearer ${token}`,
+        }
+      : {}),
+  };
+}
+
+// =====================================================
 // MAIN COMPONENT
 // =====================================================
 
@@ -277,6 +308,303 @@ export default function AdminNavtaTest() {
     activeImportTab,
     setActiveImportTab
   ] = useState("accepted");
+
+  // ===================================================
+  // SAVED QUESTION BANK MANAGEMENT
+  // ===================================================
+
+  const [
+    savedQuestions,
+    setSavedQuestions
+  ] = useState([]);
+
+  const [
+    questionBankLoading,
+    setQuestionBankLoading
+  ] = useState(false);
+
+  const [
+    questionBankMessage,
+    setQuestionBankMessage
+  ] = useState("");
+
+  const [
+    deletingQuestionId,
+    setDeletingQuestionId
+  ] = useState("");
+
+  const [
+    questionFilters,
+    setQuestionFilters
+  ] = useState({
+    subject: "",
+    exam: "",
+    classLevel: "",
+    chapter: "",
+    difficulty: "",
+    questionType: "",
+  });
+
+  // ===================================================
+  // SAVED QUESTION BANK HELPERS
+  // ===================================================
+
+  const fetchSavedQuestions =
+    async (
+      filters = questionFilters
+    ) => {
+      setQuestionBankLoading(
+        true
+      );
+
+      setQuestionBankMessage(
+        ""
+      );
+
+      try {
+        const params =
+          new URLSearchParams();
+
+        Object.entries(
+          filters
+        ).forEach(
+          ([key, value]) => {
+            if (
+              String(
+                value || ""
+              ).trim()
+            ) {
+              params.set(
+                key,
+                String(
+                  value
+                ).trim()
+              );
+            }
+          }
+        );
+
+        const query =
+          params.toString();
+
+        const response =
+          await fetch(
+            `/api/navta-test/questions${
+              query
+                ? `?${query}`
+                : ""
+            }`,
+            {
+              method: "GET",
+              credentials:
+                "include",
+              headers:
+                buildAdminHeaders(),
+            }
+          );
+
+        let data = {};
+
+        try {
+          data =
+            await response.json();
+        } catch {
+          data = {};
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Unable to load NAVTA TEST questions."
+          );
+        }
+
+        setSavedQuestions(
+          Array.isArray(
+            data.questions
+          )
+            ? data.questions
+            : Array.isArray(
+                data.data
+              )
+              ? data.data
+              : []
+        );
+      } catch (error) {
+        console.error(
+          "NAVTA question bank load error:",
+          error
+        );
+
+        setSavedQuestions(
+          []
+        );
+
+        setQuestionBankMessage(
+          error.message ||
+            "Unable to load NAVTA TEST questions."
+        );
+      } finally {
+        setQuestionBankLoading(
+          false
+        );
+      }
+    };
+
+  const deleteSavedQuestion =
+    async (
+      question
+    ) => {
+      const questionId =
+        question?._id ||
+        question?.id;
+
+      if (!questionId) {
+        setQuestionBankMessage(
+          "This question cannot be deleted because its ID is missing."
+        );
+
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          "Delete this NAVTA TEST question permanently? This action cannot be undone."
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      setDeletingQuestionId(
+        String(
+          questionId
+        )
+      );
+
+      setQuestionBankMessage(
+        ""
+      );
+
+      try {
+        const response =
+          await fetch(
+            `/api/navta-test/questions/${questionId}`,
+            {
+              method:
+                "DELETE",
+              credentials:
+                "include",
+              headers:
+                buildAdminHeaders(),
+            }
+          );
+
+        let data = {};
+
+        try {
+          data =
+            await response.json();
+        } catch {
+          data = {};
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Unable to delete this question."
+          );
+        }
+
+        setSavedQuestions(
+          (previous) =>
+            previous.filter(
+              (item) =>
+                String(
+                  item?._id ||
+                    item?.id
+                ) !==
+                String(
+                  questionId
+                )
+            )
+        );
+
+        setQuestionBankMessage(
+          data.message ||
+            "Question deleted successfully."
+        );
+      } catch (error) {
+        console.error(
+          "NAVTA question delete error:",
+          error
+        );
+
+        setQuestionBankMessage(
+          error.message ||
+            "Unable to delete this question."
+        );
+      } finally {
+        setDeletingQuestionId(
+          ""
+        );
+      }
+    };
+
+  const updateQuestionFilter =
+    (
+      field,
+      value
+    ) => {
+      setQuestionFilters(
+        (previous) => ({
+          ...previous,
+          [field]:
+            value,
+          ...(field ===
+          "subject"
+            ? {
+                exam: "",
+                classLevel:
+                  "",
+                chapter: "",
+              }
+            : {}),
+          ...(field ===
+          "classLevel"
+            ? {
+                chapter: "",
+              }
+            : {}),
+        })
+      );
+    };
+
+  const clearQuestionFilters =
+    () => {
+      const cleared = {
+        subject: "",
+        exam: "",
+        classLevel: "",
+        chapter: "",
+        difficulty: "",
+        questionType: "",
+      };
+
+      setQuestionFilters(
+        cleared
+      );
+
+      fetchSavedQuestions(
+        cleared
+      );
+    };
+
+  useEffect(() => {
+    fetchSavedQuestions();
+    // Initial question-bank load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ===================================================
   // MANUAL FORM HELPERS
@@ -371,10 +699,11 @@ export default function AdminNavtaTest() {
             {
               method: "POST",
 
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
+              headers:
+                buildAdminHeaders({
+                  "Content-Type":
+                    "application/json",
+                }),
 
               body:
                 JSON.stringify({
@@ -500,6 +829,8 @@ export default function AdminNavtaTest() {
         setMessageType(
           "success"
         );
+
+        await fetchSavedQuestions();
 
         setForm(
           emptyForm
@@ -643,6 +974,12 @@ export default function AdminNavtaTest() {
             {
               method:
                 "POST",
+
+              credentials:
+                "include",
+
+              headers:
+                buildAdminHeaders(),
 
               body:
                 formData,
@@ -920,406 +1257,18 @@ export default function AdminNavtaTest() {
       );
     };
 
-// ===================================================
-// APPROVE ACCEPTED QUESTIONS
-// ===================================================
-//
-// IMPORTANT:
-//
-// This function does NOT affect NAVTA AI.
-//
-// It only changes the FINAL database import.
-//
-// AI flow remains:
-//
-// PDF
-// -> Gemini
-// -> 5-page analysis batches
-// -> question detection
-// -> classification
-// -> answers
-// -> diagrams
-// -> admin review
-//
-// Only the final /import/confirm request is split into
-// small batches to avoid Hostinger 403 blocking.
-//
-// ===================================================
+  // ===================================================
+  // APPROVE ACCEPTED QUESTIONS
+  // ===================================================
 
-const approveAcceptedQuestions =
-  async () => {
-    if (
-      acceptedQuestions.length ===
-      0
-    ) {
-      setImportMessage(
-        "There are no accepted questions to approve."
-      );
-
-      setImportMessageType(
-        "error"
-      );
-
-      return;
-    }
-
-    setApproveLoading(
-      true
-    );
-
-    setImportMessage(
-      ""
-    );
-
-    setImportMessageType(
-      ""
-    );
-
-    // =============================================
-    // HOSTINGER-SAFE IMPORT BATCH SIZE
-    // =============================================
-    //
-    // Only 3 questions are sent in each request.
-    //
-    // Example:
-    //
-    // 37 questions:
-    //
-    // 1-3
-    // 4-6
-    // 7-9
-    // ...
-    //
-    // This does NOT affect Gemini's 5-page batching.
-    //
-    // =============================================
-
-    const CONFIRM_BATCH_SIZE =
-      3;
-
-    // =============================================
-    // SPLIT QUESTIONS INTO SMALL BATCHES
-    // =============================================
-
-    const batches =
-      [];
-
-    for (
-      let index = 0;
-      index <
-        acceptedQuestions.length;
-      index +=
-        CONFIRM_BATCH_SIZE
-    ) {
-      batches.push(
-        acceptedQuestions.slice(
-          index,
-          index +
-            CONFIRM_BATCH_SIZE
-        )
-      );
-    }
-
-    let totalImported =
-      0;
-
-    const allRejected =
-      [];
-
-    const failedBatches =
-      [];
-
-    try {
-      // ===========================================
-      // PROCESS BATCHES SEQUENTIALLY
-      // ===========================================
-      //
-      // We intentionally use await inside the loop.
-      //
-      // Batch 1 finishes first.
-      // Then Batch 2.
-      // Then Batch 3.
-      // ...
-      //
-      // ===========================================
-
-      for (
-        let batchIndex = 0;
-        batchIndex <
-          batches.length;
-        batchIndex += 1
-      ) {
-        const batch =
-          batches[
-            batchIndex
-          ];
-
-        setImportMessage(
-          `Importing questions... batch ${
-            batchIndex + 1
-          } of ${
-            batches.length
-          }.`
-        );
-
-        setImportMessageType(
-          "success"
-        );
-
-        console.log(
-          `NAVTA importing batch ${
-            batchIndex + 1
-          }/${batches.length} with ${
-            batch.length
-          } question(s).`
-        );
-
-        let response;
-
-        try {
-          response =
-            await fetch(
-              "/api/navta-test/import/confirm",
-              {
-                method:
-                  "POST",
-
-                headers: {
-                  "Content-Type":
-                    "application/json",
-                },
-
-                body:
-                  JSON.stringify({
-                    questions:
-                      batch,
-                  }),
-              }
-            );
-        } catch (error) {
-          console.error(
-            `NAVTA batch ${
-              batchIndex + 1
-            } network error:`,
-            error
-          );
-
-          failedBatches.push({
-            batchIndex:
-              batchIndex + 1,
-
-            questions:
-              batch,
-
-            reason:
-              error.message ||
-              "Network request failed.",
-          });
-
-          continue;
-        }
-
-        // =========================================
-        // READ RESPONSE
-        // =========================================
-
-        let data = {};
-
-        const responseText =
-          await response.text();
-
-        if (
-          responseText
-        ) {
-          try {
-            data =
-              JSON.parse(
-                responseText
-              );
-          } catch {
-            data = {};
-          }
-        }
-
-        // =========================================
-        // FAILED HOSTINGER / BACKEND REQUEST
-        // =========================================
-
-        if (
-          !response.ok
-        ) {
-          console.error(
-            `NAVTA import batch ${
-              batchIndex + 1
-            } failed.`,
-            {
-              status:
-                response.status,
-
-              response:
-                responseText,
-
-              batch,
-            }
-          );
-
-          failedBatches.push({
-            batchIndex:
-              batchIndex + 1,
-
-            questions:
-              batch,
-
-            status:
-              response.status,
-
-            reason:
-              data.message ||
-              responseText ||
-              `Import failed with status ${response.status}.`,
-          });
-
-          continue;
-        }
-
-        // =========================================
-        // COUNT IMPORTED QUESTIONS
-        // =========================================
-
-        const importedCount =
-          Number(
-            data.imported
-          );
-
-        if (
-          Number.isFinite(
-            importedCount
-          )
-        ) {
-          totalImported +=
-            importedCount;
-        } else {
-          totalImported +=
-            batch.length;
-        }
-
-        // =========================================
-        // COLLECT BACKEND REJECTIONS
-        // =========================================
-
-        const rejected =
-          Array.isArray(
-            data.rejectedQuestions
-          )
-            ? data.rejectedQuestions
-            : [];
-
-        if (
-          rejected.length >
-          0
-        ) {
-          allRejected.push(
-            ...rejected
-          );
-        }
-
-        console.log(
-          `NAVTA import batch ${
-            batchIndex + 1
-          } completed.`,
-          {
-            imported:
-              data.imported ??
-              batch.length,
-
-            rejected:
-              rejected.length,
-          }
-        );
-      }
-
-      // =============================================
-      // CONVERT BACKEND REJECTIONS TO DROPPED ITEMS
-      // =============================================
-
+  const approveAcceptedQuestions =
+    async () => {
       if (
-        allRejected.length >
+        acceptedQuestions.length ===
         0
       ) {
-        setDroppedQuestions(
-          (previous) => [
-            ...previous,
-
-            ...allRejected.map(
-              (item) => ({
-                question:
-                  item.question ||
-                  "",
-
-                drop:
-                  true,
-
-                dropReason:
-                  Array.isArray(
-                    item.reasons
-                  )
-                    ? item.reasons.join(
-                        " "
-                      )
-                    : item.reason ||
-                      "Rejected during final database validation.",
-              })
-            ),
-          ]
-        );
-      }
-
-      // =============================================
-      // HANDLE FAILED BATCHES
-      // =============================================
-
-      if (
-        failedBatches.length >
-        0
-      ) {
-        const failedQuestions =
-          failedBatches.flatMap(
-            (item) =>
-              item.questions
-          );
-
-        // Keep failed questions in Accepted Questions
-        // so admin can retry them.
-        setAcceptedQuestions(
-          failedQuestions
-        );
-
-        setImportSummary(
-          (previous) => ({
-            detected:
-              previous.detected,
-
-            accepted:
-              failedQuestions.length,
-
-            dropped:
-              previous.dropped +
-              allRejected.length,
-          })
-        );
-
-        const failedBatchNumbers =
-          failedBatches
-            .map(
-              (item) =>
-                item.batchIndex
-            )
-            .join(
-              ", "
-            );
-
         setImportMessage(
-          `${totalImported} question(s) imported successfully. ${failedQuestions.length} question(s) could not be imported. Failed batch(es): ${failedBatchNumbers}. You can click Approve & Import again to retry only the remaining questions.`
+          "There are no accepted questions to approve."
         );
 
         setImportMessageType(
@@ -1329,75 +1278,132 @@ const approveAcceptedQuestions =
         return;
       }
 
-      // =============================================
-      // COMPLETE SUCCESS
-      // =============================================
-
-      setAcceptedQuestions(
-        []
-      );
-
-      setImportSummary(
-        (previous) => ({
-          detected:
-            previous.detected,
-
-          accepted:
-            0,
-
-          dropped:
-            previous.dropped +
-            allRejected.length,
-        })
-      );
-
-      setImportMessage(
-        `${totalImported} approved question(s) imported successfully.`
-      );
-
-      setImportMessageType(
-        "success"
-      );
-
-      console.log(
-        "============================================"
-      );
-
-      console.log(
-        "NAVTA QUESTION IMPORT COMPLETED"
-      );
-
-      console.log(
-        `Total imported: ${totalImported}`
-      );
-
-      console.log(
-        `Total rejected: ${allRejected.length}`
-      );
-
-      console.log(
-        "============================================"
-      );
-    } catch (error) {
-      console.error(
-        "NAVTA AI confirm error:",
-        error
-      );
-
-      setImportMessage(
-        error.message ||
-          "Unable to import approved questions."
-      );
-
-      setImportMessageType(
-        "error"
-      );
-    } finally {
       setApproveLoading(
-        false
+        true
       );
-    }
-  };
+
+      setImportMessage(
+        ""
+      );
+
+      try {
+        const response =
+          await fetch(
+            "/api/navta-test/import/confirm",
+            {
+              method:
+                "POST",
+
+              credentials:
+                "include",
+
+              headers:
+                buildAdminHeaders({
+                  "Content-Type":
+                    "application/json",
+                }),
+
+              body:
+                JSON.stringify({
+                  questions:
+                    acceptedQuestions,
+                }),
+            }
+          );
+
+        let data = {};
+
+        try {
+          data =
+            await response.json();
+        } catch {
+          data = {};
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Failed to import approved questions."
+          );
+        }
+
+        const rejected =
+          Array.isArray(
+            data.rejectedQuestions
+          )
+            ? data.rejectedQuestions
+            : [];
+
+        if (
+          rejected.length > 0
+        ) {
+          setDroppedQuestions(
+            (previous) => [
+              ...previous,
+              ...rejected.map(
+                (item) => ({
+                  question:
+                    item.question ||
+                    "",
+
+                  drop: true,
+
+                  dropReason:
+                    item.reason ||
+                    "Rejected during final validation.",
+                })
+              ),
+            ]
+          );
+        }
+
+        setAcceptedQuestions(
+          []
+        );
+
+        setImportSummary(
+          (previous) => ({
+            detected:
+              previous.detected,
+
+            accepted: 0,
+
+            dropped:
+              previous.dropped +
+              rejected.length,
+          })
+        );
+
+        setImportMessage(
+          data.message ||
+            "Questions imported successfully."
+        );
+
+        setImportMessageType(
+          "success"
+        );
+
+        await fetchSavedQuestions();
+      } catch (error) {
+        console.error(
+          "NAVTA AI confirm error:",
+          error
+        );
+
+        setImportMessage(
+          error.message ||
+            "Unable to import approved questions."
+        );
+
+        setImportMessageType(
+          "error"
+        );
+      } finally {
+        setApproveLoading(
+          false
+        );
+      }
+    };
 
   // ===================================================
   // RESET AI IMPORT
@@ -1904,7 +1910,103 @@ const approveAcceptedQuestions =
           margin-top: 18px;
         }
 
+        .admin-navta-bank-toolbar {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+
+        .admin-navta-bank-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin: 14px 0 18px;
+        }
+
+        .admin-navta-bank-refresh,
+        .admin-navta-bank-clear {
+          border: 1px solid #334155;
+          border-radius: 10px;
+          padding: 10px 14px;
+          font-weight: 800;
+          cursor: pointer;
+        }
+
+        .admin-navta-bank-refresh {
+          background: #0284c7;
+          color: #ffffff;
+          border-color: #0284c7;
+        }
+
+        .admin-navta-bank-clear {
+          background: #0f172a;
+          color: #cbd5e1;
+        }
+
+        .admin-navta-bank-list {
+          display: grid;
+          gap: 14px;
+        }
+
+        .admin-navta-bank-card {
+          border: 1px solid #243047;
+          border-radius: 14px;
+          background: #0f172a;
+          padding: 18px;
+        }
+
+        .admin-navta-bank-meta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 7px;
+          margin-bottom: 10px;
+        }
+
+        .admin-navta-bank-pill {
+          padding: 5px 9px;
+          border: 1px solid #334155;
+          border-radius: 999px;
+          color: #cbd5e1;
+          font-size: 11px;
+          font-weight: 800;
+        }
+
+        .admin-navta-bank-question {
+          margin: 0;
+          color: #f8fafc;
+          line-height: 1.65;
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+        }
+
+        .admin-navta-bank-options {
+          margin: 12px 0 0;
+          padding-left: 20px;
+          color: #cbd5e1;
+          line-height: 1.7;
+        }
+
+        .admin-navta-delete-question {
+          margin-top: 14px;
+          border: 1px solid #ef4444;
+          border-radius: 10px;
+          padding: 10px 14px;
+          background: rgba(239, 68, 68, 0.12);
+          color: #fca5a5;
+          font-weight: 800;
+          cursor: pointer;
+        }
+
+        .admin-navta-delete-question:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+
         @media (max-width: 800px) {
+          .admin-navta-bank-toolbar {
+            grid-template-columns: 1fr;
+          }
           .admin-navta-grid,
           .admin-navta-grid.three,
           .admin-navta-summary-grid,
@@ -2968,6 +3070,364 @@ const approveAcceptedQuestions =
               </>
             )}
 
+          </div>
+
+          {/* =================================================
+              MANAGE UPLOADED QUESTIONS
+          ================================================= */}
+
+          <div className="admin-navta-info">
+            Question Manager: View saved NAVTA TEST questions and permanently delete any question that should no longer appear in student tests.
+          </div>
+
+          <div className="admin-navta-test-card">
+            <div className="admin-navta-form-section">
+              <h2 className="admin-navta-section-title">
+                Manage Uploaded Questions
+              </h2>
+
+              <p className="admin-navta-help">
+                Showing {savedQuestions.length} saved question{savedQuestions.length === 1 ? "" : "s"}.
+              </p>
+
+              <div className="admin-navta-bank-toolbar">
+                <select
+                  className="admin-navta-select"
+                  value={questionFilters.subject}
+                  onChange={(event) =>
+                    updateQuestionFilter(
+                      "subject",
+                      event.target.value
+                    )
+                  }
+                >
+                  <option value="">
+                    All Subjects
+                  </option>
+
+                  {Object.keys(
+                    SUBJECT_EXAMS
+                  ).map(
+                    (subject) => (
+                      <option
+                        key={subject}
+                        value={subject}
+                      >
+                        {subject}
+                      </option>
+                    )
+                  )}
+                </select>
+
+                <select
+                  className="admin-navta-select"
+                  value={questionFilters.exam}
+                  onChange={(event) =>
+                    updateQuestionFilter(
+                      "exam",
+                      event.target.value
+                    )
+                  }
+                  disabled={
+                    !questionFilters.subject
+                  }
+                >
+                  <option value="">
+                    All Preparations
+                  </option>
+
+                  {(questionFilters.subject
+                    ? SUBJECT_EXAMS[
+                        questionFilters.subject
+                      ] || []
+                    : []
+                  ).map(
+                    (exam) => (
+                      <option
+                        key={exam}
+                        value={exam}
+                      >
+                        {exam}
+                      </option>
+                    )
+                  )}
+                </select>
+
+                <select
+                  className="admin-navta-select"
+                  value={questionFilters.classLevel}
+                  onChange={(event) =>
+                    updateQuestionFilter(
+                      "classLevel",
+                      event.target.value
+                    )
+                  }
+                >
+                  <option value="">
+                    All Classes
+                  </option>
+
+                  {CLASSES.map(
+                    (item) => (
+                      <option
+                        key={item}
+                        value={item}
+                      >
+                        {item}
+                      </option>
+                    )
+                  )}
+                </select>
+
+                <select
+                  className="admin-navta-select"
+                  value={questionFilters.chapter}
+                  onChange={(event) =>
+                    updateQuestionFilter(
+                      "chapter",
+                      event.target.value
+                    )
+                  }
+                  disabled={
+                    !questionFilters.subject ||
+                    !questionFilters.classLevel
+                  }
+                >
+                  <option value="">
+                    All Chapters
+                  </option>
+
+                  {(questionFilters.subject &&
+                  questionFilters.classLevel
+                    ? CHAPTERS[
+                        questionFilters.subject
+                      ]?.[
+                        questionFilters.classLevel
+                      ] || []
+                    : []
+                  ).map(
+                    (chapterName) => (
+                      <option
+                        key={chapterName}
+                        value={chapterName}
+                      >
+                        {chapterName}
+                      </option>
+                    )
+                  )}
+                </select>
+
+                <select
+                  className="admin-navta-select"
+                  value={questionFilters.difficulty}
+                  onChange={(event) =>
+                    updateQuestionFilter(
+                      "difficulty",
+                      event.target.value
+                    )
+                  }
+                >
+                  <option value="">
+                    All Difficulties
+                  </option>
+
+                  {DIFFICULTIES.map(
+                    (item) => (
+                      <option
+                        key={item}
+                        value={item}
+                      >
+                        {item}
+                      </option>
+                    )
+                  )}
+                </select>
+
+                <select
+                  className="admin-navta-select"
+                  value={questionFilters.questionType}
+                  onChange={(event) =>
+                    updateQuestionFilter(
+                      "questionType",
+                      event.target.value
+                    )
+                  }
+                >
+                  <option value="">
+                    All Question Types
+                  </option>
+                  <option value="mcq">
+                    MCQ
+                  </option>
+                  <option value="short">
+                    Short Answer
+                  </option>
+                  <option value="long">
+                    Long Answer
+                  </option>
+                </select>
+              </div>
+
+              <div className="admin-navta-bank-actions">
+                <button
+                  type="button"
+                  className="admin-navta-bank-refresh"
+                  onClick={() =>
+                    fetchSavedQuestions()
+                  }
+                  disabled={
+                    questionBankLoading
+                  }
+                >
+                  {questionBankLoading
+                    ? "Loading..."
+                    : "Apply Filters / Refresh"}
+                </button>
+
+                <button
+                  type="button"
+                  className="admin-navta-bank-clear"
+                  onClick={
+                    clearQuestionFilters
+                  }
+                >
+                  Clear Filters
+                </button>
+              </div>
+
+              {questionBankMessage && (
+                <div className="admin-navta-message">
+                  {questionBankMessage}
+                </div>
+              )}
+
+              {questionBankLoading ? (
+                <div className="admin-navta-empty-state">
+                  Loading saved questions...
+                </div>
+              ) : savedQuestions.length === 0 ? (
+                <div className="admin-navta-empty-state">
+                  No saved NAVTA TEST questions match the current filters.
+                </div>
+              ) : (
+                <div className="admin-navta-bank-list">
+                  {savedQuestions.map(
+                    (
+                      question,
+                      index
+                    ) => {
+                      const questionId =
+                        question?._id ||
+                        question?.id ||
+                        `${index}`;
+
+                      return (
+                        <div
+                          key={
+                            String(
+                              questionId
+                            )
+                          }
+                          className="admin-navta-bank-card"
+                        >
+                          <div className="admin-navta-bank-meta">
+                            {question.subject && (
+                              <span className="admin-navta-bank-pill">
+                                {question.subject}
+                              </span>
+                            )}
+
+                            {question.exam && (
+                              <span className="admin-navta-bank-pill">
+                                {question.exam}
+                              </span>
+                            )}
+
+                            {question.classLevel && (
+                              <span className="admin-navta-bank-pill">
+                                {question.classLevel}
+                              </span>
+                            )}
+
+                            {question.chapter && (
+                              <span className="admin-navta-bank-pill">
+                                {question.chapter}
+                              </span>
+                            )}
+
+                            {question.difficulty && (
+                              <span className="admin-navta-bank-pill">
+                                {question.difficulty}
+                              </span>
+                            )}
+
+                            {question.questionType && (
+                              <span className="admin-navta-bank-pill">
+                                {String(
+                                  question.questionType
+                                ).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="admin-navta-bank-question">
+                            {index + 1}.{" "}
+                            {question.question ||
+                              "Question text unavailable"}
+                          </p>
+
+                          {Array.isArray(
+                            question.options
+                          ) &&
+                            question.options.length >
+                              0 && (
+                            <ol className="admin-navta-bank-options">
+                              {question.options.map(
+                                (
+                                  option,
+                                  optionIndex
+                                ) => (
+                                  <li
+                                    key={
+                                      optionIndex
+                                    }
+                                  >
+                                    {option}
+                                  </li>
+                                )
+                              )}
+                            </ol>
+                          )}
+
+                          <button
+                            type="button"
+                            className="admin-navta-delete-question"
+                            onClick={() =>
+                              deleteSavedQuestion(
+                                question
+                              )
+                            }
+                            disabled={
+                              deletingQuestionId ===
+                              String(
+                                questionId
+                              )
+                            }
+                          >
+                            {deletingQuestionId ===
+                            String(
+                              questionId
+                            )
+                              ? "Deleting..."
+                              : "Delete Question"}
+                          </button>
+                        </div>
+                      );
+                    }
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* =================================================
