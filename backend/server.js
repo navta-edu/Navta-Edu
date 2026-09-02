@@ -55,7 +55,7 @@ const allowedOrigins = [
   // Production
   "https://navta.in",
   "https://www.navta.in",
-  "https://skyblue-dunlin-922022.hostingersite.com"
+  "https://skyblue-dunlin-922022.hostingersite.com",
 
   // Local development
   "http://localhost:5173",
