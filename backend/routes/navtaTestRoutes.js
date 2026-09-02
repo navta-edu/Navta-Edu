@@ -21,35 +21,38 @@ const {
 } = require("../middleware/auth");
 
 // ============================================
-// QUESTION MANAGEMENT
+// ADMIN - QUESTION MANAGEMENT
 // ============================================
 
 router.post(
   "/questions",
+  protect,
+  authorizeRoles("admin"),
   createQuestion
 );
 
 router.get(
   "/questions",
+  protect,
+  authorizeRoles("admin"),
   getQuestions
 );
 
 router.delete(
   "/questions/:id",
+  protect,
+  authorizeRoles("admin"),
   deleteQuestion
 );
 
 // ============================================
-// NAVTA AI IMPORT
-// ============================================
-//
-// Multer is loaded lazily here so a problem with
-// the new AI upload dependency cannot crash the
-// entire NAVTA backend during startup.
+// ADMIN - NAVTA AI IMPORT
 // ============================================
 
 router.post(
   "/import",
+  protect,
+  authorizeRoles("admin"),
   (req, res, next) => {
     try {
       const uploadNavtaAIFile =
@@ -78,10 +81,10 @@ router.post(
   importQuestionsWithAI
 );
 
-// Keep saving disabled until analysis has
-// been tested successfully.
 router.post(
   "/import/confirm",
+  protect,
+  authorizeRoles("admin"),
   confirmAIImport
 );
 
