@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { adminAPI, contentAPI } from '../utils/api';
@@ -25,7 +25,8 @@ import {
   Calculator,
   Atom,
   FlaskConical,
-  Dna
+  Dna,
+  ChevronDown
 } from 'lucide-react';
 
 
@@ -57,6 +58,130 @@ const inputClass =
 
 const labelClass =
   'block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2';
+
+
+function NavtaAdminSelect({
+  value,
+  onChange,
+  options = [],
+  placeholder = 'Select option',
+  disabled = false
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef(null);
+
+  useEffect(() => {
+    const closeOnOutsidePress = (event) => {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(event.target)
+      ) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', closeOnOutsidePress);
+    document.addEventListener('touchstart', closeOnOutsidePress, {
+      passive: true
+    });
+
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsidePress);
+      document.removeEventListener('touchstart', closeOnOutsidePress);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+    }
+  }, [disabled]);
+
+  const selectedOption =
+    options.find(
+      (option) =>
+        String(option.value) === String(value)
+    ) || null;
+
+  return (
+    <div
+      ref={wrapperRef}
+      className="relative w-full"
+    >
+      <button
+        type="button"
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => {
+          if (!disabled) {
+            setOpen((previous) => !previous);
+          }
+        }}
+        className={`w-full min-h-[48px] px-3 py-2.5 rounded-xl border text-sm text-left flex items-center justify-between gap-3 transition-colors focus:outline-none focus:border-primary-500 ${
+          disabled
+            ? 'cursor-not-allowed opacity-55 bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400'
+            : 'cursor-pointer bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100'
+        }`}
+      >
+        <span className="min-w-0 flex-1 truncate">
+          {selectedOption?.label || placeholder}
+        </span>
+
+        <ChevronDown
+          className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${
+            open ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+
+      {open && !disabled && (
+        <div
+          role="listbox"
+          className="absolute z-[100] left-0 right-0 top-[calc(100%+8px)] max-h-64 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 shadow-2xl p-1.5"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          {options.length === 0 ? (
+            <div className="px-3 py-3 text-sm text-slate-400">
+              No options available
+            </div>
+          ) : (
+            options.map((option) => {
+              const active =
+                String(option.value) === String(value);
+
+              return (
+                <button
+                  key={String(option.value)}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  className={`w-full px-3 py-3 rounded-lg text-sm text-left flex items-center justify-between gap-3 transition-colors ${
+                    active
+                      ? 'bg-primary-500 text-white'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <span className="min-w-0 flex-1">
+                    {option.label}
+                  </span>
+
+                  {active && (
+                    <Check className="w-4 h-4 shrink-0" />
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 
 /*
@@ -2379,32 +2504,15 @@ export default function AdminDashboard() {
                   1. Subject
                 </label>
 
-                <select
+                <NavtaAdminSelect
                   value={selectedSubject}
-                  onChange={(e) =>
-                    handleSubjectChange(
-                      e.target.value
-                    )
-                  }
-                  className={inputClass}
-                >
-
-                  <option value="">
-                    Select Subject
-                  </option>
-
-                  {subjects.map((s) => (
-
-                    <option
-                      key={s._id || s.id}
-                      value={s._id || s.id}
-                    >
-                      {s.name}
-                    </option>
-
-                  ))}
-
-                </select>
+                  onChange={handleSubjectChange}
+                  placeholder="Select Subject"
+                  options={subjects.map((s) => ({
+                    value: s._id || s.id,
+                    label: s.name
+                  }))}
+                />
 
               </div>
 
@@ -2415,37 +2523,16 @@ export default function AdminDashboard() {
                   2. Examination
                 </label>
 
-                <select
+                <NavtaAdminSelect
                   value={selectedExam}
-                  onChange={(e) =>
-                    handleExamChange(
-                      e.target.value
-                    )
-                  }
-                  disabled={
-                    !selectedSubject
-                  }
-                  className={inputClass}
-                >
-
-                  <option value="">
-                    Select Examination
-                  </option>
-
-                  {availableExams.map(
-                    (exam) => (
-
-                      <option
-                        key={exam}
-                        value={exam}
-                      >
-                        {exam}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
+                  onChange={handleExamChange}
+                  placeholder="Select Examination"
+                  disabled={!selectedSubject}
+                  options={availableExams.map((exam) => ({
+                    value: exam,
+                    label: exam
+                  }))}
+                />
 
               </div>
 
@@ -2456,37 +2543,19 @@ export default function AdminDashboard() {
                   3. Class
                 </label>
 
-                <select
+                <NavtaAdminSelect
                   value={selectedClass}
-                  onChange={(e) =>
-                    setSelectedClass(
-                      e.target.value
-                    )
-                  }
-                  disabled={
-                    !selectedExam
-                  }
-                  className={inputClass}
-                >
-
-                  <option value="">
-                    Select Class
-                  </option>
-
-                  {CLASS_OPTIONS.map(
-                    (item) => (
-
-                      <option
-                        key={item}
-                        value={item}
-                      >
-                        {item}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
+                  onChange={(value) => {
+                    setSelectedClass(value);
+                    setSelectedChapter('');
+                  }}
+                  placeholder="Select Class"
+                  disabled={!selectedExam}
+                  options={CLASS_OPTIONS.map((item) => ({
+                    value: item,
+                    label: item
+                  }))}
+                />
 
               </div>
 
@@ -2501,50 +2570,23 @@ export default function AdminDashboard() {
                 4. Chapter
               </label>
 
-              <select
+              <NavtaAdminSelect
                 value={selectedChapter}
-                onChange={(e) =>
-                  setSelectedChapter(
-                    e.target.value
-                  )
+                onChange={setSelectedChapter}
+                placeholder={
+                  chapters.length === 0
+                    ? 'No chapters available'
+                    : 'Select Chapter'
                 }
                 disabled={
                   !selectedClass ||
                   chapters.length === 0
                 }
-                className={inputClass}
-              >
-
-                <option value="">
-                  {chapters.length === 0
-                    ? 'No chapters available'
-                    : 'Select Chapter'}
-                </option>
-
-                {chapters.map(
-                  (chapter) => (
-
-                    <option
-                      key={
-                        chapter._id ||
-                        chapter.id
-                      }
-                      value={
-                        chapter._id ||
-                        chapter.id
-                      }
-                    >
-
-                      Ch {chapter.chapterNumber}
-                      {' — '}
-                      {chapter.title}
-
-                    </option>
-
-                  )
-                )}
-
-              </select>
+                options={chapters.map((chapter) => ({
+                  value: chapter._id || chapter.id,
+                  label: `Ch ${chapter.chapterNumber} — ${chapter.title}`
+                }))}
+              />
 
             </div>
 
@@ -2553,7 +2595,7 @@ export default function AdminDashboard() {
 
             <div className="p-4 rounded-2xl bg-primary-500/5 border border-primary-500/20">
 
-              <div className="flex items-center gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
 
                 <BookOpen className="w-4 h-4 text-primary-500" />
 
