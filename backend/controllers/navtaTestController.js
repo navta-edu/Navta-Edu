@@ -1469,6 +1469,72 @@ exports.confirmAIImport = async (req, res) => {
       }
 
       // ======================================
+      // SCREENSHOT-FIRST NAVTA TEST METADATA
+      // ======================================
+      //
+      // The AI import service creates one complete
+      // question screenshot from the original PDF.
+      // questionImage is therefore the PRIMARY
+      // student-facing representation for AI-imported
+      // NAVTA TEST questions.
+      //
+      // These fields are preserved when the schema
+      // supports them. questionImage/questionImages
+      // remain the fields used by the test generators.
+      // ======================================
+
+      if (
+        rawQuestion.questionBoundingBox &&
+        typeof rawQuestion
+          .questionBoundingBox ===
+          "object"
+      ) {
+        const box =
+          rawQuestion.questionBoundingBox;
+
+        const x = Number(box.x);
+        const y = Number(box.y);
+        const width = Number(box.width);
+        const height = Number(box.height);
+
+        if (
+          Number.isFinite(x) &&
+          Number.isFinite(y) &&
+          Number.isFinite(width) &&
+          Number.isFinite(height) &&
+          x >= 0 &&
+          y >= 0 &&
+          width > 0 &&
+          height > 0 &&
+          x <= 1 &&
+          y <= 1 &&
+          x + width <= 1.0001 &&
+          y + height <= 1.0001
+        ) {
+          payload.questionBoundingBox = {
+            x,
+            y,
+            width,
+            height,
+          };
+        }
+      }
+
+      if (payload.questionImage?.url) {
+        payload.studentQuestionFormat =
+          "image";
+      } else if (
+        rawQuestion.studentQuestionFormat
+      ) {
+        payload.studentQuestionFormat =
+          String(
+            rawQuestion.studentQuestionFormat
+          )
+            .trim()
+            .toLowerCase();
+      }
+
+      // ======================================
       // REJECT INVALID ADMIN-APPROVED ITEM
       // ======================================
 
@@ -1741,6 +1807,12 @@ exports.generateTest = async (req, res) => {
             correctAnswer: 1,
             explanation: 1,
             chapter: 1,
+
+            // Screenshot-first AI questions
+            questionImage: 1,
+            questionImages: 1,
+            studentQuestionFormat: 1,
+            sourceDocument: 1,
           },
         },
       ]);
@@ -2418,6 +2490,26 @@ exports.generateBossBattle = async (req, res) => {
 
           difficulty:
             question.difficulty,
+
+          // Screenshot-first AI questions
+          questionImage:
+            question.questionImage ||
+            null,
+
+          questionImages:
+            Array.isArray(
+              question.questionImages
+            )
+              ? question.questionImages
+              : [],
+
+          studentQuestionFormat:
+            question.questionImage?.url
+              ? "image"
+              : (
+                  question.studentQuestionFormat ||
+                  "text"
+                ),
 
           maxMarks:
             question.maxMarks ||
@@ -3328,6 +3420,26 @@ exports.generateRevengeBattle = async (req, res) => {
 
           difficulty:
             question.difficulty,
+
+          // Screenshot-first AI questions
+          questionImage:
+            question.questionImage ||
+            null,
+
+          questionImages:
+            Array.isArray(
+              question.questionImages
+            )
+              ? question.questionImages
+              : [],
+
+          studentQuestionFormat:
+            question.questionImage?.url
+              ? "image"
+              : (
+                  question.studentQuestionFormat ||
+                  "text"
+                ),
 
           maxMarks:
             question.maxMarks ||
