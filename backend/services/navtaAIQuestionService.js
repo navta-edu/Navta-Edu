@@ -69,18 +69,6 @@ const NAVTA_AI_TIMEOUT_MS =
 // =====================================================
 // FIXED 5-PAGE BATCH
 // =====================================================
-//
-// NAVTA intentionally processes 5 PDF pages at a time.
-//
-// Example:
-//
-// Request 1 -> pages 1,2,3,4,5
-// Request 2 -> pages 6,7,8,9,10
-// Request 3 -> pages 11,12,13,14,15
-//
-// The final request can contain fewer than 5 pages.
-//
-// =====================================================
 
 const NAVTA_AI_BATCH_SIZE = 5;
 
@@ -95,6 +83,46 @@ const cleanString = (
   return String(
     value || ""
   ).trim();
+};
+
+
+// =====================================================
+// NORMALIZE ACADEMIC CONTENT
+// =====================================================
+
+const normalizeAcademicContent = (
+  value = ""
+) => {
+  let text =
+    cleanString(
+      value
+    );
+
+  if (!text) {
+    return "";
+  }
+
+  text =
+    text
+      .replace(
+        /```(?:latex|tex|math|markdown)?/gi,
+        ""
+      )
+      .replace(
+        /```/g,
+        ""
+      )
+      .replace(
+        /\r\n?/g,
+        "\n"
+      )
+      .replace(
+        /\u00a0/g,
+        " "
+      )
+      .trim();
+
+  return text;
 };
 
 
@@ -121,21 +149,15 @@ const normalizeQuestionType = (
       value
     ).toLowerCase();
 
-  if (
-    type === "short"
-  ) {
+  if (type === "short") {
     return "short";
   }
 
-  if (
-    type === "long"
-  ) {
+  if (type === "long") {
     return "long";
   }
 
-  if (
-    type === "mcq"
-  ) {
+  if (type === "mcq") {
     return "mcq";
   }
 
@@ -155,21 +177,15 @@ const normalizeDifficulty = (
       value
     ).toLowerCase();
 
-  if (
-    difficulty === "easy"
-  ) {
+  if (difficulty === "easy") {
     return "Easy";
   }
 
-  if (
-    difficulty === "medium"
-  ) {
+  if (difficulty === "medium") {
     return "Medium";
   }
 
-  if (
-    difficulty === "hard"
-  ) {
+  if (difficulty === "hard") {
     return "Hard";
   }
 
@@ -347,7 +363,7 @@ Return exactly four options when four options are visible.
 
 20. Preserve options accurately.
 
-21. Preserve mathematical expressions as readable text.
+21. Preserve mathematical expressions accurately.
 
 22. correctAnswer must be:
 
@@ -411,6 +427,367 @@ EXPLANATIONS
 32. The explanation should help a student understand the answer.
 
 33. Do not reject an otherwise readable question merely because a long explanation is unavailable.
+
+
+=====================================================
+CRITICAL ACADEMIC FORMATTING RULES
+=====================================================
+
+NAVTA renders academic content with KaTeX.
+
+EVERY returned question, option, explanation, modelAnswer and keyPoint MUST follow these formatting rules.
+
+
+=====================================================
+A. NORMAL PROSE
+=====================================================
+
+Keep ordinary English words as ordinary text.
+
+Do NOT put complete paragraphs inside LaTeX.
+
+
+=====================================================
+B. INLINE MATHEMATICS
+=====================================================
+
+Every mathematical expression inside a sentence MUST be enclosed in single dollar delimiters.
+
+Correct:
+
+Let $\alpha$, $\beta$ and $\gamma$ be the roots of
+$x^3 + ax^2 + bx + c = 0$.
+
+Incorrect:
+
+Let \alpha, \beta and \gamma be the roots of
+x^3 + ax^2 + bx + c = 0.
+
+Never return raw LaTeX commands such as:
+
+\alpha
+\beta
+\gamma
+\lambda
+\frac
+\sqrt
+\sin
+\cos
+\theta
+
+outside a valid $...$ or $$...$$ math block.
+
+
+=====================================================
+C. DISPLAY EQUATIONS
+=====================================================
+
+A complete equation or multi-line equation that should appear on its own line MUST use double dollar delimiters.
+
+Example:
+
+$$
+\alpha x + \beta y + \gamma z = 0
+$$
+
+For a system of equations:
+
+$$
+\begin{aligned}
+\alpha x + \beta y + \gamma z &= 0 \\
+\beta x + \gamma y + \alpha z &= 0 \\
+\gamma x + \alpha y + \beta z &= 0
+\end{aligned}
+$$
+
+
+=====================================================
+D. MATRICES
+=====================================================
+
+Matrices MUST use valid LaTeX matrix environments inside $$...$$.
+
+Example:
+
+$$
+A =
+\begin{bmatrix}
+\sin^2\alpha & 0 & 0 \\
+0 & \sin^2\beta & 0 \\
+0 & 0 & \sin^2\gamma
+\end{bmatrix}
+$$
+
+Do NOT return the words:
+
+\begin{bmatrix}
+
+or:
+
+\end{bmatrix}
+
+as ordinary visible text.
+
+
+=====================================================
+E. DETERMINANTS
+=====================================================
+
+Determinants MUST use vmatrix inside a display block.
+
+Example:
+
+$$
+\begin{vmatrix}
+a & b & c \\
+d & e & f \\
+g & h & i
+\end{vmatrix}
+$$
+
+
+=====================================================
+F. FRACTIONS, ROOTS, POWERS AND SUBSCRIPTS
+=====================================================
+
+Use valid LaTeX.
+
+Examples:
+
+$\frac{GMm}{r^2}$
+
+$\sqrt{x^2+y^2}$
+
+$a^3 = 27c$
+
+$x_1 + x_2$
+
+
+=====================================================
+G. PHYSICS
+=====================================================
+
+Return physical equations as valid LaTeX.
+
+Examples:
+
+$F = ma$
+
+$E = mc^2$
+
+$V = IR$
+
+$P = VI$
+
+$F = \frac{GMm}{r^2}$
+
+$\vec{F} = q(\vec{E} + \vec{v}\times\vec{B})$
+
+$$
+s = ut + \frac{1}{2}at^2
+$$
+
+$$
+v^2 = u^2 + 2as
+$$
+
+Preserve:
+
+- vectors
+- Greek symbols
+- subscripts
+- superscripts
+- fractions
+- integrals
+- derivatives
+- units
+- scientific notation
+
+
+=====================================================
+H. CHEMISTRY
+=====================================================
+
+Chemical formulae MUST preserve proper subscripts,
+superscripts, charges and reaction arrows.
+
+Examples:
+
+$\mathrm{H_2O}$
+
+$\mathrm{CO_2}$
+
+$\mathrm{H_2SO_4}$
+
+$\mathrm{NH_3}$
+
+$\mathrm{CH_4}$
+
+$\mathrm{Fe^{3+}}$
+
+$\mathrm{SO_4^{2-}}$
+
+$\mathrm{NH_4^+}$
+
+$\Delta H$
+
+Chemical reactions should use valid formatting.
+
+Example:
+
+$$
+\mathrm{2H_2 + O_2 \rightarrow 2H_2O}
+$$
+
+Example:
+
+$$
+\mathrm{CaCO_3 \rightarrow CaO + CO_2}
+$$
+
+Preserve:
+
+- reaction arrows
+- coefficients
+- subscripts
+- superscripts
+- ionic charges
+
+
+=====================================================
+I. BIOLOGY
+=====================================================
+
+Normal Biology terminology remains normal text.
+
+Scientific formulae and mathematical expressions must be formatted correctly.
+
+Examples:
+
+$\mathrm{O_2}$
+
+$\mathrm{CO_2}$
+
+$\mathrm{C_6H_{12}O_6}$
+
+$\mathrm{ATP}$
+
+$\mathrm{NADH}$
+
+Example:
+
+$$
+\mathrm{6CO_2 + 6H_2O \rightarrow C_6H_{12}O_6 + 6O_2}
+$$
+
+
+=====================================================
+J. OPTIONS
+=====================================================
+
+Apply the SAME formatting rules to every MCQ option.
+
+Incorrect:
+
+a^3 = 27c
+
+Correct:
+
+"$a^3 = 27c$"
+
+Incorrect:
+
+\alpha + \beta + \gamma = 0
+
+Correct:
+
+"$\alpha + \beta + \gamma = 0$"
+
+
+=====================================================
+K. NO BROKEN DELIMITERS
+=====================================================
+
+Never return an unmatched single $.
+
+Never return:
+
+$A =
+
+without the matching closing $.
+
+Never place a $$ block inside a $...$ block.
+
+Never leave:
+
+\begin{bmatrix}
+
+without:
+
+\end{bmatrix}
+
+Never leave:
+
+\begin{vmatrix}
+
+without:
+
+\end{vmatrix}
+
+
+=====================================================
+L. VISUAL QUESTIONS
+=====================================================
+
+If the printed question depends on an actual:
+
+- graph
+- circuit
+- geometry figure
+- biological diagram
+- chemical structure
+- ray diagram
+- apparatus
+- coordinate graph
+- chart
+- labelled figure
+- required table
+
+DO NOT replace that visual with invented text.
+
+DO NOT invent ASCII art.
+
+DO NOT describe the visual as a replacement for displaying it.
+
+Use:
+
+hasVisual = true
+
+Return the correct:
+
+visualBoundingBox
+
+and:
+
+sourcePage
+
+NAVTA will crop the ORIGINAL visual from the PDF page.
+
+
+=====================================================
+M. FINAL FORMATTING CHECK
+=====================================================
+
+Before returning JSON, verify every question and every option:
+
+- contains no visible raw LaTeX command outside math delimiters
+- contains no unmatched $ delimiter
+- contains valid matrix/determinant environments
+- preserves all mathematical symbols
+- preserves all Physics notation
+- preserves Chemistry subscripts/superscripts/reactions
+- preserves Biology scientific formulae
+- uses the original required visual when the question depends on a figure
 
 
 =====================================================
@@ -917,8 +1294,6 @@ const normalizeVisualBoundingBox = (
       safeHeight,
   };
 };
-
-
 // =====================================================
 // NORMALIZE AI QUESTION
 // =====================================================
@@ -1084,7 +1459,7 @@ const normalizeDetectedQuestion = ({
       ),
 
     question:
-      cleanString(
+      normalizeAcademicContent(
         item?.question
       ),
 
@@ -1120,7 +1495,7 @@ const normalizeDetectedQuestion = ({
         item?.options
       )
         .map(
-          cleanString
+          normalizeAcademicContent
         )
         .filter(
           Boolean
@@ -1129,7 +1504,7 @@ const normalizeDetectedQuestion = ({
     correctAnswer,
 
     modelAnswer:
-      cleanString(
+      normalizeAcademicContent(
         item?.modelAnswer
       ),
 
@@ -1138,7 +1513,7 @@ const normalizeDetectedQuestion = ({
         item?.keyPoints
       )
         .map(
-          cleanString
+          normalizeAcademicContent
         )
         .filter(
           Boolean
@@ -1147,7 +1522,7 @@ const normalizeDetectedQuestion = ({
     maxMarks,
 
     explanation:
-      cleanString(
+      normalizeAcademicContent(
         item?.explanation
       ),
 
