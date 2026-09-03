@@ -318,17 +318,18 @@ function formatSolveTime(totalSeconds) {
 function normaliseNavtaLatex(math = "") {
   let value = String(math || "");
 
-  /*
-   * AI-imported questions can contain LaTeX commands with an
-   * extra slash. Repair known commands without touching the
-   * legitimate "\\" matrix row separator.
-   */
-  value = value.replace(
-    /\\\\(alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|neq|ne|leq|geq|le|ge|approx|equiv|pm|mp|times|div|cdot|sqrt|frac|dfrac|tfrac|sum|prod|int|iint|iiint|lim|infty|sin|cos|tan|cot|sec|csc|log|ln|exp|left|right|begin|end|text|mathrm|mathbf|mathit|mathbb|mathcal|vec|overrightarrow|overline|underline|hat|bar|dot|ddot|partial|nabla|therefore|because|implies|Rightarrow|rightarrow|leftarrow|leftrightarrow|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|det)\b/g,
-    "\\$1"
-  );
+  value = value
+    .replace(/```latex/gi, "")
+    .replace(/```tex/gi, "")
+    .replace(/```math/gi, "")
+    .replace(/```/g, "")
+    .replace(
+      /\\\\(alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|neq|ne|leq|geq|le|ge|approx|equiv|pm|mp|times|div|cdot|sqrt|frac|dfrac|tfrac|sum|prod|int|iint|iiint|lim|infty|sin|cos|tan|cot|sec|csc|log|ln|exp|left|right|begin|end|text|mathrm|mathbf|mathit|mathbb|mathcal|vec|overrightarrow|overline|underline|hat|bar|dot|ddot|partial|nabla|therefore|because|implies|Rightarrow|rightarrow|leftarrow|leftrightarrow|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|det)\b/g,
+      "\\$1"
+    )
+    .trim();
 
-  return value.trim();
+  return value;
 }
 
 const NAVTA_MATRIX_ENVIRONMENTS =
@@ -339,17 +340,8 @@ function renderBareNavtaText(text = "", keyPrefix = "text") {
 
   if (!value) return null;
 
-  /*
-   * Render common bare LaTeX commands even when the imported
-   * question did not contain $...$ delimiters.
-   *
-   * Example:
-   *   value of \lambda is
-   * becomes:
-   *   value of λ is
-   */
   const bareMathPattern =
-    /(\\(?:lambda|alpha|beta|gamma|delta|epsilon|varepsilon|theta|pi|mu|sigma|omega|infty|neq|ne|leq|geq|le|ge|approx|equiv|pm|mp|times|div|cdot|therefore|because|Rightarrow|rightarrow|leftarrow|leftrightarrow|perp|parallel)(?:\s*\^\s*(?:\{[^{}]*\}|[-+]?[A-Za-z0-9]+))?(?:\s*_\s*(?:\{[^{}]*\}|[-+]?[A-Za-z0-9]+))?|\\(?:sqrt|frac|dfrac|tfrac)\{[^{}]*\}(?:\{[^{}]*\})?|\\det\b)/g;
+    /(\\(?:lambda|alpha|beta|gamma|delta|epsilon|varepsilon|theta|pi|mu|sigma|omega|infty|neq|ne|leq|geq|le|ge|approx|equiv|pm|mp|times|div|cdot|therefore|because|Rightarrow|rightarrow|leftarrow|leftrightarrow|perp|parallel|sin|cos|tan|cot|sec|csc|log|ln|det)(?:\s*\^\s*(?:\{[^{}]*\}|[-+]?[A-Za-z0-9]+))?(?:\s*_\s*(?:\{[^{}]*\}|[-+]?[A-Za-z0-9]+))?|\\(?:sqrt|frac|dfrac|tfrac)\{[^{}]*\}(?:\{[^{}]*\})?)/g;
 
   const pieces = value.split(bareMathPattern);
 
@@ -383,25 +375,12 @@ function renderBareNavtaText(text = "", keyPrefix = "text") {
 }
 
 function renderNavtaContent(text = "") {
-  let value = String(text || "");
+  let value = normaliseNavtaLatex(text);
 
   if (!value) {
     return null;
   }
 
-  /*
-   * Remove accidental Markdown fences sometimes returned by
-   * AI imports.
-   */
-  value = value
-    .replace(/```(?:latex|tex|math)?/gi, "")
-    .replace(/```/g, "")
-    .trim();
-
-  /*
-   * Normalise \( ... \) and \[ ... \] into the same delimiter
-   * format handled below.
-   */
   value = value
     .replace(
       /\\\(([\s\S]*?)\\\)/g,
@@ -412,21 +391,6 @@ function renderNavtaContent(text = "") {
       (_, math) => `$$${math}$$`
     );
 
-  /*
-   * IMPORTANT NAVTA FIX
-   *
-   * Imported questions can arrive like this with NO $ delimiters:
-   *
-   * If \begin{vmatrix}
-   * a^2+\lambda & ab & ca \\
-   * ab & b^2+\lambda & bc \\
-   * ca & bc & c^2+\lambda
-   * \end{vmatrix} = ...
-   *
-   * Detect matrix / determinant environments automatically and
-   * convert them to display math. This prevents students from
-   * seeing words such as "\begin{vmatrix}" and "\lambda".
-   */
   const matrixEnvironmentRegex = new RegExp(
     `(\\\\begin\\{(?:${NAVTA_MATRIX_ENVIRONMENTS})\\}[\\s\\S]*?\\\\end\\{(?:${NAVTA_MATRIX_ENVIRONMENTS})\\})`,
     "g"
@@ -459,9 +423,6 @@ function renderNavtaContent(text = "") {
     });
   }
 
-  /*
-   * No matrix found: continue with the normal delimiter parser.
-   */
   if (protectedParts.length === 0) {
     protectedParts.push({
       type: "text",
@@ -476,19 +437,19 @@ function renderNavtaContent(text = "") {
       const math = normaliseNavtaLatex(protectedPart.value);
 
       output.push(
-        <span
+        <div
           key={`matrix-${protectedIndex}`}
-          className="navta-math-block navta-matrix-display"
+          className="navta-exact-matrix"
         >
           <BlockMath
             math={math}
             renderError={() => (
-              <span className="navta-math-fallback">
+              <pre className="navta-math-fallback">
                 {protectedPart.value}
-              </span>
+              </pre>
             )}
           />
-        </span>
+        </div>
       );
 
       return;
@@ -497,7 +458,7 @@ function renderNavtaContent(text = "") {
     const normalisedPart = protectedPart.value;
 
     const parts = normalisedPart.split(
-      /(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/
+      /(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g
     );
 
     parts.forEach((part, index) => {
@@ -512,9 +473,9 @@ function renderNavtaContent(text = "") {
         );
 
         output.push(
-          <span
+          <div
             key={`block-${protectedIndex}-${index}`}
-            className="navta-math-block"
+            className="navta-exact-equation"
           >
             <BlockMath
               math={math}
@@ -524,7 +485,7 @@ function renderNavtaContent(text = "") {
                 </span>
               )}
             />
-          </span>
+          </div>
         );
 
         return;
@@ -2969,6 +2930,49 @@ export default function NavtaTestPage() {
   overflow-x: auto;
   overflow-y: hidden;
 }
+
+/* Explicit block equations remain scrollable instead of breaking layout. */
+        .navta-math-block {
+          max-width: 100%;
+          overflow-x: auto;
+          overflow-y: hidden;
+        }
+
+        .navta-exact-matrix {
+          width: 100%;
+          margin: 18px 0 22px;
+          padding: 12px 0;
+          overflow-x: auto;
+          overflow-y: hidden;
+          text-align: left;
+        }
+
+        .navta-exact-matrix .katex-display {
+          margin: 0;
+          text-align: left;
+        }
+
+        .navta-exact-matrix .katex-display > .katex {
+          display: inline-block;
+          text-align: left;
+          font-size: 1.18em;
+        }
+
+        .navta-exact-equation {
+          width: 100%;
+          margin: 10px 0;
+          overflow-x: auto;
+          overflow-y: hidden;
+        }
+
+        .navta-exact-equation .katex-display {
+          margin: 0;
+          text-align: left;
+        }
+
+        .navta-question .katex {
+          color: inherit;
+        }
 
 /* ===================================================
    MOBILE
