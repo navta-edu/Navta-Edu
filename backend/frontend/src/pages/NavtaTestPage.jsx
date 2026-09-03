@@ -319,102 +319,201 @@ function normaliseNavtaLatex(math = "") {
   let value = String(math || "");
 
   /*
-   * Some AI-imported questions arrive with LaTeX commands
-   * double-escaped in MongoDB/API output, for example:
-   *
-   *   \\alpha
-   *   \\beta
-   *   \\gamma
-   *   \\neq
-   *
-   * KaTeX expects:
-   *
-   *   \alpha
-   *   \beta
-   *   \gamma
-   *   \neq
-   *
-   * Only known LaTeX command names are repaired here so that
-   * legitimate matrix row separators (\\) are not destroyed.
+   * AI-imported questions can contain LaTeX commands with an
+   * extra slash. Repair known commands without touching the
+   * legitimate "\\" matrix row separator.
    */
   value = value.replace(
-    /\\\\(alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|neq|ne|leq|geq|le|ge|approx|equiv|pm|mp|times|div|cdot|sqrt|frac|dfrac|tfrac|sum|prod|int|iint|iiint|lim|infty|sin|cos|tan|cot|sec|csc|log|ln|exp|left|right|begin|end|text|mathrm|mathbf|mathit|mathbb|mathcal|vec|overrightarrow|overline|underline|hat|bar|dot|ddot|partial|nabla|therefore|because|implies|Rightarrow|rightarrow|leftarrow|leftrightarrow|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel)\b/g,
+    /\\\\(alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|neq|ne|leq|geq|le|ge|approx|equiv|pm|mp|times|div|cdot|sqrt|frac|dfrac|tfrac|sum|prod|int|iint|iiint|lim|infty|sin|cos|tan|cot|sec|csc|log|ln|exp|left|right|begin|end|text|mathrm|mathbf|mathit|mathbb|mathcal|vec|overrightarrow|overline|underline|hat|bar|dot|ddot|partial|nabla|therefore|because|implies|Rightarrow|rightarrow|leftarrow|leftrightarrow|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|det)\b/g,
     "\\$1"
   );
 
   return value.trim();
 }
 
-function renderNavtaContent(
-  text = ""
-) {
-  const value =
-    String(
-      text || ""
+const NAVTA_MATRIX_ENVIRONMENTS =
+  "matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|array";
+
+function renderBareNavtaText(text = "", keyPrefix = "text") {
+  const value = String(text || "");
+
+  if (!value) return null;
+
+  /*
+   * Render common bare LaTeX commands even when the imported
+   * question did not contain $...$ delimiters.
+   *
+   * Example:
+   *   value of \lambda is
+   * becomes:
+   *   value of λ is
+   */
+  const bareMathPattern =
+    /(\\(?:lambda|alpha|beta|gamma|delta|epsilon|varepsilon|theta|pi|mu|sigma|omega|infty|neq|ne|leq|geq|le|ge|approx|equiv|pm|mp|times|div|cdot|therefore|because|Rightarrow|rightarrow|leftarrow|leftrightarrow|perp|parallel)(?:\s*\^\s*(?:\{[^{}]*\}|[-+]?[A-Za-z0-9]+))?(?:\s*_\s*(?:\{[^{}]*\}|[-+]?[A-Za-z0-9]+))?|\\(?:sqrt|frac|dfrac|tfrac)\{[^{}]*\}(?:\{[^{}]*\})?|\\det\b)/g;
+
+  const pieces = value.split(bareMathPattern);
+
+  return pieces.map((piece, index) => {
+    if (!piece) return null;
+
+    if (piece.startsWith("\\")) {
+      const math = normaliseNavtaLatex(piece);
+
+      return (
+        <span
+          key={`${keyPrefix}-math-${index}`}
+          className="navta-math-inline"
+        >
+          <InlineMath
+            math={math}
+            renderError={() => (
+              <span className="navta-math-fallback">{piece}</span>
+            )}
+          />
+        </span>
+      );
+    }
+
+    return (
+      <React.Fragment key={`${keyPrefix}-text-${index}`}>
+        {piece}
+      </React.Fragment>
     );
+  });
+}
+
+function renderNavtaContent(text = "") {
+  let value = String(text || "");
 
   if (!value) {
     return null;
   }
 
-  // ---------------------------------------------------
-  // NORMALISE COMMON AI LATEX DELIMITERS
-  // ---------------------------------------------------
+  /*
+   * Remove accidental Markdown fences sometimes returned by
+   * AI imports.
+   */
+  value = value
+    .replace(/```(?:latex|tex|math)?/gi, "")
+    .replace(/```/g, "")
+    .trim();
 
-  const normalised =
-    value
-      .replace(
-        /\\\(([\s\S]*?)\\\)/g,
-        (_, math) =>
-          `$${math}$`
-      )
-      .replace(
-        /\\\[([\s\S]*?)\\\]/g,
-        (_, math) =>
-          `$$${math}$$`
+  /*
+   * Normalise \( ... \) and \[ ... \] into the same delimiter
+   * format handled below.
+   */
+  value = value
+    .replace(
+      /\\\(([\s\S]*?)\\\)/g,
+      (_, math) => `$${math}$`
+    )
+    .replace(
+      /\\\[([\s\S]*?)\\\]/g,
+      (_, math) => `$$${math}$$`
+    );
+
+  /*
+   * IMPORTANT NAVTA FIX
+   *
+   * Imported questions can arrive like this with NO $ delimiters:
+   *
+   * If \begin{vmatrix}
+   * a^2+\lambda & ab & ca \\
+   * ab & b^2+\lambda & bc \\
+   * ca & bc & c^2+\lambda
+   * \end{vmatrix} = ...
+   *
+   * Detect matrix / determinant environments automatically and
+   * convert them to display math. This prevents students from
+   * seeing words such as "\begin{vmatrix}" and "\lambda".
+   */
+  const matrixEnvironmentRegex = new RegExp(
+    `(\\\\begin\\{(?:${NAVTA_MATRIX_ENVIRONMENTS})\\}[\\s\\S]*?\\\\end\\{(?:${NAVTA_MATRIX_ENVIRONMENTS})\\})`,
+    "g"
+  );
+
+  const protectedParts = [];
+  let cursor = 0;
+  let matrixMatch;
+
+  while ((matrixMatch = matrixEnvironmentRegex.exec(value)) !== null) {
+    if (matrixMatch.index > cursor) {
+      protectedParts.push({
+        type: "text",
+        value: value.slice(cursor, matrixMatch.index),
+      });
+    }
+
+    protectedParts.push({
+      type: "matrix",
+      value: matrixMatch[1],
+    });
+
+    cursor = matrixMatch.index + matrixMatch[1].length;
+  }
+
+  if (cursor < value.length) {
+    protectedParts.push({
+      type: "text",
+      value: value.slice(cursor),
+    });
+  }
+
+  /*
+   * No matrix found: continue with the normal delimiter parser.
+   */
+  if (protectedParts.length === 0) {
+    protectedParts.push({
+      type: "text",
+      value,
+    });
+  }
+
+  const output = [];
+
+  protectedParts.forEach((protectedPart, protectedIndex) => {
+    if (protectedPart.type === "matrix") {
+      const math = normaliseNavtaLatex(protectedPart.value);
+
+      output.push(
+        <span
+          key={`matrix-${protectedIndex}`}
+          className="navta-math-block navta-matrix-display"
+        >
+          <BlockMath
+            math={math}
+            renderError={() => (
+              <span className="navta-math-fallback">
+                {protectedPart.value}
+              </span>
+            )}
+          />
+        </span>
       );
 
-  // ---------------------------------------------------
-  // SPLIT NORMAL TEXT FROM MATH
-  // ---------------------------------------------------
+      return;
+    }
 
-  const parts =
-    normalised.split(
+    const normalisedPart = protectedPart.value;
+
+    const parts = normalisedPart.split(
       /(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/
     );
 
-  return parts.map(
-    (
-      part,
-      index
-    ) => {
-      if (!part) {
-        return null;
-      }
-
-      // ===============================================
-      // BLOCK MATH
-      // ===============================================
+    parts.forEach((part, index) => {
+      if (!part) return;
 
       if (
-        part.startsWith(
-          "$$"
-        ) &&
-        part.endsWith(
-          "$$"
-        )
+        part.startsWith("$$") &&
+        part.endsWith("$$")
       ) {
-        const math =
-          normaliseNavtaLatex(
-            part.slice(
-              2,
-              -2
-            )
-          );
+        const math = normaliseNavtaLatex(
+          part.slice(2, -2)
+        );
 
-        return (
+        output.push(
           <span
-            key={index}
+            key={`block-${protectedIndex}-${index}`}
             className="navta-math-block"
           >
             <BlockMath
@@ -427,31 +526,21 @@ function renderNavtaContent(
             />
           </span>
         );
+
+        return;
       }
 
-      // ===============================================
-      // INLINE MATH
-      // ===============================================
-
       if (
-        part.startsWith(
-          "$"
-        ) &&
-        part.endsWith(
-          "$"
-        )
+        part.startsWith("$") &&
+        part.endsWith("$")
       ) {
-        const math =
-          normaliseNavtaLatex(
-            part.slice(
-              1,
-              -1
-            )
-          );
+        const math = normaliseNavtaLatex(
+          part.slice(1, -1)
+        );
 
-        return (
+        output.push(
           <span
-            key={index}
+            key={`inline-${protectedIndex}-${index}`}
             className="navta-math-inline"
           >
             <InlineMath
@@ -464,21 +553,22 @@ function renderNavtaContent(
             />
           </span>
         );
+
+        return;
       }
 
-      // ===============================================
-      // NORMAL TEXT
-      // ===============================================
-
-      return (
-        <React.Fragment
-          key={index}
-        >
-          {part}
+      output.push(
+        <React.Fragment key={`plain-${protectedIndex}-${index}`}>
+          {renderBareNavtaText(
+            part,
+            `plain-${protectedIndex}-${index}`
+          )}
         </React.Fragment>
       );
-    }
-  );
+    });
+  });
+
+  return output;
 }
 
 export default function NavtaTestPage() {
@@ -2742,6 +2832,23 @@ export default function NavtaTestPage() {
   display: inline-block;
   text-align: left;
 }
+
+/* Matrix / determinant questions imported without $ delimiters */
+.navta-matrix-display {
+  margin: 14px 0 18px;
+  padding: 10px 0;
+  text-align: left;
+}
+
+.navta-matrix-display .katex-display {
+  margin: 0;
+  text-align: left;
+}
+
+.navta-matrix-display .katex {
+  font-size: 1.08em;
+}
+
 
 /* ===================================================
    OPTIONS
