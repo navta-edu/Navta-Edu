@@ -297,310 +297,214 @@ function formatSolveTime(totalSeconds) {
 // =====================================================
 // UNIVERSAL NAVTA SCIENCE + MATH RENDERER
 // =====================================================
-//
-// Works for:
-//
-// Physics
-// Chemistry
-// Maths
-// Biology
-//
-// Normal text remains normal text.
-//
-// $ ... $        -> inline mathematics
-// $$ ... $$      -> block mathematics
-//
-// Large matrix / determinant environments are
-// automatically shown as block mathematics.
-//
+// Supports both new questions with $...$/$$...$$ and older
+// AI-imported questions containing bare LaTeX such as:
+// \frac, \sqrt, \lambda, \times, \begin{vmatrix},
+// \begin{bmatrix}, \begin{cases}, aligned equations, etc.
 // =====================================================
 
-function normaliseNavtaLatex(math = "") {
-  let value = String(math || "");
-
-  value = value
-    .replace(/```latex/gi, "")
-    .replace(/```tex/gi, "")
-    .replace(/```math/gi, "")
+function normaliseNavtaLatex(input = "") {
+  return String(input ?? "")
+    .replace(/```(?:latex|tex|math)?/gi, "")
     .replace(/```/g, "")
-    .replace(
-      /\\\\(alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|neq|ne|leq|geq|le|ge|approx|equiv|pm|mp|times|div|cdot|sqrt|frac|dfrac|tfrac|sum|prod|int|iint|iiint|lim|infty|sin|cos|tan|cot|sec|csc|log|ln|exp|left|right|begin|end|text|mathrm|mathbf|mathit|mathbb|mathcal|vec|overrightarrow|overline|underline|hat|bar|dot|ddot|partial|nabla|therefore|because|implies|Rightarrow|rightarrow|leftarrow|leftrightarrow|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|det)\b/g,
-      "\\$1"
-    )
+    .replace(/\u00a0/g, " ")
+    .replace(/\r\n?/g, "\n")
+    // Some old imports stored two literal backslashes before commands.
+    // Reduce only command escapes; keep LaTeX row separators (\\) intact.
+    .replace(/\\\\(?=(?:begin|end|frac|dfrac|tfrac|sqrt|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|psi|omega|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|times|cdot|div|neq|ne|leq|geq|approx|equiv|pm|mp|sum|prod|int|lim|infty|sin|cos|tan|log|ln|vec|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|Rightarrow|therefore|because)\b)/g, "\\")
+    .trim();
+}
+
+const NAVTA_BLOCK_ENVIRONMENTS =
+  "matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|array|cases|aligned|alignedat|gathered|split";
+
+const NAVTA_LATEX_COMMAND =
+  /\\(?:begin|end|frac|dfrac|tfrac|sqrt|alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|times|cdot|div|neq|ne|leq|geq|approx|equiv|pm|mp|sum|prod|int|iint|iiint|lim|infty|sin|cos|tan|cot|sec|csc|log|ln|exp|vec|overrightarrow|overline|underline|hat|bar|dot|ddot|partial|nabla|therefore|because|implies|Rightarrow|rightarrow|leftarrow|leftrightarrow|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel)\b/;
+
+function renderNavtaInlineMath(math, key) {
+  const cleaned = normaliseNavtaLatex(math)
+    .replace(/^\$|\$$/g, "")
     .trim();
 
-  return value;
-}
-
-const NAVTA_MATRIX_ENVIRONMENTS =
-  "matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|array";
-
-function isNavtaMathFragment(value = "") {
-  const text = String(value || "").trim();
-
-  if (!text) return false;
-
-  return (
-    /\\(?:alpha|beta|gamma|delta|epsilon|theta|lambda|mu|pi|rho|sigma|phi|psi|omega|sin|cos|tan|sqrt|frac|det|neq|leq|geq|pm|times|cdot|infty)\b/.test(text) ||
-    /[A-Za-z0-9)]\s*\^\s*(?:\{[^}]+\}|[-+]?[A-Za-z0-9]+)/.test(text) ||
-    /[A-Za-z0-9)]\s*_\s*(?:\{[^}]+\}|[-+]?[A-Za-z0-9]+)/.test(text) ||
-    /(?:\\[A-Za-z]+|[A-Za-z0-9])\s*[+\-*/=]\s*(?:\\[A-Za-z]+|[A-Za-z0-9])/.test(text)
-  );
-}
-
-function renderInlineNavtaMath(math, key) {
-  const cleaned = normaliseNavtaLatex(math);
+  if (!cleaned) return null;
 
   return (
     <span key={key} className="navta-math-inline">
       <InlineMath
         math={cleaned}
         renderError={() => (
-          <span className="navta-math-fallback">{math}</span>
+          <span className="navta-math-fallback">{cleaned}</span>
         )}
       />
     </span>
   );
 }
 
-function renderBareNavtaText(text = "", keyPrefix = "text") {
-  let value = normaliseNavtaLatex(text);
+function renderNavtaBlockMath(math, key) {
+  const cleaned = normaliseNavtaLatex(math)
+    .replace(/^\$\$|\$\$$/g, "")
+    .trim();
 
-  if (!value) return null;
+  if (!cleaned) return null;
 
-  /*
-   * Remove an unmatched single dollar sign produced by some AI
-   * imports. Balanced $...$ / $$...$$ are handled before this
-   * function is called.
-   */
-  const singleDollarCount = (value.match(/\$/g) || []).length;
-
-  if (singleDollarCount % 2 !== 0) {
-    value = value.replace(/\$/g, "");
-  }
-
-  /*
-   * Detect complete bare equations first.
-   *
-   * Examples:
-   *   x^3 + ax^2 + bx + c = 0
-   *   \alpha x + \beta y + \gamma z = 0
-   *   \alpha + \beta + \gamma = 0
-   *   a^3 = 27c
-   *
-   * This is the important difference from the previous renderer:
-   * the WHOLE equation is sent to KaTeX, not only "\alpha".
-   */
-  const equationPattern =
-    /((?:\\[A-Za-z]+|[A-Za-z0-9(){}])(?:[\s]*[A-Za-z0-9(){}^_\\+\-*/.=]|[\s]){0,160}?(?:=|\\neq|\\leq|\\geq)(?:[\s]*[A-Za-z0-9(){}^_\\+\-*/.]|[\s]){1,120})/g;
-
-  const equationPieces = value.split(equationPattern);
-
-  const rendered = [];
-
-  equationPieces.forEach((piece, pieceIndex) => {
-    if (!piece) return;
-
-    const trimmed = piece.trim();
-
-    if (
-      trimmed &&
-      (trimmed.includes("=") ||
-        trimmed.includes("\\neq") ||
-        trimmed.includes("\\leq") ||
-        trimmed.includes("\\geq")) &&
-      isNavtaMathFragment(trimmed)
-    ) {
-      rendered.push(
-        renderInlineNavtaMath(
-          trimmed,
-          `${keyPrefix}-equation-${pieceIndex}`
-        )
-      );
-      return;
-    }
-
-    /*
-     * For normal English text, replace bare Greek/symbol commands
-     * individually so students never see "\alpha", "\beta",
-     * "\gamma", "\lambda", etc.
-     */
-    const commandPattern =
-      /(\\(?:alpha|beta|gamma|delta|epsilon|varepsilon|theta|lambda|mu|pi|rho|sigma|tau|phi|psi|omega|Gamma|Delta|Theta|Lambda|Pi|Sigma|Phi|Psi|Omega|neq|ne|leq|geq|approx|equiv|pm|mp|times|div|cdot|sqrt|frac|dfrac|tfrac|sum|prod|int|lim|infty|sin|cos|tan|cot|sec|csc|log|ln|det|rightarrow|leftarrow|Rightarrow|therefore|because)(?:\s*\^\s*(?:\{[^{}]*\}|[-+]?[A-Za-z0-9]+))?(?:\s*_\s*(?:\{[^{}]*\}|[-+]?[A-Za-z0-9]+))?)/g;
-
-    const commandPieces = piece.split(commandPattern);
-
-    commandPieces.forEach((commandPiece, commandIndex) => {
-      if (!commandPiece) return;
-
-      if (commandPiece.startsWith("\\")) {
-        rendered.push(
-          renderInlineNavtaMath(
-            commandPiece,
-            `${keyPrefix}-command-${pieceIndex}-${commandIndex}`
-          )
-        );
-      } else {
-        rendered.push(
-          <React.Fragment
-            key={`${keyPrefix}-text-${pieceIndex}-${commandIndex}`}
-          >
-            {commandPiece}
-          </React.Fragment>
-        );
-      }
-    });
-  });
-
-  return rendered;
+  return (
+    <div key={key} className="navta-exact-equation">
+      <BlockMath
+        math={cleaned}
+        renderError={() => (
+          <div className="navta-math-fallback">{cleaned}</div>
+        )}
+      />
+    </div>
+  );
 }
 
-function renderNavtaContent(text = "") {
-  let value = normaliseNavtaLatex(text);
+function looksLikeWholeMath(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return false;
 
-  if (!value) {
-    return null;
-  }
-
-  /*
-   * Normalise standard LaTeX wrappers.
-   */
-  value = value
-    .replace(
-      /\\\(([\s\S]*?)\\\)/g,
-      (_, math) => `$${math}$`
-    )
-    .replace(
-      /\\\[([\s\S]*?)\\\]/g,
-      (_, math) => `$$${math}$$`
+  // Options such as \frac{2}{5}, x^2, \lambda, A^{-1}, etc.
+  if (NAVTA_LATEX_COMMAND.test(text) && !/[.!?]\s+[A-Z]/.test(text)) {
+    const words = text.match(/[A-Za-z]{3,}/g) || [];
+    const proseWords = words.filter(
+      (word) =>
+        ![
+          "frac", "dfrac", "tfrac", "sqrt", "alpha", "beta", "gamma",
+          "delta", "theta", "lambda", "sigma", "omega", "times", "cdot",
+          "left", "right", "begin", "end", "matrix", "pmatrix", "bmatrix",
+          "vmatrix", "cases", "aligned", "det", "text", "mathrm", "neq",
+          "leq", "geq", "sin", "cos", "tan", "log", "infty", "adj"
+        ].includes(word.toLowerCase())
     );
+    if (proseWords.length <= 2) return true;
+  }
 
-  /*
-   * Detect and protect real matrices / determinants first.
-   */
-  const matrixEnvironmentRegex = new RegExp(
-    `(\\\\begin\\{(?:${NAVTA_MATRIX_ENVIRONMENTS})\\}[\\s\\S]*?\\\\end\\{(?:${NAVTA_MATRIX_ENVIRONMENTS})\\})`,
-    "g"
+  return (
+    /^[\sA-Za-z0-9{}()[\]|.,+\-*/=<>_^\\]+$/.test(text) &&
+    (/[=^_]/.test(text) || NAVTA_LATEX_COMMAND.test(text)) &&
+    (text.match(/\s+/g) || []).length < 10
   );
+}
 
-  const protectedParts = [];
-  let cursor = 0;
-  let matrixMatch;
+function renderLegacyMixedText(text = "", keyPrefix = "legacy") {
+  const value = normaliseNavtaLatex(text);
+  if (!value) return null;
 
-  while ((matrixMatch = matrixEnvironmentRegex.exec(value)) !== null) {
-    if (matrixMatch.index > cursor) {
-      protectedParts.push({
-        type: "text",
-        value: value.slice(cursor, matrixMatch.index),
-      });
-    }
-
-    protectedParts.push({
-      type: "matrix",
-      value: matrixMatch[1],
-    });
-
-    cursor = matrixMatch.index + matrixMatch[1].length;
-  }
-
-  if (cursor < value.length) {
-    protectedParts.push({
-      type: "text",
-      value: value.slice(cursor),
-    });
-  }
-
-  if (protectedParts.length === 0) {
-    protectedParts.push({
-      type: "text",
-      value,
-    });
+  if (looksLikeWholeMath(value)) {
+    return renderNavtaInlineMath(value, `${keyPrefix}-whole`);
   }
 
   const output = [];
+  let rest = value;
+  let serial = 0;
 
-  protectedParts.forEach((protectedPart, protectedIndex) => {
-    if (protectedPart.type === "matrix") {
+  // Match the most common complete mathematical fragments found in old
+  // NAVTA imports. Longer structures are intentionally matched first.
+  const fragmentRegex = /(\\(?:d?frac|tfrac)\s*\{[^{}]*\}\s*\{[^{}]*\}|\\sqrt(?:\[[^\]]*\])?\s*\{[^{}]*\}|\\(?:alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|psi|omega)(?:\s*[_^]\s*(?:\{[^{}]*\}|[A-Za-z0-9+-]+))*|[A-Za-z](?:\s*[_^]\s*(?:\{[^{}]*\}|[A-Za-z0-9+-]+))+|\d+(?:\.\d+)?\s*\\(?:times|cdot|div)\s*\d*(?:\.\d+)?|[A-Za-z0-9{}()^_+\-*/\\. ]{1,120}(?:=|\\neq|\\leq|\\geq)[A-Za-z0-9{}()^_+\-*/\\. ]{1,120})/;
+
+  while (rest) {
+    const match = rest.match(fragmentRegex);
+
+    if (!match || match.index === undefined) {
       output.push(
-        <div
-          key={`matrix-${protectedIndex}`}
-          className="navta-exact-matrix"
-        >
-          <BlockMath
-            math={normaliseNavtaLatex(protectedPart.value)}
-            renderError={() => (
-              <pre className="navta-math-fallback">
-                {protectedPart.value}
-              </pre>
-            )}
-          />
-        </div>
-      );
-
-      return;
-    }
-
-    /*
-     * Render explicit $...$ and $$...$$ first.
-     */
-    const parts = protectedPart.value.split(
-      /(\$\$[\s\S]*?\$\$|\$[^$]*?\$)/g
-    );
-
-    parts.forEach((part, index) => {
-      if (!part) return;
-
-      if (
-        part.startsWith("$$") &&
-        part.endsWith("$$")
-      ) {
-        output.push(
-          <div
-            key={`block-${protectedIndex}-${index}`}
-            className="navta-exact-equation"
-          >
-            <BlockMath
-              math={normaliseNavtaLatex(
-                part.slice(2, -2)
-              )}
-              renderError={() => (
-                <span className="navta-math-fallback">
-                  {part.slice(2, -2)}
-                </span>
-              )}
-            />
-          </div>
-        );
-
-        return;
-      }
-
-      if (
-        part.startsWith("$") &&
-        part.endsWith("$")
-      ) {
-        output.push(
-          renderInlineNavtaMath(
-            part.slice(1, -1),
-            `inline-${protectedIndex}-${index}`
-          )
-        );
-
-        return;
-      }
-
-      output.push(
-        <React.Fragment key={`plain-${protectedIndex}-${index}`}>
-          {renderBareNavtaText(
-            part,
-            `plain-${protectedIndex}-${index}`
-          )}
+        <React.Fragment key={`${keyPrefix}-text-${serial++}`}>
+          {rest}
         </React.Fragment>
       );
-    });
-  });
+      break;
+    }
+
+    if (match.index > 0) {
+      output.push(
+        <React.Fragment key={`${keyPrefix}-text-${serial++}`}>
+          {rest.slice(0, match.index)}
+        </React.Fragment>
+      );
+    }
+
+    const candidate = match[0].trim();
+    output.push(
+      renderNavtaInlineMath(candidate, `${keyPrefix}-math-${serial++}`)
+    );
+
+    rest = rest.slice(match.index + match[0].length);
+  }
 
   return output;
+}
+
+function renderNavtaContent(input = "") {
+  let value = normaliseNavtaLatex(input);
+  if (!value) return null;
+
+  // Convert standard TeX wrappers to NAVTA's explicit delimiters.
+  value = value
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => `$$${math}$$`)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => `$${math}$`);
+
+  // If an MCQ option or other field is purely mathematical, render the
+  // complete expression at once. This fixes legacy values like \frac{2}{5}.
+  if (!value.includes("$$") && !value.includes("$") && looksLikeWholeMath(value)) {
+    return renderNavtaInlineMath(value, "whole-math");
+  }
+
+  const tokens = [];
+  let cursor = 0;
+  let tokenIndex = 0;
+
+  // Protect explicit math and complete LaTeX environments before processing
+  // surrounding English prose. The backreference guarantees that begin/end
+  // use the same environment (vmatrix with vmatrix, cases with cases, etc.).
+  const protectedRegex = new RegExp(
+    `(\\$\\$[\\s\\S]*?\\$\\$|\\$[^$]*?\\$|\\\\begin\\{(${NAVTA_BLOCK_ENVIRONMENTS})\\}[\\s\\S]*?\\\\end\\{\\2\\})`,
+    "g"
+  );
+
+  let match;
+  while ((match = protectedRegex.exec(value)) !== null) {
+    if (match.index > cursor) {
+      tokens.push({
+        type: "text",
+        value: value.slice(cursor, match.index),
+        key: tokenIndex++,
+      });
+    }
+
+    const raw = match[0];
+    if (raw.startsWith("$$")) {
+      tokens.push({ type: "block", value: raw.slice(2, -2), key: tokenIndex++ });
+    } else if (raw.startsWith("$")) {
+      tokens.push({ type: "inline", value: raw.slice(1, -1), key: tokenIndex++ });
+    } else {
+      tokens.push({ type: "block", value: raw, key: tokenIndex++ });
+    }
+
+    cursor = match.index + raw.length;
+  }
+
+  if (cursor < value.length) {
+    tokens.push({ type: "text", value: value.slice(cursor), key: tokenIndex++ });
+  }
+
+  if (tokens.length === 0) {
+    tokens.push({ type: "text", value, key: 0 });
+  }
+
+  return tokens.map((token) => {
+    if (token.type === "block") {
+      return renderNavtaBlockMath(token.value, `navta-block-${token.key}`);
+    }
+
+    if (token.type === "inline") {
+      return renderNavtaInlineMath(token.value, `navta-inline-${token.key}`);
+    }
+
+    return (
+      <React.Fragment key={`navta-text-${token.key}`}>
+        {renderLegacyMixedText(token.value, `navta-text-${token.key}`)}
+      </React.Fragment>
+    );
+  });
 }
 
 export default function NavtaTestPage() {
