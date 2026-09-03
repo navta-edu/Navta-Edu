@@ -507,6 +507,78 @@ function renderNavtaContent(input = "") {
   });
 }
 
+
+function getNavtaQuestionImage(question) {
+  const primaryUrl = String(
+    question?.questionImage?.url || ""
+  ).trim();
+
+  if (primaryUrl) {
+    return {
+      url: primaryUrl,
+      altText:
+        String(
+          question?.questionImage?.altText ||
+            question?.questionNumber ||
+            "NAVTA question"
+        ).trim() || "NAVTA question",
+    };
+  }
+
+  const firstImage = Array.isArray(
+    question?.questionImages
+  )
+    ? question.questionImages.find(
+        (image) =>
+          image &&
+          typeof image === "object" &&
+          String(image.url || "").trim()
+      )
+    : null;
+
+  if (firstImage) {
+    return {
+      url: String(firstImage.url || "").trim(),
+      altText:
+        String(
+          firstImage.altText ||
+            question?.questionNumber ||
+            "NAVTA question"
+        ).trim() || "NAVTA question",
+    };
+  }
+
+  return null;
+}
+
+function shouldUseNavtaQuestionScreenshot(question) {
+  return Boolean(getNavtaQuestionImage(question));
+}
+
+function NavtaQuestionBody({ question }) {
+  const image = getNavtaQuestionImage(question);
+
+  if (image?.url) {
+    return (
+      <div className="navta-question-image-shell">
+        <img
+          src={image.url}
+          alt={image.altText}
+          className="navta-question-image"
+          loading="eager"
+          decoding="async"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <h2 className="navta-question">
+      {renderNavtaContent(question?.question || "")}
+    </h2>
+  );
+}
+
 export default function NavtaTestPage() {
   const {
     updateCoinBalance,
@@ -2499,6 +2571,54 @@ export default function NavtaTestPage() {
           color: var(--nt-soft-text);
         }
 
+
+        .navta-question-image-shell {
+          width: 100%;
+          margin: 0 0 24px;
+          padding: 14px;
+          border: 1px solid var(--nt-border);
+          border-radius: 18px;
+          background: #ffffff;
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .navta-question-image {
+          display: block;
+          width: auto;
+          max-width: 100%;
+          height: auto;
+          max-height: 72vh;
+          object-fit: contain;
+          object-position: center;
+          border-radius: 10px;
+        }
+
+        html.dark .navta-question-image-shell {
+          background: #ffffff;
+          border-color: rgba(148, 163, 184, 0.35);
+        }
+
+        .navta-image-answer-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+          margin-top: 8px;
+        }
+
+        .navta-image-answer-grid .navta-option {
+          min-height: 58px;
+          justify-content: center;
+          text-align: center;
+          padding: 12px;
+        }
+
+        .navta-image-answer-grid .navta-option-content {
+          display: none;
+        }
+
         .navta-status-pill {
           display: inline-block;
           margin-bottom: 12px;
@@ -3039,6 +3159,22 @@ export default function NavtaTestPage() {
           .navta-revenge-focus-grid,
           .navta-revenge-comparison {
             grid-template-columns: 1fr;
+          }
+
+          .navta-question-image-shell {
+            padding: 8px;
+            margin-bottom: 18px;
+            border-radius: 14px;
+          }
+
+          .navta-question-image {
+            max-height: 62vh;
+            border-radius: 8px;
+          }
+
+          .navta-image-answer-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
           }
 
           .navta-question-card {
@@ -4072,18 +4208,29 @@ export default function NavtaTestPage() {
               Question {currentQuestion + 1} of {questions.length}
               {" • "}
               {getQuestionTypeLabel(resolvedQuestionType)}
+              {shouldUseNavtaQuestionScreenshot(
+                currentTestQuestion
+              )
+                ? " • Original Question Image"
+                : ""}
             </div>
 
             {resolvedQuestionType === "mcq" && (
               <>
                 <div className="navta-question-card">
-                  <h2 className="navta-question">
-                    {renderNavtaContent(
-                      currentTestQuestion.question
-                    )}
-                  </h2>
+                  <NavtaQuestionBody
+                    question={currentTestQuestion}
+                  />
 
-                  <div>
+                  <div
+                    className={
+                      shouldUseNavtaQuestionScreenshot(
+                        currentTestQuestion
+                      )
+                        ? "navta-image-answer-grid"
+                        : ""
+                    }
+                  >
                     {(currentTestQuestion.options || []).map(
                       (option, index) => {
                         const feedback =
@@ -4130,11 +4277,13 @@ export default function NavtaTestPage() {
                               {String.fromCharCode(65 + index)}
                             </span>
 
-                            <span className="navta-option-content">
-                                {renderNavtaContent(
-                                   option
-                             )}
-                          </span>
+                            {!shouldUseNavtaQuestionScreenshot(
+                              currentTestQuestion
+                            ) && (
+                              <span className="navta-option-content">
+                                {renderNavtaContent(option)}
+                              </span>
+                            )}
                           </button>
                         );
                       }
@@ -4166,12 +4315,18 @@ export default function NavtaTestPage() {
                             answerFeedback[currentQuestion]
                               .correctAnswer
                         )}
-                        .{" "}
-                        {renderNavtaContent(
-                          currentTestQuestion.options[
-                            answerFeedback[currentQuestion]
-                              .correctAnswer
-                          ]
+                        {!shouldUseNavtaQuestionScreenshot(
+                          currentTestQuestion
+                        ) && (
+                          <>
+                            .{" "}
+                            {renderNavtaContent(
+                              currentTestQuestion.options[
+                                answerFeedback[currentQuestion]
+                                  .correctAnswer
+                              ]
+                            )}
+                          </>
                         )}
                       </div>
 
@@ -4304,11 +4459,9 @@ export default function NavtaTestPage() {
                       : "Long Answer"}
                   </span>
 
-                  <h2 className="navta-question">
-                    {renderNavtaContent(
-                       currentTestQuestion.question
-                    )}
-                  </h2>
+                  <NavtaQuestionBody
+                    question={currentTestQuestion}
+                  />
 
                   <p
                     style={{
