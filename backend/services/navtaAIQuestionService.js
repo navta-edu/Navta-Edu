@@ -1,2375 +1,1272 @@
-// =====================================================
-// NAVTA AI QUESTION SERVICE
-// Google Gemini Vision API
-// =====================================================
-//
-// Production flow:
-//
-// Hostinger backend
-// -> Google Gemini API
-// -> Gemini Vision model
-//
-// PDF pages are rendered elsewhere in NAVTA.
-// This service receives those rendered page images,
-// sends them to Gemini in batches of EXACTLY 5 pages,
-// extracts structured questions, and returns them to
-// the existing NAVTA import pipeline.
-//
-// Processing:
-//
-// Pages 1-5
-// Pages 6-10
-// Pages 11-15
-// Pages 16-20
-// ...
-// until the final page.
-//
-// IMPORTANT:
-// GEMINI_API_KEY must exist only in backend environment
-// variables. Never expose it in frontend code.
-// =====================================================
+const path = require("path");
 
+const {
+  processNavtaDocument,
+} = require("./navtaDocumentService");
+
+const {
+  renderPdfPages,
+} = require("./navtaPdfVisualService");
+
+const {
+  analyseRenderedPages,
+} = require("./navtaAIQuestionService");
+
+const {
+  createQuestionDiagram,
+} = require("./navtaDiagramCropService");
+
+const {
+  uploadQuestionImage,
+} = require("./navtaImageService");
 
 // =====================================================
-// CONFIG
+// CONSTANTS
 // =====================================================
 
-const GEMINI_API_KEY =
-  String(
-    process.env.GEMINI_API_KEY || ""
-  ).trim();
+const VALID_SUBJECTS = new Set([
+  "Physics",
+  "Chemistry",
+  "Maths",
+  "Biology",
+]);
 
+const VALID_EXAMS = new Set([
+  "NEET",
+  "JEE",
+  "Boards",
+]);
 
-const GEMINI_MODEL =
-  String(
-    process.env.GEMINI_MODEL ||
-      "gemini-3.5-flash-lite"
-  ).trim();
+const VALID_CLASSES = new Set([
+  "Class 11",
+  "Class 12",
+]);
 
+const VALID_DIFFICULTIES = new Set([
+  "Easy",
+  "Medium",
+  "Hard",
+]);
 
-const GEMINI_API_BASE =
-  String(
-    process.env.GEMINI_API_BASE ||
-      "https://generativelanguage.googleapis.com/v1beta"
-  )
-    .trim()
-    .replace(/\/+$/, "");
+const VALID_QUESTION_TYPES = new Set([
+  "mcq",
+  "short",
+  "long",
+]);
 
-
-const NAVTA_AI_TIMEOUT_MS =
-  Math.max(
-    30000,
-    Number(
-      process.env.NAVTA_AI_TIMEOUT_MS ||
-        180000
-    ) || 180000
-  );
-
-
-// =====================================================
-// FIXED 5-PAGE BATCH
-// =====================================================
-
-const NAVTA_AI_BATCH_SIZE = 5;
-
+// Limit the number of PDF pages processed in one import.
+// This protects server memory and avoids sending a huge
+// number of AI requests during a single upload.
+const MAX_PDF_PAGES_PER_IMPORT = Number.MAX_SAFE_INTEGER;
 
 // =====================================================
 // HELPERS
 // =====================================================
 
-const cleanString = (
-  value = ""
-) => {
-  return String(
-    value || ""
-  ).trim();
+const cleanString = (value = "") => {
+  return String(value || "").trim();
 };
 
-
-// =====================================================
-// NORMALIZE ACADEMIC CONTENT
-// =====================================================
-
-const normalizeAcademicContent = (
-  value = ""
-) => {
-  let text =
-    cleanString(
-      value
-    );
-
-  if (!text) {
-    return "";
-  }
-
-  text =
-    text
-      .replace(
-        /```(?:latex|tex|math|markdown)?/gi,
-        ""
-      )
-      .replace(
-        /```/g,
-        ""
-      )
-      .replace(
-        /\r\n?/g,
-        "\n"
-      )
-      .replace(
-        /\u00a0/g,
-        " "
-      )
-      .trim();
-
-  return text;
-};
-
-
-const safeArray = (
-  value
-) => {
-  return Array.isArray(
-    value
-  )
+const safeArray = (value) => {
+  return Array.isArray(value)
     ? value
     : [];
 };
 
-
-// =====================================================
-// NORMALIZE QUESTION TYPE
-// =====================================================
-
-const normalizeQuestionType = (
-  value
-) => {
-  const type =
-    cleanString(
-      value
-    ).toLowerCase();
-
-  if (type === "short") {
-    return "short";
-  }
-
-  if (type === "long") {
-    return "long";
-  }
-
-  if (type === "mcq") {
-    return "mcq";
-  }
-
-  return "";
+const getFileType = (fileName = "") => {
+  return path
+    .extname(fileName)
+    .toLowerCase()
+    .replace(".", "");
 };
 
-
-// =====================================================
-// NORMALIZE DIFFICULTY
-// =====================================================
-
-const normalizeDifficulty = (
-  value
-) => {
-  const difficulty =
-    cleanString(
-      value
-    ).toLowerCase();
-
-  if (difficulty === "easy") {
-    return "Easy";
-  }
-
-  if (difficulty === "medium") {
-    return "Medium";
-  }
-
-  if (difficulty === "hard") {
-    return "Hard";
-  }
-
-  return "";
-};
-
-
-// =====================================================
-// IMAGE BUFFER -> BASE64
-// =====================================================
-
-const imageBufferToBase64 = (
-  buffer
-) => {
-  if (
-    !Buffer.isBuffer(
-      buffer
-    )
-  ) {
-    throw new Error(
-      "A valid page image buffer is required."
-    );
-  }
-
-  if (
-    buffer.length === 0
-  ) {
-    throw new Error(
-      "The page image buffer is empty."
-    );
-  }
-
-  return buffer.toString(
-    "base64"
-  );
-};
-
-
-// =====================================================
-// SYSTEM INSTRUCTIONS
-// =====================================================
-
-const SYSTEM_PROMPT = `
-You are NAVTA AI, an educational question-paper analysis system.
-
-Your job is to analyse rendered question-paper PAGE IMAGES and detect every academic question visible on those pages.
-
-NAVTA supports:
-
-Subjects:
-- Physics
-- Chemistry
-- Maths
-- Biology
-
-Exams:
-- NEET
-- JEE
-- Boards
-
-Classes:
-- Class 11
-- Class 12
-
-Difficulty:
-- Easy
-- Medium
-- Hard
-
-Question types:
-- mcq
-- short
-- long
-
-
-=====================================================
-CRITICAL QUESTION DETECTION RULES
-=====================================================
-
-1. The PAGE IMAGES are the PRIMARY source.
-
-2. You MUST analyse EVERY supplied page.
-
-3. You MUST scan every supplied page from TOP to BOTTOM.
-
-4. Detect EVERY academic question visible on ALL supplied pages.
-
-5. DO NOT stop after detecting only the first few questions.
-
-6. If five pages are supplied, you must inspect ALL FIVE pages completely.
-
-For example:
-
-If pages 1, 2, 3, 4 and 5 are supplied:
-
-- fully inspect page 1
-- fully inspect page 2
-- fully inspect page 3
-- fully inspect page 4
-- fully inspect page 5
-
-Do not return early.
-
-7. If pages 6, 7, 8, 9 and 10 are supplied:
-
-inspect every one of those pages completely.
-
-Continue this behaviour for every later page batch.
-
-8. Your goal is MAXIMUM QUESTION RECALL without inventing questions.
-
-9. Preserve the printed question number whenever visible.
-
-10. A page may contain many questions.
-
-Do not assume one page contains only one question.
-
-If a page contains:
-
-Q1
-Q2
-Q3
-Q4
-Q5
-Q6
-Q7
-
-then return all seven questions if they are readable.
-
-11. Questions may be arranged:
-
-- vertically
-- in columns
-- in sections
-- across multiple areas of the page
-
-Inspect the COMPLETE page.
-
-12. Pay special attention to two-column question papers.
-
-If the page contains a left column and right column,
-scan BOTH columns.
-
-13. Preserve the original question wording as accurately as possible.
-
-14. Do not invent questions.
-
-
-=====================================================
-QUESTIONS CONTINUING BETWEEN PAGES
-=====================================================
-
-15. A question may continue from one supplied page to the next supplied page.
-
-If adjacent supplied pages clearly contain different parts of the same question, combine them into one complete question.
-
-16. Do not duplicate a question simply because it appears across two pages.
-
-17. If a question begins near the bottom of one page and continues on the next supplied page, combine it.
-
-18. If a question cannot be understood completely because the required continuation is NOT present in the supplied batch:
-
-drop = true
-
-and explain why using dropReason.
-
-
-=====================================================
-MCQ RULES
-=====================================================
-
-19. For MCQ questions:
-
-Return exactly four options when four options are visible.
-
-20. Preserve options accurately.
-
-21. Preserve mathematical expressions accurately.
-
-22. correctAnswer must be:
-
-0 = A
-1 = B
-2 = C
-3 = D
-
-23. If the correct answer cannot be determined reliably:
-
-correctAnswer = null
-
-24. Never guess a correct answer just to make a question valid.
-
-25. NEET and JEE questions must use:
-
-questionType = "mcq"
-
-
-=====================================================
-BOARD QUESTION RULES
-=====================================================
-
-26. Boards questions may use:
-
-- mcq
-- short
-- long
-
-27. For Boards written questions provide when possible:
-
-- modelAnswer
-- keyPoints
-- maxMarks
-
-
-=====================================================
-CLASSIFICATION
-=====================================================
-
-28. Determine as accurately as possible:
-
-- subject
-- exam
-- classLevel
-- chapter
-- difficulty
-- questionType
-
-29. If administrator hints are supplied and they clearly match the pages, use them.
-
-30. Do not blindly use hints if they clearly contradict the question.
-
-
-=====================================================
-EXPLANATIONS
-=====================================================
-
-31. Provide an educational explanation when it can be determined reliably.
-
-32. The explanation should help a student understand the answer.
-
-33. Do not reject an otherwise readable question merely because a long explanation is unavailable.
-
-
-=====================================================
-CRITICAL ACADEMIC FORMATTING RULES
-=====================================================
-
-NAVTA renders academic content with KaTeX.
-
-EVERY returned question, option, explanation, modelAnswer and keyPoint MUST follow these formatting rules.
-
-
-=====================================================
-A. NORMAL PROSE
-=====================================================
-
-Keep ordinary English words as ordinary text.
-
-Do NOT put complete paragraphs inside LaTeX.
-
-
-=====================================================
-B. INLINE MATHEMATICS
-=====================================================
-
-Every mathematical expression inside a sentence MUST be enclosed in single dollar delimiters.
-
-Correct:
-
-Let $\alpha$, $\beta$ and $\gamma$ be the roots of
-$x^3 + ax^2 + bx + c = 0$.
-
-Incorrect:
-
-Let \alpha, \beta and \gamma be the roots of
-x^3 + ax^2 + bx + c = 0.
-
-Never return raw LaTeX commands such as:
-
-\alpha
-\beta
-\gamma
-\lambda
-\frac
-\sqrt
-\sin
-\cos
-\theta
-
-outside a valid $...$ or $$...$$ math block.
-
-
-=====================================================
-C. DISPLAY EQUATIONS
-=====================================================
-
-A complete equation or multi-line equation that should appear on its own line MUST use double dollar delimiters.
-
-Example:
-
-$$
-\alpha x + \beta y + \gamma z = 0
-$$
-
-For a system of equations:
-
-$$
-\begin{aligned}
-\alpha x + \beta y + \gamma z &= 0 \\
-\beta x + \gamma y + \alpha z &= 0 \\
-\gamma x + \alpha y + \beta z &= 0
-\end{aligned}
-$$
-
-
-=====================================================
-D. MATRICES
-=====================================================
-
-Matrices MUST use valid LaTeX matrix environments inside $$...$$.
-
-Example:
-
-$$
-A =
-\begin{bmatrix}
-\sin^2\alpha & 0 & 0 \\
-0 & \sin^2\beta & 0 \\
-0 & 0 & \sin^2\gamma
-\end{bmatrix}
-$$
-
-Do NOT return the words:
-
-\begin{bmatrix}
-
-or:
-
-\end{bmatrix}
-
-as ordinary visible text.
-
-
-=====================================================
-E. DETERMINANTS
-=====================================================
-
-Determinants MUST use vmatrix inside a display block.
-
-Example:
-
-$$
-\begin{vmatrix}
-a & b & c \\
-d & e & f \\
-g & h & i
-\end{vmatrix}
-$$
-
-
-=====================================================
-F. FRACTIONS, ROOTS, POWERS AND SUBSCRIPTS
-=====================================================
-
-Use valid LaTeX.
-
-Examples:
-
-$\frac{GMm}{r^2}$
-
-$\sqrt{x^2+y^2}$
-
-$a^3 = 27c$
-
-$x_1 + x_2$
-
-
-=====================================================
-G. PHYSICS
-=====================================================
-
-Return physical equations as valid LaTeX.
-
-Examples:
-
-$F = ma$
-
-$E = mc^2$
-
-$V = IR$
-
-$P = VI$
-
-$F = \frac{GMm}{r^2}$
-
-$\vec{F} = q(\vec{E} + \vec{v}\times\vec{B})$
-
-$$
-s = ut + \frac{1}{2}at^2
-$$
-
-$$
-v^2 = u^2 + 2as
-$$
-
-Preserve:
-
-- vectors
-- Greek symbols
-- subscripts
-- superscripts
-- fractions
-- integrals
-- derivatives
-- units
-- scientific notation
-
-
-=====================================================
-H. CHEMISTRY
-=====================================================
-
-Chemical formulae MUST preserve proper subscripts,
-superscripts, charges and reaction arrows.
-
-Examples:
-
-$\mathrm{H_2O}$
-
-$\mathrm{CO_2}$
-
-$\mathrm{H_2SO_4}$
-
-$\mathrm{NH_3}$
-
-$\mathrm{CH_4}$
-
-$\mathrm{Fe^{3+}}$
-
-$\mathrm{SO_4^{2-}}$
-
-$\mathrm{NH_4^+}$
-
-$\Delta H$
-
-Chemical reactions should use valid formatting.
-
-Example:
-
-$$
-\mathrm{2H_2 + O_2 \rightarrow 2H_2O}
-$$
-
-Example:
-
-$$
-\mathrm{CaCO_3 \rightarrow CaO + CO_2}
-$$
-
-Preserve:
-
-- reaction arrows
-- coefficients
-- subscripts
-- superscripts
-- ionic charges
-
-
-=====================================================
-I. BIOLOGY
-=====================================================
-
-Normal Biology terminology remains normal text.
-
-Scientific formulae and mathematical expressions must be formatted correctly.
-
-Examples:
-
-$\mathrm{O_2}$
-
-$\mathrm{CO_2}$
-
-$\mathrm{C_6H_{12}O_6}$
-
-$\mathrm{ATP}$
-
-$\mathrm{NADH}$
-
-Example:
-
-$$
-\mathrm{6CO_2 + 6H_2O \rightarrow C_6H_{12}O_6 + 6O_2}
-$$
-
-
-=====================================================
-J. OPTIONS
-=====================================================
-
-Apply the SAME formatting rules to every MCQ option.
-
-Incorrect:
-
-a^3 = 27c
-
-Correct:
-
-"$a^3 = 27c$"
-
-Incorrect:
-
-\alpha + \beta + \gamma = 0
-
-Correct:
-
-"$\alpha + \beta + \gamma = 0$"
-
-
-=====================================================
-K. NO BROKEN DELIMITERS
-=====================================================
-
-Never return an unmatched single $.
-
-Never return:
-
-$A =
-
-without the matching closing $.
-
-Never place a $$ block inside a $...$ block.
-
-Never leave:
-
-\begin{bmatrix}
-
-without:
-
-\end{bmatrix}
-
-Never leave:
-
-\begin{vmatrix}
-
-without:
-
-\end{vmatrix}
-
-
-=====================================================
-L. VISUAL QUESTIONS
-=====================================================
-
-If the printed question depends on an actual:
-
-- graph
-- circuit
-- geometry figure
-- biological diagram
-- chemical structure
-- ray diagram
-- apparatus
-- coordinate graph
-- chart
-- labelled figure
-- required table
-
-DO NOT replace that visual with invented text.
-
-DO NOT invent ASCII art.
-
-DO NOT describe the visual as a replacement for displaying it.
-
-Use:
-
-hasVisual = true
-
-Return the correct:
-
-visualBoundingBox
-
-and:
-
-sourcePage
-
-NAVTA will crop the ORIGINAL visual from the PDF page.
-
-
-=====================================================
-M. FINAL FORMATTING CHECK
-=====================================================
-
-Before returning JSON, verify every question and every option:
-
-- contains no visible raw LaTeX command outside math delimiters
-- contains no unmatched $ delimiter
-- contains valid matrix/determinant environments
-- preserves all mathematical symbols
-- preserves all Physics notation
-- preserves Chemistry subscripts/superscripts/reactions
-- preserves Biology scientific formulae
-- uses the original required visual when the question depends on a figure
-
-
-=====================================================
-DIAGRAMS AND VISUALS
-=====================================================
-
-34. DIAGRAMS AND VISUALS ARE VERY IMPORTANT.
-
-A visual includes:
-
-- circuit
-- graph
-- geometry figure
-- biological diagram
-- chemistry structure
-- table required to solve the question
-- chart
-- ray diagram
-- apparatus
-- coordinate graph
-- labelled figure
-- mathematical figure
-
-35. If a question depends on a visual:
-
-hasVisual = true
-
-36. Return visualBoundingBox using NORMALIZED coordinates for the page identified by sourcePage:
-
-{
-  "x": 0.0,
-  "y": 0.0,
-  "width": 0.0,
-  "height": 0.0
-}
-
-37. Each coordinate must be between 0 and 1.
-
-38. x is the horizontal starting position from the LEFT edge.
-
-39. y is the vertical starting position from the TOP edge.
-
-40. width is the visual width divided by total page width.
-
-41. height is the visual height divided by total page height.
-
-42. The visualBoundingBox must contain the REQUIRED diagram, graph, circuit, figure, table or other visual as tightly as practical.
-
-43. Do not include the complete page.
-
-44. Do not include the entire question text unless that text is part of the required figure.
-
-45. If no visual is required:
-
-hasVisual = false
-visualDescription = ""
-visualBoundingBox = null
-
-
-=====================================================
-DROP RULES
-=====================================================
-
-46. Do NOT drop a readable question simply because classification is difficult.
-
-Make your best reliable classification.
-
-47. Only use:
-
-drop = true
-
-when the actual question itself is:
-
-- incomplete
-- unreadable
-- genuinely uncertain
-- missing essential continuation
-- impossible to reconstruct safely
-
-48. Never invent missing question text.
-
-49. Never make up an answer simply to make a question valid.
-
-
-=====================================================
-SOURCE PAGE
-=====================================================
-
-50. sourcePage is REQUIRED.
-
-51. sourcePage must be the actual PDF page number containing the question.
-
-52. If a question spans multiple supplied pages, use the page where the question begins.
-
-53. If a visual belongs to the question, sourcePage must identify the page containing the visual because NAVTA uses that page to crop the diagram.
-
-
-=====================================================
-OUTPUT
-=====================================================
-
-54. Return ONLY valid JSON.
-
-55. Do not return Markdown.
-
-56. Do not use code fences.
-
-57. Return EVERY question you detected.
-
-58. Before producing the final JSON, mentally verify that you inspected every supplied page from top to bottom.
-
-The exact top-level response structure is:
-
-{
-  "questions": []
-}
-`;
-
-
-// =====================================================
-// BATCH PROMPT
-// =====================================================
-
-const buildBatchPrompt = ({
-  pages = [],
-  text = "",
-  hints = {},
-}) => {
-  const subjectHint =
-    cleanString(
-      hints.subject
-    ) ||
-    "Not provided";
-
-  const examHint =
-    cleanString(
-      hints.exam
-    ) ||
-    "Not provided";
-
-  const classHint =
-    cleanString(
-      hints.classLevel
-    ) ||
-    "Not provided";
-
-
-  const pageNumbers =
-    pages
-      .map(
-        (page) =>
-          Number(
-            page?.pageNumber
-          )
-      )
-      .filter(
-        Boolean
-      );
-
-
-  const pageContext =
-    pages
-      .map(
-        (page) => {
-          const pageNumber =
-            Number(
-              page?.pageNumber
-            );
-
-          const pageText =
-            cleanString(
-              page?.text
-            );
-
-          return `
-=====================================================
-PDF PAGE ${pageNumber}
-=====================================================
-
-Extracted text context for page ${pageNumber}:
-
-${pageText.slice(
-  0,
-  7000
-)}
-`;
-        }
-      )
-      .join(
-        "\n"
-      );
-
-
-  return `
-Analyse this NAVTA question-paper page batch.
-
-
-=====================================================
-SUPPLIED PDF PAGES
-=====================================================
-
-${pageNumbers.join(", ")}
-
-
-You MUST analyse these pages in this order:
-
-${pageNumbers
-  .map(
-    (number) =>
-      `PDF Page ${number}`
-  )
-  .join("\n")}
-
-
-IMPORTANT:
-
-You MUST inspect EVERY supplied page.
-
-Do not analyse only the first page.
-
-Do not stop after finding the first few questions.
-
-Scan every page completely from top to bottom.
-
-If a page contains two columns, inspect both columns.
-
-Detect every readable academic question.
-
-
-=====================================================
-ADMIN HINTS
-=====================================================
-
-Subject:
-${subjectHint}
-
-Preparation / Exam:
-${examHint}
-
-Class:
-${classHint}
-
-
-=====================================================
-SOURCE PRIORITY
-=====================================================
-
-The PAGE IMAGES supplied with this request are the PRIMARY SOURCE.
-
-Each image is preceded by a text label identifying its PDF page number.
-
-Extracted document text is SUPPORTING CONTEXT only.
-
-Do not create questions that are not visible on one or more supplied page images.
-
-
-=====================================================
-PAGE TEXT CONTEXT
-=====================================================
-
-${pageContext}
-
-
-=====================================================
-GENERAL DOCUMENT TEXT CONTEXT
-=====================================================
-
-${String(
-  text || ""
-).slice(
-  0,
-  8000
-)}
-
-
-=====================================================
-REQUIRED QUESTION FORMAT
-=====================================================
-
-For EVERY detected question return an object using this exact structure:
-
-{
-  "questionNumber": "",
-  "question": "",
-  "subject": "",
-  "exam": "",
-  "classLevel": "",
-  "chapter": "",
-  "difficulty": "",
-  "questionType": "",
-  "options": [],
-  "correctAnswer": null,
-  "modelAnswer": "",
-  "keyPoints": [],
-  "maxMarks": null,
-  "explanation": "",
-  "hasVisual": false,
-  "visualDescription": "",
-  "visualBoundingBox": null,
-  "sourcePage": null,
-  "drop": false,
-  "dropReason": ""
-}
-
-
-=====================================================
-FINAL CHECK BEFORE RETURNING JSON
-=====================================================
-
-Before returning:
-
-1. Confirm you inspected ALL of these pages:
-
-${pageNumbers.join(", ")}
-
-2. Confirm you scanned each page completely.
-
-3. Confirm you did not stop after only a few questions.
-
-4. Confirm every visible readable academic question has been included.
-
-5. Confirm question numbers were preserved whenever visible.
-
-6. Confirm sourcePage is one of these supplied PDF page numbers:
-
-${pageNumbers.join(", ")}
-
-
-Return:
-
-{
-  "questions": [...]
-}
-
-Return JSON only.
-`;
-};
-
-
-// =====================================================
-// CLEAN MODEL JSON
-// =====================================================
-
-const cleanJsonResponse = (
-  value
-) => {
-  let text =
-    cleanString(
-      value
-    );
-
-  if (
-    text.startsWith(
-      "```"
-    )
-  ) {
-    text =
-      text.replace(
-        /^```(?:json)?\s*/i,
-        ""
-      );
-
-    text =
-      text.replace(
-        /\s*```$/,
-        ""
-      );
-  }
-
-  return text.trim();
-};
-
-
-// =====================================================
-// NORMALIZE VISUAL BOX
-// =====================================================
-
-const normalizeVisualBoundingBox = (
-  value
-) => {
-  if (
-    !value ||
-    typeof value !==
-      "object"
-  ) {
+const normalizeBoundingBox = (value) => {
+  if (!value || typeof value !== "object") {
     return null;
   }
 
-
-  const x =
-    Number(
-      value.x
-    );
-
-  const y =
-    Number(
-      value.y
-    );
-
-  const width =
-    Number(
-      value.width
-    );
-
-  const height =
-    Number(
-      value.height
-    );
-
+  const x = Number(value.x);
+  const y = Number(value.y);
+  const width = Number(value.width);
+  const height = Number(value.height);
 
   if (
-    !Number.isFinite(
-      x
-    ) ||
-    !Number.isFinite(
-      y
-    ) ||
-    !Number.isFinite(
-      width
-    ) ||
-    !Number.isFinite(
-      height
-    )
-  ) {
-    return null;
-  }
-
-
-  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
     width <= 0 ||
     height <= 0
   ) {
     return null;
   }
 
+  const safeX = Math.min(1, Math.max(0, x));
+  const safeY = Math.min(1, Math.max(0, y));
+  const safeWidth = Math.min(
+    Math.max(0, 1 - safeX),
+    Math.max(0, width)
+  );
+  const safeHeight = Math.min(
+    Math.max(0, 1 - safeY),
+    Math.max(0, height)
+  );
 
-  const safeX =
-    Math.min(
-      1,
-      Math.max(
-        0,
-        x
-      )
-    );
-
-
-  const safeY =
-    Math.min(
-      1,
-      Math.max(
-        0,
-        y
-      )
-    );
-
-
-  const safeWidth =
-    Math.min(
-      Math.max(
-        0,
-        1 -
-          safeX
-      ),
-      Math.max(
-        0,
-        width
-      )
-    );
-
-
-  const safeHeight =
-    Math.min(
-      Math.max(
-        0,
-        1 -
-          safeY
-      ),
-      Math.max(
-        0,
-        height
-      )
-    );
-
-
-  if (
-    safeWidth <= 0 ||
-    safeHeight <= 0
-  ) {
+  if (safeWidth <= 0 || safeHeight <= 0) {
     return null;
   }
 
-
   return {
-    x:
-      safeX,
-
-    y:
-      safeY,
-
-    width:
-      safeWidth,
-
-    height:
-      safeHeight,
+    x: safeX,
+    y: safeY,
+    width: safeWidth,
+    height: safeHeight,
   };
 };
+
 // =====================================================
-// NORMALIZE AI QUESTION
+// SUBJECT NORMALIZATION
 // =====================================================
 
-const normalizeDetectedQuestion = ({
-  item,
-  fallbackPageNumber,
-  validPageNumbers = [],
-}) => {
-  const questionType =
-    normalizeQuestionType(
-      item?.questionType
-    );
+const normalizeSubject = (value) => {
+  const text =
+    cleanString(value).toLowerCase();
 
+  const map = {
+    physics: "Physics",
+    chemistry: "Chemistry",
+    maths: "Maths",
+    math: "Maths",
+    mathematics: "Maths",
+    biology: "Biology",
+  };
 
-  let correctAnswer =
-    null;
+  return (
+    map[text] ||
+    cleanString(value)
+  );
+};
 
+// =====================================================
+// EXAM NORMALIZATION
+// =====================================================
 
-  if (
-    item?.correctAnswer !==
-      null &&
-    item?.correctAnswer !==
-      undefined &&
-    item?.correctAnswer !==
-      ""
-  ) {
-    const numericAnswer =
-      Number(
-        item.correctAnswer
-      );
+const normalizeExam = (value) => {
+  const text =
+    cleanString(value).toLowerCase();
 
-    if (
-      Number.isInteger(
-        numericAnswer
-      ) &&
-      numericAnswer >= 0 &&
-      numericAnswer <= 3
-    ) {
-      correctAnswer =
-        numericAnswer;
-    }
+  if (text === "neet") {
+    return "NEET";
   }
 
-
-  let maxMarks =
-    null;
-
-
   if (
-    item?.maxMarks !==
-      null &&
-    item?.maxMarks !==
-      undefined &&
-    item?.maxMarks !==
-      ""
+    text === "jee" ||
+    text === "jee main" ||
+    text === "jee mains" ||
+    text === "jee advanced"
   ) {
-    const numericMarks =
-      Number(
-        item.maxMarks
-      );
-
-    if (
-      Number.isFinite(
-        numericMarks
-      ) &&
-      numericMarks > 0
-    ) {
-      maxMarks =
-        numericMarks;
-    }
+    return "JEE";
   }
 
-
-  const visualBoundingBox =
-    normalizeVisualBoundingBox(
-      item?.visualBoundingBox
-    );
-
-
-  const requestedVisual =
-    Boolean(
-      item?.hasVisual
-    );
-
-
-  const hasVisual =
-    requestedVisual &&
-    Boolean(
-      visualBoundingBox
-    );
-
-
-  const drop =
-    Boolean(
-      item?.drop
-    );
-
-
-  let dropReason =
-    cleanString(
-      item?.dropReason
-    );
-
-
   if (
-    requestedVisual &&
-    !visualBoundingBox &&
-    !dropReason
+    text === "boards" ||
+    text === "board" ||
+    text === "cbse"
   ) {
-    dropReason =
-      "A required visual was detected but its bounding box could not be identified.";
+    return "Boards";
   }
 
+  return cleanString(value);
+};
 
-  const requestedSourcePage =
-    Number(
-      item?.sourcePage
-    );
+// =====================================================
+// CLASS NORMALIZATION
+// =====================================================
 
-
-  const safeValidPages =
-    safeArray(
-      validPageNumbers
-    )
-      .map(
-        Number
-      )
-      .filter(
-        (value) =>
-          Number.isInteger(
-            value
-          ) &&
-          value > 0
-      );
-
-
-  let sourcePage =
-    Number(
-      fallbackPageNumber
-    ) ||
-    safeValidPages[0] ||
-    null;
-
+const normalizeClassLevel = (value) => {
+  const text =
+    cleanString(value).toLowerCase();
 
   if (
-    Number.isInteger(
-      requestedSourcePage
-    ) &&
-    safeValidPages.includes(
-      requestedSourcePage
-    )
+    text === "class 11" ||
+    text === "11" ||
+    text === "xi"
   ) {
-    sourcePage =
-      requestedSourcePage;
+    return "Class 11";
   }
 
+  if (
+    text === "class 12" ||
+    text === "12" ||
+    text === "xii"
+  ) {
+    return "Class 12";
+  }
 
-  return {
-    questionNumber:
-      cleanString(
-        item?.questionNumber
-      ),
+  return cleanString(value);
+};
+
+// =====================================================
+// QUESTION VALIDATION
+// =====================================================
+
+const validateDetectedQuestion = (
+  rawQuestion
+) => {
+  const question = {
+    ...rawQuestion,
 
     question:
-      normalizeAcademicContent(
-        item?.question
+      cleanString(
+        rawQuestion.question
+      ),
+
+    questionBoundingBox:
+      normalizeBoundingBox(
+        rawQuestion.questionBoundingBox
       ),
 
     subject:
-      cleanString(
-        item?.subject
+      normalizeSubject(
+        rawQuestion.subject
       ),
 
     exam:
-      cleanString(
-        item?.exam
+      normalizeExam(
+        rawQuestion.exam
       ),
 
     classLevel:
-      cleanString(
-        item?.classLevel
+      normalizeClassLevel(
+        rawQuestion.classLevel
       ),
 
     chapter:
       cleanString(
-        item?.chapter
+        rawQuestion.chapter
       ),
 
     difficulty:
-      normalizeDifficulty(
-        item?.difficulty
+      cleanString(
+        rawQuestion.difficulty
       ),
 
-    questionType,
+    questionType:
+      cleanString(
+        rawQuestion.questionType
+      ).toLowerCase(),
 
     options:
       safeArray(
-        item?.options
+        rawQuestion.options
       )
-        .map(
-          normalizeAcademicContent
-        )
-        .filter(
-          Boolean
-        ),
+        .map(cleanString)
+        .filter(Boolean),
 
-    correctAnswer,
+    explanation:
+      cleanString(
+        rawQuestion.explanation
+      ),
 
     modelAnswer:
-      normalizeAcademicContent(
-        item?.modelAnswer
+      cleanString(
+        rawQuestion.modelAnswer
       ),
 
     keyPoints:
       safeArray(
-        item?.keyPoints
+        rawQuestion.keyPoints
       )
-        .map(
-          normalizeAcademicContent
-        )
-        .filter(
-          Boolean
-        ),
-
-    maxMarks,
-
-    explanation:
-      normalizeAcademicContent(
-        item?.explanation
-      ),
-
-    hasVisual,
-
-    visualDescription:
-      cleanString(
-        item?.visualDescription
-      ),
-
-    visualBoundingBox,
-
-    drop:
-      drop ||
-      (
-        requestedVisual &&
-        !visualBoundingBox
-      ),
-
-    dropReason,
-
-    sourcePage,
-  };
-};
-
-
-// =====================================================
-// GEMINI CONFIG CHECK
-// =====================================================
-
-const checkGeminiConnection =
-  async () => {
-    if (
-      !GEMINI_API_KEY
-    ) {
-      throw new Error(
-        "GEMINI_API_KEY is not configured."
-      );
-    }
-
-    if (
-      !GEMINI_MODEL
-    ) {
-      throw new Error(
-        "GEMINI_MODEL is not configured."
-      );
-    }
-
-    return true;
+        .map(cleanString)
+        .filter(Boolean),
   };
 
+  const reasons = [];
 
-// =====================================================
-// EXTRACT GEMINI ERROR
-// =====================================================
+  // =========================================
+  // AI DROP CHECK
+  // =========================================
 
-const extractGeminiError = (
-  data,
-  fallbackMessage
-) => {
-  const message =
-    cleanString(
-      data?.error?.message
+  if (question.drop) {
+    reasons.push(
+      question.dropReason ||
+        "NAVTA AI marked this question as uncertain."
     );
+  }
+
+  // =========================================
+  // QUESTION TEXT
+  // =========================================
+
+  if (!question.question) {
+    reasons.push(
+      "Question text is missing."
+    );
+  }
+
+  // =========================================
+  // QUESTION SCREENSHOT BOUNDING BOX
+  // =========================================
+
+  if (!question.questionBoundingBox) {
+    reasons.push(
+      "Complete one-question screenshot boundary could not be identified."
+    );
+  }
+
+  // =========================================
+  // SUBJECT
+  // =========================================
 
   if (
-    message
+    !VALID_SUBJECTS.has(
+      question.subject
+    )
   ) {
-    return message;
-  }
-
-  return fallbackMessage;
-};
-
-
-// =====================================================
-// EXTRACT GEMINI RESPONSE TEXT
-// =====================================================
-
-const extractGeminiText = (
-  data
-) => {
-  const candidates =
-    safeArray(
-      data?.candidates
+    reasons.push(
+      "Invalid or uncertain subject."
     );
+  }
 
-  for (
-    const candidate of
-    candidates
+  // =========================================
+  // EXAM
+  // =========================================
+
+  if (
+    !VALID_EXAMS.has(
+      question.exam
+    )
   ) {
-    const parts =
-      safeArray(
-        candidate?.content?.parts
-      );
+    reasons.push(
+      "Invalid or uncertain exam."
+    );
+  }
 
-    const text =
-      parts
-        .map(
-          (part) =>
-            typeof part?.text ===
-              "string"
-              ? part.text
-              : ""
-        )
-        .filter(
-          Boolean
-        )
-        .join(
-          "\n"
-        )
-        .trim();
+  // =========================================
+  // CLASS
+  // =========================================
+
+  if (
+    !VALID_CLASSES.has(
+      question.classLevel
+    )
+  ) {
+    reasons.push(
+      "Invalid or uncertain class level."
+    );
+  }
+
+  // =========================================
+  // CHAPTER
+  // =========================================
+
+  if (!question.chapter) {
+    reasons.push(
+      "Chapter could not be identified."
+    );
+  }
+
+  // =========================================
+  // DIFFICULTY
+  // =========================================
+
+  if (
+    !VALID_DIFFICULTIES.has(
+      question.difficulty
+    )
+  ) {
+    reasons.push(
+      "Difficulty could not be identified."
+    );
+  }
+
+  // =========================================
+  // QUESTION TYPE
+  // =========================================
+
+  if (
+    !VALID_QUESTION_TYPES.has(
+      question.questionType
+    )
+  ) {
+    reasons.push(
+      "Invalid question type."
+    );
+  }
+
+  // =========================================
+  // JEE / NEET TYPE RULE
+  // =========================================
+
+  if (
+    ["JEE", "NEET"].includes(
+      question.exam
+    ) &&
+    question.questionType !== "mcq"
+  ) {
+    reasons.push(
+      `${question.exam} questions must be MCQ.`
+    );
+  }
+
+  // =========================================
+  // MCQ VALIDATION
+  // =========================================
+
+  if (
+    question.questionType === "mcq"
+  ) {
+    if (
+      question.options.length !== 4
+    ) {
+      reasons.push(
+        "MCQ must contain exactly 4 options."
+      );
+    }
 
     if (
-      text
+      !Number.isInteger(
+        rawQuestion.correctAnswer
+      ) ||
+      rawQuestion.correctAnswer < 0 ||
+      rawQuestion.correctAnswer > 3
     ) {
-      return text;
+      reasons.push(
+        "MCQ correct answer could not be determined."
+      );
     }
   }
 
-  return "";
+  return {
+    valid:
+      reasons.length === 0,
+
+    reasons,
+
+    question,
+  };
 };
 
-
 // =====================================================
-// GEMINI REQUEST
+// PROCESS COMPLETE QUESTION SCREENSHOT
 // =====================================================
 
-const requestGeminiAnalysis =
+const processQuestionScreenshot =
   async ({
-    pages = [],
-    text = "",
-    hints = {},
+    question,
+    renderedPage,
+    sourceFileName,
   }) => {
-    await checkGeminiConnection();
-
-
-    if (
-      !Array.isArray(
-        pages
-      ) ||
-      pages.length ===
-        0
-    ) {
-      return [];
+    if (!question.questionBoundingBox) {
+      return {
+        questionImage: null,
+        screenshotWarning:
+          "NAVTA AI did not return a complete question screenshot boundary.",
+      };
     }
 
-
-    const validPages =
-      pages.filter(
-        (page) =>
-          Number(
-            page?.pageNumber
-          ) > 0 &&
-          Buffer.isBuffer(
-            page?.buffer
-          ) &&
-          page.buffer.length >
-            0
-      );
-
-
-    if (
-      validPages.length ===
-        0
-    ) {
-      return [];
+    if (!renderedPage) {
+      return {
+        questionImage: null,
+        screenshotWarning:
+          "NAVTA could not locate the rendered PDF page for this question.",
+      };
     }
 
+    try {
+      // Reuse NAVTA's existing crop service by presenting the
+      // complete question box as the crop box.
+      const cropQuestion = {
+        ...question,
+        visualBoundingBox:
+          question.questionBoundingBox,
+      };
 
-    const validPageNumbers =
-      validPages.map(
-        (page) =>
-          Number(
-            page.pageNumber
+      const cropped =
+        await createQuestionDiagram({
+          question:
+            cropQuestion,
+
+          pageBuffer:
+            renderedPage.buffer,
+        });
+
+      if (
+        !cropped ||
+        !Buffer.isBuffer(
+          cropped.buffer
+        ) ||
+        cropped.buffer.length === 0
+      ) {
+        return {
+          questionImage: null,
+
+          screenshotWarning:
+            "NAVTA detected the question but could not create its screenshot.",
+        };
+      }
+
+      const safeFileName =
+        cleanString(
+          sourceFileName
+        )
+          .replace(
+            /[^a-zA-Z0-9._-]/g,
+            "-"
           )
+          .slice(0, 80) ||
+        "navta-question";
+
+      const questionNumber =
+        cleanString(
+          question.questionNumber
+        )
+          .replace(
+            /[^a-zA-Z0-9_-]/g,
+            "-"
+          )
+          .slice(0, 30) ||
+        "question";
+
+      const upload =
+        await uploadQuestionImage({
+          buffer:
+            cropped.buffer,
+
+          fileName:
+            `${safeFileName}-page-${question.sourcePage}-${questionNumber}`,
+
+          folder:
+            "navta/ai-imports/questions",
+        });
+
+      if (!upload?.url) {
+        return {
+          questionImage: null,
+
+          screenshotWarning:
+            "The complete question screenshot could not be uploaded.",
+        };
+      }
+
+      return {
+        questionImage: {
+          url:
+            upload.url,
+
+          publicId:
+            upload.publicId || "",
+
+          altText:
+            `Question ${cleanString(
+              question.questionNumber
+            ) || ""}`.trim() ||
+            "NAVTA question",
+
+          sourcePage:
+            question.sourcePage,
+
+          width:
+            upload.width ||
+            cropped.width,
+
+          height:
+            upload.height ||
+            cropped.height,
+        },
+      };
+    } catch (error) {
+      console.error(
+        "NAVTA QUESTION SCREENSHOT PROCESSING ERROR:",
+        error
       );
 
+      return {
+        questionImage: null,
 
-    const prompt =
-      `${SYSTEM_PROMPT}\n\n${buildBatchPrompt({
+        screenshotWarning:
+          "NAVTA could not process the complete question screenshot.",
+      };
+    }
+  };
+
+
+// =====================================================
+// PROCESS OPTIONAL QUESTION VISUAL
+// =====================================================
+//
+// This keeps the old visual-crop capability for admin
+// metadata, but the STUDENT-FACING image is now always
+// the complete question screenshot above.
+// =====================================================
+
+const processQuestionVisual =
+  async ({
+    question,
+    renderedPage,
+    sourceFileName,
+  }) => {
+    if (
+      !question.hasVisual ||
+      !question.visualBoundingBox
+    ) {
+      return {
+        visualImage: null,
+      };
+    }
+
+    if (!renderedPage) {
+      return {
+        visualImage: null,
+
+        visualWarning:
+          "NAVTA AI detected a visual, but its PDF page could not be located.",
+      };
+    }
+
+    try {
+      const cropped =
+        await createQuestionDiagram({
+          question,
+
+          pageBuffer:
+            renderedPage.buffer,
+        });
+
+      if (
+        !cropped ||
+        !Buffer.isBuffer(
+          cropped.buffer
+        ) ||
+        cropped.buffer.length === 0
+      ) {
+        return {
+          visualImage: null,
+
+          visualWarning:
+            "NAVTA detected the visual but could not create its image.",
+        };
+      }
+
+      const safeFileName =
+        cleanString(
+          sourceFileName
+        )
+          .replace(
+            /[^a-zA-Z0-9._-]/g,
+            "-"
+          )
+          .slice(0, 80) ||
+        "navta-question";
+
+      const upload =
+        await uploadQuestionImage({
+          buffer:
+            cropped.buffer,
+
+          fileName:
+            `${safeFileName}-page-${question.sourcePage}-visual`,
+
+          folder:
+            "navta/ai-imports/visuals",
+        });
+
+      if (!upload?.url) {
+        return {
+          visualImage: null,
+
+          visualWarning:
+            "The question visual could not be uploaded.",
+        };
+      }
+
+      return {
+        visualImage: {
+          url:
+            upload.url,
+
+          publicId:
+            upload.publicId || "",
+
+          altText:
+            question.visualDescription ||
+            "Question visual",
+
+          sourcePage:
+            question.sourcePage,
+
+          width:
+            upload.width ||
+            cropped.width,
+
+          height:
+            upload.height ||
+            cropped.height,
+        },
+      };
+    } catch (error) {
+      console.error(
+        "NAVTA VISUAL PROCESSING ERROR:",
+        error
+      );
+
+      return {
+        visualImage: null,
+
+        visualWarning:
+          "Visual was detected, but NAVTA could not process it.",
+      };
+    }
+  };
+
+
+// =====================================================
+// BUILD QUESTION FOR ADMIN REVIEW
+// =====================================================
+
+const buildImportQuestion = ({
+  question,
+  questionImage = null,
+  visualImage = null,
+  sourceFileName,
+  fileType,
+}) => {
+  const result = {
+    question:
+      question.question,
+
+    questionNumber:
+      question.questionNumber || "",
+
+    questionBoundingBox:
+      question.questionBoundingBox || null,
+
+    studentQuestionFormat:
+      questionImage?.url
+        ? "image"
+        : "text",
+
+    subject:
+      question.subject,
+
+    exam:
+      question.exam,
+
+    classLevel:
+      question.classLevel,
+
+    chapter:
+      question.chapter,
+
+    difficulty:
+      question.difficulty,
+
+    questionType:
+      question.questionType,
+
+    explanation:
+      question.explanation || "",
+
+    sourceDocument: {
+      fileName:
+        sourceFileName,
+
+      fileType,
+
+      pageNumber:
+        question.sourcePage,
+
+      importedByAI:
+        true,
+    },
+  };
+
+  // =========================================
+  // MCQ DATA
+  // =========================================
+
+  if (
+    question.questionType === "mcq"
+  ) {
+    result.options =
+      question.options;
+
+    result.correctAnswer =
+      question.correctAnswer;
+  }
+
+  // =========================================
+  // WRITTEN QUESTION DATA
+  // =========================================
+
+  if (
+    ["short", "long"].includes(
+      question.questionType
+    )
+  ) {
+    result.modelAnswer =
+      question.modelAnswer || "";
+
+    result.keyPoints =
+      question.keyPoints || [];
+
+    if (
+      question.maxMarks !== null &&
+      question.maxMarks !== undefined &&
+      Number.isFinite(
+        Number(
+          question.maxMarks
+        )
+      )
+    ) {
+      result.maxMarks =
+        Number(
+          question.maxMarks
+        );
+    }
+  }
+
+  // =========================================
+  // QUESTION IMAGE
+  // =========================================
+
+  if (questionImage?.url) {
+    result.questionImage =
+      questionImage;
+
+    result.questionImages = [
+      questionImage,
+    ];
+  } else {
+    result.questionImage =
+      null;
+
+    result.questionImages = [];
+  }
+
+  // Keep a separately-cropped required visual only as
+  // optional metadata. NAVTA TEST should use questionImage.
+  if (visualImage?.url) {
+    result.questionVisual =
+      visualImage;
+  }
+
+  return result;
+};
+
+// =====================================================
+// PROCESS PDF IMPORT
+// =====================================================
+
+const processPdfImport =
+  async ({
+    file,
+    documentResult,
+    hints,
+  }) => {
+    // =========================================
+    // RENDER PDF PAGES
+    // =========================================
+
+    const rendered =
+      await renderPdfPages({
+        buffer:
+          file.buffer,
+
+        scale:
+          1.8,
+
+        maxPages:
+          MAX_PDF_PAGES_PER_IMPORT,
+      });
+
+    if (
+      !rendered ||
+      !Array.isArray(
+        rendered.pages
+      ) ||
+      rendered.pages.length === 0
+    ) {
+      throw new Error(
+        "NAVTA could not render any pages from this PDF."
+      );
+    }
+
+    // =========================================
+    // NAVTA AI GATEWAY ANALYSIS
+    // =========================================
+
+    const detectedQuestions =
+      await analyseRenderedPages({
         pages:
-          validPages,
+          rendered.pages,
 
-        text,
+        text:
+          documentResult.text ||
+          "",
 
         hints,
-      })}`;
+      });
 
+    // =========================================
+    // CREATE PAGE LOOKUP
+    // =========================================
 
-    const parts = [
-      {
-        text:
-          prompt,
-      },
-    ];
-
-
-    // =================================================
-    // ADD EACH PAGE IMAGE
-    // =================================================
+    const pageMap =
+      new Map();
 
     for (
       const page of
-      validPages
+      rendered.pages
     ) {
-      const pageNumber =
+      pageMap.set(
         Number(
           page.pageNumber
-        );
-
-      const mimeType =
-        cleanString(
-          page?.mimeType
-        ) ||
-        "image/png";
-
-
-      parts.push({
-        text:
-          `The next image is PDF PAGE ${pageNumber}. Analyse this entire page from top to bottom.`,
-      });
-
-
-      parts.push({
-        inline_data: {
-          mime_type:
-            mimeType,
-
-          data:
-            imageBufferToBase64(
-              page.buffer
-            ),
-        },
-      });
-    }
-
-
-    const controller =
-      new AbortController();
-
-
-    const timeout =
-      setTimeout(
-        () => {
-          controller.abort();
-        },
-        NAVTA_AI_TIMEOUT_MS
-      );
-
-
-    let response;
-
-
-    try {
-      const endpoint =
-        `${GEMINI_API_BASE}/models/${encodeURIComponent(
-          GEMINI_MODEL
-        )}:generateContent?key=${encodeURIComponent(
-          GEMINI_API_KEY
-        )}`;
-
-
-      console.log(
-        `NAVTA Gemini request: analysing PDF pages ${validPageNumbers.join(
-          ", "
-        )} using ${GEMINI_MODEL}.`
-      );
-
-
-      response =
-        await fetch(
-          endpoint,
-          {
-            method:
-              "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json",
-
-              Accept:
-                "application/json",
-            },
-
-            signal:
-              controller.signal,
-
-            body:
-              JSON.stringify({
-                contents: [
-                  {
-                    role:
-                      "user",
-
-                    parts,
-                  },
-                ],
-
-                generationConfig: {
-                  temperature:
-                    0.1,
-
-                  responseMimeType:
-                    "application/json",
-                },
-              }),
-          }
-        );
-    } catch (error) {
-      if (
-        error?.name ===
-          "AbortError"
-      ) {
-        throw new Error(
-          `Gemini timed out while analysing PDF pages ${validPageNumbers.join(
-            ", "
-          )}.`
-        );
-      }
-
-
-      throw new Error(
-        `NAVTA could not connect to Gemini. ${error.message}`
-      );
-    } finally {
-      clearTimeout(
-        timeout
+        ),
+        page
       );
     }
 
-
-    const responseText =
-      await response.text();
-
-
-    let data = {};
-
-
-    try {
-      data =
-        responseText
-          ? JSON.parse(
-              responseText
-            )
-          : {};
-    } catch (error) {
-      console.error(
-        "NAVTA GEMINI RAW RESPONSE:",
-        responseText
-      );
-
-      throw new Error(
-        `Gemini returned an invalid API response while analysing pages ${validPageNumbers.join(
-          ", "
-        )}.`
-      );
-    }
-
-
-    if (
-      !response.ok
-    ) {
-      const apiMessage =
-        extractGeminiError(
-          data,
-          `Gemini request failed with status ${response.status}.`
-        );
-
-
-      console.error(
-        "NAVTA GEMINI API ERROR:",
-        apiMessage
-      );
-
-
-      throw new Error(
-        apiMessage
-      );
-    }
-
-
-    const outputText =
-      extractGeminiText(
-        data
-      );
-
-
-    if (
-      !outputText
-    ) {
-      const finishReason =
-        cleanString(
-          data?.candidates?.[0]
-            ?.finishReason
-        );
-
-
-      const blockReason =
-        cleanString(
-          data?.promptFeedback
-            ?.blockReason
-        );
-
-
-      if (
-        blockReason
-      ) {
-        throw new Error(
-          `Gemini blocked the PDF analysis request: ${blockReason}.`
-        );
-      }
-
-
-      if (
-        finishReason
-      ) {
-        throw new Error(
-          `Gemini returned no question data. Finish reason: ${finishReason}.`
-        );
-      }
-
-
-      throw new Error(
-        `Gemini returned no question data for pages ${validPageNumbers.join(
-          ", "
-        )}.`
-      );
-    }
-
-
-    const cleanedOutput =
-      cleanJsonResponse(
-        outputText
-      );
-
-
-    let parsed;
-
-
-    try {
-      parsed =
-        JSON.parse(
-          cleanedOutput
-        );
-    } catch (error) {
-      console.error(
-        "NAVTA GEMINI JSON PARSE ERROR:",
-        cleanedOutput
-      );
-
-
-      throw new Error(
-        `NAVTA could not understand the Gemini JSON response for pages ${validPageNumbers.join(
-          ", "
-        )}.`
-      );
-    }
-
-
-    const questions =
-      safeArray(
-        parsed?.questions
-      );
-
-
-    const fallbackPageNumber =
-      validPageNumbers[0];
-
-
-    const normalized =
-      questions.map(
-        (item) =>
-          normalizeDetectedQuestion({
-            item,
-
-            fallbackPageNumber,
-
-            validPageNumbers,
-          })
-      );
-
-
-    console.log(
-      `NAVTA Gemini pages ${validPageNumbers.join(
-        ", "
-      )}: detected ${normalized.length} question(s).`
-    );
-
-
-    return normalized;
-  };
-
-
-// =====================================================
-// ANALYSE ONE RENDERED PAGE
-// =====================================================
-
-const analyseNavtaPage =
-  async ({
-    pageNumber,
-    imageBuffer,
-    mimeType =
-      "image/png",
-    text = "",
-    hints = {},
-  }) => {
-    if (
-      !Buffer.isBuffer(
-        imageBuffer
-      ) ||
-      imageBuffer.length ===
-        0
-    ) {
-      throw new Error(
-        `Rendered image for page ${pageNumber} is missing.`
-      );
-    }
-
-
-    console.log(
-      `NAVTA AI analysing PDF page ${pageNumber} with Gemini ${GEMINI_MODEL}...`
-    );
-
-
-    return requestGeminiAnalysis({
-      pages: [
-        {
-          pageNumber:
-            Number(
-              pageNumber
-            ),
-
-          buffer:
-            imageBuffer,
-
-          mimeType,
-
-          text,
-        },
-      ],
-
-      text,
-
-      hints,
-    });
-  };
-
-
-// =====================================================
-// SPLIT PAGES INTO EXACT 5-PAGE BATCHES
-// =====================================================
-
-const createPageBatches = (
-  pages = []
-) => {
-  const batches =
-    [];
-
-
-  for (
-    let index = 0;
-    index < pages.length;
-    index +=
-      NAVTA_AI_BATCH_SIZE
-  ) {
-    batches.push(
-      pages.slice(
-        index,
-        index +
-          NAVTA_AI_BATCH_SIZE
-      )
-    );
-  }
-
-
-  return batches;
-};
-
-
-// =====================================================
-// ANALYSE MULTIPLE RENDERED PAGES
-// =====================================================
-
-const analyseRenderedPages =
-  async ({
-    pages = [],
-    text = "",
-    hints = {},
-  }) => {
-    if (
-      !Array.isArray(
-        pages
-      ) ||
-      pages.length ===
-        0
-    ) {
-      return [];
-    }
-
-
-    await checkGeminiConnection();
-
-
-    // =================================================
-    // VALID PAGES
-    // =================================================
-
-    const validPages =
-      pages.filter(
-        (page) => {
-          const pageNumber =
-            Number(
-              page?.pageNumber
-            );
-
-
-          return (
-            pageNumber >
-              0 &&
-            Buffer.isBuffer(
-              page?.buffer
-            ) &&
-            page.buffer.length >
-              0
-          );
-        }
-      );
-
-
-    if (
-      validPages.length ===
-        0
-    ) {
-      return [];
-    }
-
-
-    // =================================================
-    // SORT PAGES
-    // =================================================
-    //
-    // Guarantees:
-    //
-    // 1,2,3,4,5
-    // then
-    // 6,7,8,9,10
-    // etc.
-    //
-    // =================================================
-
-    validPages.sort(
-      (
-        first,
-        second
-      ) =>
-        Number(
-          first.pageNumber
-        ) -
-        Number(
-          second.pageNumber
-        )
-    );
-
-
-    // =================================================
-    // CREATE 5-PAGE BATCHES
-    // =================================================
-
-    const batches =
-      createPageBatches(
-        validPages
-      );
-
-
-    const questions =
+    const acceptedQuestions =
       [];
 
+    const droppedQuestions =
+      [];
 
-    console.log(
-      "====================================================="
-    );
-
-    console.log(
-      "NAVTA GEMINI PDF ANALYSIS STARTING"
-    );
-
-    console.log(
-      `Total rendered pages: ${validPages.length}`
-    );
-
-    console.log(
-      `Batch size: ${NAVTA_AI_BATCH_SIZE} pages`
-    );
-
-    console.log(
-      `Total Gemini requests: ${batches.length}`
-    );
-
-    console.log(
-      "====================================================="
-    );
-
-
-    // =================================================
-    // PROCESS EACH BATCH SEQUENTIALLY
-    // =================================================
-    //
-    // IMPORTANT:
-    //
-    // We intentionally use await inside this loop.
-    //
-    // This means:
-    //
-    // FIRST:
-    // pages 1-5 finish
-    //
-    // THEN:
-    // pages 6-10 begin
-    //
-    // THEN:
-    // pages 11-15
-    //
-    // etc.
-    //
-    // =================================================
+    // =========================================
+    // VALIDATE EACH DETECTED QUESTION
+    // =========================================
 
     for (
-      let batchIndex = 0;
-      batchIndex <
-        batches.length;
-      batchIndex += 1
+      const rawQuestion of
+      detectedQuestions
     ) {
-      const batch =
-        batches[
-          batchIndex
-        ];
-
-
-      const pageNumbers =
-        batch.map(
-          (page) =>
-            Number(
-              page.pageNumber
-            )
+      const validation =
+        validateDetectedQuestion(
+          rawQuestion
         );
 
+      // =====================================
+      // DROP INVALID QUESTION
+      // =====================================
 
-      console.log(
-        "-----------------------------------------------------"
+      if (
+        !validation.valid
+      ) {
+        const reason =
+          validation.reasons.join(
+            " "
+          );
+
+        droppedQuestions.push({
+          ...validation.question,
+
+          reason,
+
+          dropReason:
+            reason,
+        });
+
+        continue;
+      }
+
+      const question =
+        validation.question;
+
+      // =====================================
+      // FIND SOURCE PDF PAGE
+      // =====================================
+
+      const renderedPage =
+        pageMap.get(
+          Number(
+            question.sourcePage
+          )
+        );
+
+      // =====================================
+      // CREATE COMPLETE QUESTION SCREENSHOT
+      // =====================================
+
+      const screenshot =
+        await processQuestionScreenshot({
+          question,
+
+          renderedPage,
+
+          sourceFileName:
+            file.originalname,
+        });
+
+      // The screenshot is now mandatory because NAVTA TEST
+      // will show the original question image, not reconstructed
+      // question text.
+      if (!screenshot.questionImage?.url) {
+        const reason =
+          screenshot.screenshotWarning ||
+          "The complete question screenshot could not be preserved.";
+
+        droppedQuestions.push({
+          ...question,
+
+          reason,
+
+          dropReason:
+            reason,
+        });
+
+        continue;
+      }
+
+      // =====================================
+      // OPTIONAL SEPARATE DIAGRAM / VISUAL
+      // =====================================
+
+      const visual =
+        await processQuestionVisual({
+          question,
+
+          renderedPage,
+
+          sourceFileName:
+            file.originalname,
+        });
+
+      // =====================================
+      // BUILD ADMIN REVIEW QUESTION
+      // =====================================
+
+      const importQuestion =
+        buildImportQuestion({
+          question,
+
+          questionImage:
+            screenshot.questionImage,
+
+          visualImage:
+            visual.visualImage,
+
+          sourceFileName:
+            file.originalname,
+
+          fileType:
+            "pdf",
+        });
+
+      // Since the complete screenshot already contains any
+      // printed diagram or visual, a separate visual crop failing
+      // must NOT drop an otherwise valid question.
+      if (
+        question.hasVisual &&
+        visual.visualWarning
+      ) {
+        importQuestion.visualWarning =
+          visual.visualWarning;
+      }
+
+      // =====================================
+      // ACCEPT QUESTION
+      // =====================================
+
+      acceptedQuestions.push(
+        importQuestion
+      );
+    }
+
+    // =========================================
+    // RETURN PDF RESULT
+    // =========================================
+
+    return {
+      acceptedQuestions,
+
+      droppedQuestions,
+
+      documentInfo: {
+        fileType:
+          "pdf",
+
+        fileName:
+          file.originalname,
+
+        totalPages:
+          rendered.totalPages,
+
+        renderedPages:
+          rendered.renderedPages,
+
+        truncated:
+          Boolean(
+            rendered.truncated
+          ),
+      },
+    };
+  };
+
+// =====================================================
+// MAIN NAVTA AI IMPORT SERVICE
+// =====================================================
+
+const analyseNavtaImport =
+  async ({
+    file,
+    subject,
+    exam,
+    classLevel,
+  }) => {
+    // =========================================
+    // FILE CHECK
+    // =========================================
+
+    if (!file) {
+      throw new Error(
+        "Please upload a PDF, DOCX or TXT file."
+      );
+    }
+
+    // =========================================
+    // FILE TYPE
+    // =========================================
+
+    const fileType =
+      getFileType(
+        file.originalname
       );
 
-      console.log(
-        `NAVTA Gemini batch ${batchIndex + 1}/${batches.length}`
+    if (
+      ![
+        "pdf",
+        "docx",
+        "txt",
+      ].includes(
+        fileType
+      )
+    ) {
+      throw new Error(
+        "Unsupported file type. Please upload a PDF, DOCX or TXT file."
+      );
+    }
+
+    // =========================================
+    // PROCESS ORIGINAL DOCUMENT
+    // =========================================
+
+    const documentResult =
+      await processNavtaDocument(
+        file
       );
 
-      console.log(
-        `Processing PDF pages: ${pageNumbers.join(
-          ", "
-        )}`
-      );
+    // =========================================
+    // NORMALIZE ADMIN HINTS
+    // =========================================
 
-      console.log(
-        "-----------------------------------------------------"
-      );
+    const hints = {
+      subject:
+        normalizeSubject(
+          subject
+        ),
 
+      exam:
+        normalizeExam(
+          exam
+        ),
 
-      const detected =
-        await requestGeminiAnalysis({
-          pages:
-            batch,
+      classLevel:
+        normalizeClassLevel(
+          classLevel
+        ),
+    };
 
-          text,
+    // =========================================
+    // PDF IMPORT
+    // =========================================
+
+    if (
+      fileType === "pdf"
+    ) {
+      const result =
+        await processPdfImport({
+          file,
+
+          documentResult,
 
           hints,
         });
 
+      const acceptedCount =
+        result
+          .acceptedQuestions
+          .length;
 
-      questions.push(
-        ...detected
-      );
+      const droppedCount =
+        result
+          .droppedQuestions
+          .length;
 
+      return {
+        ...result,
 
-      console.log(
-        `Batch ${batchIndex + 1} completed.`
-      );
+        summary: {
+          detected:
+            acceptedCount +
+            droppedCount,
 
-      console.log(
-        `Questions found in this batch: ${detected.length}`
-      );
+          accepted:
+            acceptedCount,
 
-      console.log(
-        `Total questions detected so far: ${questions.length}`
+          dropped:
+            droppedCount,
+        },
+      };
+    }
+
+    // =========================================
+    // DOCX
+    // =========================================
+    //
+    // DOCX text/image extraction exists in the
+    // document service, but question-to-image
+    // association is not enabled yet.
+    //
+    // We intentionally stop here instead of
+    // importing diagrams incorrectly.
+    // =========================================
+
+    if (
+      fileType === "docx"
+    ) {
+      throw new Error(
+        "Screenshot-first NAVTA AI currently requires PDF. Please upload a PDF so NAVTA can crop one original question image per question."
       );
     }
 
+    // =========================================
+    // TXT
+    // =========================================
+    //
+    // TXT has no embedded visual information.
+    // A dedicated text-only AI parser will be
+    // connected separately.
+    // =========================================
 
-    console.log(
-      "====================================================="
+    if (
+      fileType === "txt"
+    ) {
+      throw new Error(
+        "Screenshot-first NAVTA AI currently requires PDF. TXT files cannot provide original question screenshots."
+      );
+    }
+
+    throw new Error(
+      "Unsupported file type."
     );
-
-    console.log(
-      "NAVTA GEMINI PDF ANALYSIS COMPLETED"
-    );
-
-    console.log(
-      `Pages analysed: ${validPages.length}`
-    );
-
-    console.log(
-      `Total detected questions: ${questions.length}`
-    );
-
-    console.log(
-      "====================================================="
-    );
-
-
-    return questions;
   };
-
 
 // =====================================================
 // EXPORT
 // =====================================================
 
 module.exports = {
-  analyseNavtaPage,
-
-  analyseRenderedPages,
-
-  checkGeminiConnection,
-
-
-  // ===================================================
-  // BACKWARD COMPATIBILITY
-  // ===================================================
-  //
-  // These aliases prevent older NAVTA code from
-  // crashing if it still imports the old connection
-  // check function names.
-  //
-  // ===================================================
-
-  checkNavtaAIGatewayConnection:
-    checkGeminiConnection,
-
-  checkOllamaConnection:
-    checkGeminiConnection,
+  analyseNavtaImport,
+  validateDetectedQuestion,
 };
