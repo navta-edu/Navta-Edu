@@ -10,6 +10,7 @@ const {
 
 const {
   analyseRenderedPages,
+  solveQuestionFromImage,
 } = require("./navtaAIQuestionService");
 
 const {
@@ -67,13 +68,8 @@ const VALID_QUESTION_TYPES = new Set([
 // Render the complete PDF.
 //
 // navtaAIQuestionService.js processes the resulting
-// pages sequentially:
-//
-// 1-5
-// 6-10
-// 11-15
-// ...
-// until the last page.
+// pages sequentially, one rendered page at a time,
+// until the final page.
 //
 // =====================================================
 
@@ -188,7 +184,10 @@ const normalizeClassLevel = (value) => {
 // =====================================================
 
 const validateDetectedQuestion = (
-  rawQuestion
+  rawQuestion,
+  {
+    requireCorrectAnswer = true,
+  } = {}
 ) => {
   const question = {
     ...rawQuestion,
@@ -387,11 +386,14 @@ const validateDetectedQuestion = (
     }
 
     if (
-      !Number.isInteger(
-        rawQuestion.correctAnswer
-      ) ||
-      rawQuestion.correctAnswer < 0 ||
-      rawQuestion.correctAnswer > 3
+      requireCorrectAnswer &&
+      (
+        !Number.isInteger(
+          rawQuestion.correctAnswer
+        ) ||
+        rawQuestion.correctAnswer < 0 ||
+        rawQuestion.correctAnswer > 3
+      )
     ) {
       reasons.push(
         "MCQ correct answer could not be determined."
@@ -408,6 +410,276 @@ const validateDetectedQuestion = (
     question,
   };
 };
+
+// =====================================================
+// PROCESS COMPLETE QUESTION SCREENSHOT
+// =====================================================
+//
+// The complete original printed question screenshot is
+// now the primary student-facing question image.
+//
+// We reuse the existing crop service by temporarily
+// mapping questionBoundingBox -> visualBoundingBox.
+// This keeps all crop math in one tested service.
+//
+// The returned crop buffer is also sent directly to the
+// dedicated Gemini answer solver BEFORE final validation.
+//
+// =====================================================
+
+const processCompleteQuestionScreenshot =
+  async ({
+    question,
+    renderedPage,
+    sourceFileName,
+  }) => {
+    if (
+      !question?.questionBoundingBox
+    ) {
+      return {
+        questionImage: null,
+        cropBuffer: null,
+        screenshotWarning:
+          "The complete question screenshot boundary is missing.",
+      };
+    }
+
+    if (!renderedPage) {
+      return {
+        questionImage: null,
+        cropBuffer: null,
+        screenshotWarning:
+          "The source PDF page for this question could not be located.",
+      };
+    }
+
+    try {
+      const cropQuestion = {
+        ...question,
+
+        hasVisual:
+          true,
+
+        visualBoundingBox:
+          question.questionBoundingBox,
+
+        visualDescription:
+          question.question ||
+          `Question ${question.questionNumber || ""}`.trim(),
+      };
+
+      const cropped =
+        await createQuestionDiagram({
+          question:
+            cropQuestion,
+
+          pageBuffer:
+            renderedPage.buffer,
+        });
+
+      if (
+        !cropped ||
+        !Buffer.isBuffer(
+          cropped.buffer
+        ) ||
+        cropped.buffer.length === 0
+      ) {
+        return {
+          questionImage: null,
+          cropBuffer: null,
+          screenshotWarning:
+            "NAVTA detected the question boundary but could not create the complete question screenshot.",
+        };
+      }
+
+      const safeFileName =
+        cleanString(
+          sourceFileName
+        )
+          .replace(
+            /[^a-zA-Z0-9._-]/g,
+            "-"
+          )
+          .slice(0, 80) ||
+        "navta-question";
+
+      const questionNumber =
+        cleanString(
+          question.questionNumber
+        )
+          .replace(
+            /[^a-zA-Z0-9_-]/g,
+            "-"
+          )
+          .slice(0, 30) ||
+        "question";
+
+      const upload =
+        await uploadQuestionImage({
+          buffer:
+            cropped.buffer,
+
+          fileName:
+            `${safeFileName}-page-${question.sourcePage}-${questionNumber}-full-question`,
+
+          folder:
+            "navta/ai-imports/pending",
+        });
+
+      if (!upload?.url) {
+        return {
+          questionImage: null,
+          cropBuffer:
+            cropped.buffer,
+          screenshotWarning:
+            "NAVTA created the complete question screenshot but could not upload it.",
+        };
+      }
+
+      return {
+        cropBuffer:
+          cropped.buffer,
+
+        questionImage: {
+          url:
+            upload.url,
+
+          publicId:
+            upload.publicId || "",
+
+          altText:
+            question.question ||
+            `Question ${question.questionNumber || ""}`.trim() ||
+            "NAVTA question",
+
+          sourcePage:
+            question.sourcePage,
+
+          width:
+            upload.width ||
+            cropped.width,
+
+          height:
+            upload.height ||
+            cropped.height,
+
+          bbox:
+            question.questionBoundingBox,
+        },
+      };
+    } catch (error) {
+      console.error(
+        "NAVTA COMPLETE QUESTION SCREENSHOT ERROR:",
+        error
+      );
+
+      return {
+        questionImage: null,
+        cropBuffer: null,
+        screenshotWarning:
+          "NAVTA could not process the complete question screenshot.",
+      };
+    }
+  };
+
+
+// =====================================================
+// SOLVE MCQ FROM COMPLETE QUESTION SCREENSHOT
+// =====================================================
+
+const solveMissingMcqAnswer =
+  async ({
+    question,
+    cropBuffer,
+  }) => {
+    if (
+      question?.questionType !== "mcq"
+    ) {
+      return question;
+    }
+
+    if (
+      Number.isInteger(
+        question.correctAnswer
+      ) &&
+      question.correctAnswer >= 0 &&
+      question.correctAnswer <= 3
+    ) {
+      return question;
+    }
+
+    if (
+      !Buffer.isBuffer(
+        cropBuffer
+      ) ||
+      cropBuffer.length === 0
+    ) {
+      return question;
+    }
+
+    console.log(
+      `NAVTA solving missing MCQ answer from screenshot: page=${question.sourcePage}, question=${question.questionNumber || "?"}.`
+    );
+
+    const solution =
+      await solveQuestionFromImage({
+        imageBuffer:
+          cropBuffer,
+
+        question,
+      });
+
+    if (
+      Number.isInteger(
+        solution?.correctAnswer
+      ) &&
+      solution.correctAnswer >= 0 &&
+      solution.correctAnswer <= 3
+    ) {
+      return {
+        ...question,
+
+        correctAnswer:
+          solution.correctAnswer,
+
+        explanation:
+          cleanString(
+            solution.explanation
+          ) ||
+          question.explanation ||
+          "",
+
+        answerConfidence:
+          cleanString(
+            solution.confidence
+          ) ||
+          "medium",
+
+        answerSolvedFromScreenshot:
+          true,
+      };
+    }
+
+    return {
+      ...question,
+
+      answerConfidence:
+        cleanString(
+          solution?.confidence
+        ) ||
+        "low",
+
+      answerSolvedFromScreenshot:
+        false,
+
+      answerSolverWarning:
+        cleanString(
+          solution?.solverError
+        ) ||
+        "NAVTA could not determine the MCQ answer from the complete question screenshot.",
+    };
+  };
+
 
 // =====================================================
 // PROCESS QUESTION DIAGRAM
@@ -733,13 +1005,8 @@ const processPdfImport =
     // NAVTA GEMINI ANALYSIS
     // =========================================
     //
-    // analyseRenderedPages() processes:
-    //
-    // 1-5
-    // 6-10
-    // 11-15
-    // ...
-    // final page
+    // analyseRenderedPages() processes each rendered
+    // page sequentially until the final page
     //
     // =========================================
 
@@ -785,32 +1052,50 @@ const processPdfImport =
       [];
 
     // =========================================
-    // VALIDATE EACH DETECTED QUESTION
+    // PROCESS EACH DETECTED QUESTION
+    // =========================================
+    //
+    // ORDER IS IMPORTANT:
+    //
+    // 1. Validate structure WITHOUT requiring MCQ answer.
+    // 2. Find original rendered page.
+    // 3. Crop the COMPLETE question screenshot.
+    // 4. If MCQ answer is missing, solve from screenshot.
+    // 5. Run FINAL validation including correctAnswer.
+    // 6. Build admin-review object.
+    // 7. Accept only after all required checks pass.
+    //
+    // This prevents valid MCQs from being dropped before
+    // the screenshot solver gets a chance to solve them.
     // =========================================
 
     for (
       const rawQuestion of
       detectedQuestions
     ) {
-      const validation =
+      // =====================================
+      // STAGE 1 VALIDATION
+      // =====================================
+
+      const preliminaryValidation =
         validateDetectedQuestion(
-          rawQuestion
+          rawQuestion,
+          {
+            requireCorrectAnswer:
+              false,
+          }
         );
 
-      // =====================================
-      // DROP INVALID QUESTION
-      // =====================================
-
       if (
-        !validation.valid
+        !preliminaryValidation.valid
       ) {
         const reason =
-          validation.reasons.join(
+          preliminaryValidation.reasons.join(
             " "
           );
 
         droppedQuestions.push({
-          ...validation.question,
+          ...preliminaryValidation.question,
 
           reason,
 
@@ -821,8 +1106,9 @@ const processPdfImport =
         continue;
       }
 
-      const question =
-        validation.question;
+      let question = {
+        ...preliminaryValidation.question,
+      };
 
       // =====================================
       // FIND SOURCE PDF PAGE
@@ -835,12 +1121,28 @@ const processPdfImport =
           )
         );
 
+      if (!renderedPage) {
+        const reason =
+          "The source PDF page for this question could not be located.";
+
+        droppedQuestions.push({
+          ...question,
+
+          reason,
+
+          dropReason:
+            reason,
+        });
+
+        continue;
+      }
+
       // =====================================
-      // PROCESS DIAGRAM / VISUAL
+      // COMPLETE QUESTION SCREENSHOT
       // =====================================
 
-      const visual =
-        await processQuestionVisual({
+      const screenshot =
+        await processCompleteQuestionScreenshot({
           question,
 
           renderedPage,
@@ -848,6 +1150,143 @@ const processPdfImport =
           sourceFileName:
             file.originalname,
         });
+
+      if (
+        !screenshot.questionImage ||
+        !Buffer.isBuffer(
+          screenshot.cropBuffer
+        ) ||
+        screenshot.cropBuffer.length === 0
+      ) {
+        const reason =
+          screenshot.screenshotWarning ||
+          "NAVTA could not preserve the complete original question screenshot.";
+
+        droppedQuestions.push({
+          ...question,
+
+          reason,
+
+          dropReason:
+            reason,
+        });
+
+        continue;
+      }
+
+      // =====================================
+      // SOLVE MISSING MCQ ANSWER
+      // =====================================
+
+      if (
+        question.questionType === "mcq" &&
+        (
+          !Number.isInteger(
+            question.correctAnswer
+          ) ||
+          question.correctAnswer < 0 ||
+          question.correctAnswer > 3
+        )
+      ) {
+        try {
+          question =
+            await solveMissingMcqAnswer({
+              question,
+
+              cropBuffer:
+                screenshot.cropBuffer,
+            });
+        } catch (error) {
+          console.error(
+            "NAVTA SCREENSHOT ANSWER SOLVER ERROR:",
+            error
+          );
+
+          question = {
+            ...question,
+
+            answerSolvedFromScreenshot:
+              false,
+
+            answerConfidence:
+              "low",
+
+            answerSolverWarning:
+              error?.message ||
+              "NAVTA answer solver failed.",
+          };
+        }
+      }
+
+      // =====================================
+      // FINAL VALIDATION
+      // =====================================
+
+      const finalValidation =
+        validateDetectedQuestion(
+          question,
+          {
+            requireCorrectAnswer:
+              true,
+          }
+        );
+
+      if (
+        !finalValidation.valid
+      ) {
+        const reason =
+          finalValidation.reasons.join(
+            " "
+          );
+
+        droppedQuestions.push({
+          ...finalValidation.question,
+
+          questionImage:
+            screenshot.questionImage,
+
+          questionImages: [
+            screenshot.questionImage,
+          ],
+
+          answerConfidence:
+            question.answerConfidence ||
+            "",
+
+          answerSolvedFromScreenshot:
+            Boolean(
+              question.answerSolvedFromScreenshot
+            ),
+
+          answerSolverWarning:
+            question.answerSolverWarning ||
+            "",
+
+          reason,
+
+          dropReason:
+            reason,
+        });
+
+        continue;
+      }
+
+      question = {
+        ...finalValidation.question,
+
+        answerConfidence:
+          question.answerConfidence ||
+          "",
+
+        answerSolvedFromScreenshot:
+          Boolean(
+            question.answerSolvedFromScreenshot
+          ),
+
+        answerSolverWarning:
+          question.answerSolverWarning ||
+          "",
+      };
 
       // =====================================
       // BUILD ADMIN REVIEW QUESTION
@@ -858,7 +1297,7 @@ const processPdfImport =
           question,
 
           questionImage:
-            visual.questionImage,
+            screenshot.questionImage,
 
           sourceFileName:
             file.originalname,
@@ -868,33 +1307,27 @@ const processPdfImport =
         });
 
       // =====================================
-      // VISUAL REQUIRED BUT FAILED
+      // PRESERVE SOLVER METADATA
       // =====================================
 
       if (
-        question.hasVisual &&
-        !visual.questionImage
+        question.questionType === "mcq"
       ) {
-        const reason =
-          visual.visualWarning ||
-          "The question requires a diagram, but the diagram could not be preserved.";
+        importQuestion.answerConfidence =
+          question.answerConfidence ||
+          "";
 
-        droppedQuestions.push({
-          ...importQuestion,
+        importQuestion.answerSolvedFromScreenshot =
+          Boolean(
+            question.answerSolvedFromScreenshot
+          );
 
-          hasVisual:
-            true,
-
-          visualDescription:
-            question.visualDescription,
-
-          reason,
-
-          dropReason:
-            reason,
-        });
-
-        continue;
+        if (
+          question.answerSolverWarning
+        ) {
+          importQuestion.answerSolverWarning =
+            question.answerSolverWarning;
+        }
       }
 
       // =====================================
