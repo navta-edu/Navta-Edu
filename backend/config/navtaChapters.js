@@ -1,4 +1,22 @@
-module.exports = {
+// =====================================================
+// NAVTA MASTER CHAPTER CONFIGURATION
+// =====================================================
+//
+// SINGLE SOURCE OF TRUTH FOR CHAPTERS
+//
+// Used by:
+// 1. NAVTA Test
+// 2. Study Notes
+// 3. Admin Dashboard
+// 4. PYQ / future content systems
+//
+// IMPORTANT:
+// Add or remove chapters ONLY HERE.
+// Any page using the chapter API will automatically
+// receive the updated chapter list.
+// =====================================================
+
+const chapters = {
   Physics: {
     "Class 11": [
       "Units and Measurements",
@@ -137,3 +155,356 @@ module.exports = {
     ]
   }
 };
+
+// =====================================================
+// SUBJECT ALIASES
+// =====================================================
+//
+// Your website may use:
+// Maths
+// Mathematics
+//
+// Both should resolve to the same chapter list.
+// =====================================================
+
+const SUBJECT_ALIASES = {
+  physics: "Physics",
+  chemistry: "Chemistry",
+
+  maths: "Maths",
+  math: "Maths",
+  mathematics: "Maths",
+
+  biology: "Biology",
+  bio: "Biology"
+};
+
+// =====================================================
+// CLASS ALIASES
+// =====================================================
+
+const CLASS_ALIASES = {
+  "11": "Class 11",
+  "class 11": "Class 11",
+  "class11": "Class 11",
+  "xi": "Class 11",
+
+  "12": "Class 12",
+  "class 12": "Class 12",
+  "class12": "Class 12",
+  "xii": "Class 12"
+};
+
+// =====================================================
+// NORMALIZE SUBJECT
+// =====================================================
+
+const normalizeSubjectName = (value = "") => {
+  const raw = String(value || "").trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  if (chapters[raw]) {
+    return raw;
+  }
+
+  return (
+    SUBJECT_ALIASES[raw.toLowerCase()] ||
+    ""
+  );
+};
+
+// =====================================================
+// NORMALIZE CLASS
+// =====================================================
+
+const normalizeClassName = (value = "") => {
+  const raw = String(value || "").trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  if (
+    raw === "Class 11" ||
+    raw === "Class 12"
+  ) {
+    return raw;
+  }
+
+  return (
+    CLASS_ALIASES[raw.toLowerCase()] ||
+    ""
+  );
+};
+
+// =====================================================
+// GET SUBJECTS
+// =====================================================
+
+const getSubjectNames = () => {
+  return Object.keys(chapters);
+};
+
+// =====================================================
+// GET CLASSES
+// =====================================================
+
+const getClassesForSubject = (
+  subject
+) => {
+  const normalizedSubject =
+    normalizeSubjectName(subject);
+
+  if (
+    !normalizedSubject ||
+    !chapters[normalizedSubject]
+  ) {
+    return [];
+  }
+
+  return Object.keys(
+    chapters[normalizedSubject]
+  );
+};
+
+// =====================================================
+// GET CHAPTERS
+// =====================================================
+
+const getChaptersForSubject = (
+  subject,
+  classLevel = ""
+) => {
+  const normalizedSubject =
+    normalizeSubjectName(subject);
+
+  if (
+    !normalizedSubject ||
+    !chapters[normalizedSubject]
+  ) {
+    return [];
+  }
+
+  // -----------------------------------------
+  // If class was supplied, return that class.
+  // -----------------------------------------
+
+  if (classLevel) {
+    const normalizedClass =
+      normalizeClassName(
+        classLevel
+      );
+
+    if (!normalizedClass) {
+      return [];
+    }
+
+    return [
+      ...(
+        chapters[
+          normalizedSubject
+        ][normalizedClass] ||
+        []
+      )
+    ];
+  }
+
+  // -----------------------------------------
+  // No class supplied:
+  // return chapters from both classes.
+  // -----------------------------------------
+
+  const output = [];
+
+  Object.entries(
+    chapters[normalizedSubject]
+  ).forEach(
+    ([
+      currentClass,
+      chapterList
+    ]) => {
+      chapterList.forEach(
+        (chapterName) => {
+          output.push({
+            name: chapterName,
+            chapter: chapterName,
+            subject:
+              normalizedSubject,
+            classLevel:
+              currentClass
+          });
+        }
+      );
+    }
+  );
+
+  return output;
+};
+
+// =====================================================
+// GET STRUCTURED CHAPTERS
+// =====================================================
+//
+// Useful for Admin Dashboard / Study Notes.
+//
+// Output:
+//
+// [
+//   {
+//     name: "Determinants",
+//     subject: "Maths",
+//     classLevel: "Class 12"
+//   }
+// ]
+// =====================================================
+
+const getStructuredChapters = (
+  subject = "",
+  classLevel = ""
+) => {
+  const subjectsToUse =
+    subject
+      ? [
+          normalizeSubjectName(
+            subject
+          )
+        ].filter(Boolean)
+      : getSubjectNames();
+
+  const output = [];
+
+  subjectsToUse.forEach(
+    (subjectName) => {
+      const classes =
+        classLevel
+          ? [
+              normalizeClassName(
+                classLevel
+              )
+            ].filter(Boolean)
+          : getClassesForSubject(
+              subjectName
+            );
+
+      classes.forEach(
+        (className) => {
+          const chapterList =
+            chapters[
+              subjectName
+            ]?.[className] ||
+            [];
+
+          chapterList.forEach(
+            (
+              chapterName,
+              index
+            ) => {
+              output.push({
+                // Stable config ID.
+                // This is NOT a MongoDB ObjectId.
+                _id:
+                  `${subjectName}-${className}-${index}`
+                    .toLowerCase()
+                    .replace(
+                      /[^a-z0-9]+/g,
+                      "-"
+                    )
+                    .replace(
+                      /^-|-$/g,
+                      ""
+                    ),
+
+                name:
+                  chapterName,
+
+                chapter:
+                  chapterName,
+
+                subject:
+                  subjectName,
+
+                classLevel:
+                  className
+              });
+            }
+          );
+        }
+      );
+    }
+  );
+
+  return output;
+};
+
+// =====================================================
+// EXPORT
+// =====================================================
+//
+// Existing code using:
+//
+// const chapters = require("../config/chapters");
+//
+// will STILL work because the chapter object itself
+// remains module.exports.
+//
+// Helper functions are non-enumerable so
+// Object.keys(chapters) continues returning only:
+//
+// Physics
+// Chemistry
+// Maths
+// Biology
+//
+// =====================================================
+
+Object.defineProperties(
+  chapters,
+  {
+    normalizeSubjectName: {
+      value:
+        normalizeSubjectName,
+      enumerable:
+        false
+    },
+
+    normalizeClassName: {
+      value:
+        normalizeClassName,
+      enumerable:
+        false
+    },
+
+    getSubjectNames: {
+      value:
+        getSubjectNames,
+      enumerable:
+        false
+    },
+
+    getClassesForSubject: {
+      value:
+        getClassesForSubject,
+      enumerable:
+        false
+    },
+
+    getChaptersForSubject: {
+      value:
+        getChaptersForSubject,
+      enumerable:
+        false
+    },
+
+    getStructuredChapters: {
+      value:
+        getStructuredChapters,
+      enumerable:
+        false
+    }
+  }
+);
+
+module.exports = chapters;
