@@ -28,3 +28,7 @@ fix_colors.ps1
 test_backend.ps1
 backend_out.txt
 backend_err.txt
+
+# Question Separator - temporary uploaded/generated files
+backend/uploads/
+backend/temp/
