@@ -676,47 +676,122 @@ export default function NotesPage() {
   | FETCH NOTES
   |--------------------------------------------------------------------------
   */
+useEffect(() => {
+  if (!selectedChapter) {
+    setNotes([]);
+    setSelectedNote(null);
+    return;
+  }
 
-  useEffect(() => {
-    if (!selectedChapter) {
-      setNotes([]);
-      setSelectedNote(null);
-      return;
-    }
+  const fetchNotes = async () => {
+    setNotesLoading(true);
 
-    if (selectedChapter.startsWith("local-")) {
-      setNotes([]);
-      setSelectedNote(null);
-      return;
-    }
+    try {
+      const currentChapter =
+        chapters.find(
+          (chapter) =>
+            String(chapter._id) ===
+            String(selectedChapter)
+        );
 
-    const fetchNotes = async () => {
-      setNotesLoading(true);
-
-      try {
-        const res = await contentAPI.getNotes(selectedChapter);
-
-        const noteData = res.data || [];
-
-        setNotes(noteData);
-
-        if (noteData.length > 0) {
-          setSelectedNote(noteData[0]);
-        } else {
-          setSelectedNote(null);
-        }
-      } catch (err) {
-        console.error("Failed to load notes:", err);
-
+      if (!currentChapter) {
         setNotes([]);
         setSelectedNote(null);
-      } finally {
-        setNotesLoading(false);
+        return;
       }
-    };
 
-    fetchNotes();
-  }, [selectedChapter]);
+      console.log(
+        'NAVTA loading Study Notes:',
+        {
+          chapterId:
+            currentChapter._id,
+
+          chapterName:
+            currentChapter.title,
+
+          subjectName:
+            selectedSubject?.name,
+
+          className:
+            selectedClass,
+
+          exam:
+            selectedExam
+        }
+      );
+
+      const res =
+        await contentAPI.getNotes(
+          currentChapter._id,
+          {
+            chapterName:
+              currentChapter.title,
+
+            subjectName:
+              selectedSubject?.name ||
+              currentChapter.subject ||
+              '',
+
+            className:
+              selectedClass ||
+              currentChapter.className ||
+              '',
+
+            classLevel:
+              selectedClass ||
+              currentChapter.className ||
+              '',
+
+            exam:
+              selectedExam ||
+              currentChapter.exam ||
+              ''
+          }
+        );
+
+      const noteData =
+        Array.isArray(res?.data)
+          ? res.data
+          : [];
+
+      console.log(
+        'NAVTA Study Notes returned:',
+        noteData
+      );
+
+      setNotes(noteData);
+
+      if (noteData.length > 0) {
+        setSelectedNote(
+          noteData[0]
+        );
+      } else {
+        setSelectedNote(null);
+      }
+
+    } catch (err) {
+      console.error(
+        'Failed to load notes:',
+        err
+      );
+
+      setNotes([]);
+      setSelectedNote(null);
+
+    } finally {
+      setNotesLoading(false);
+    }
+  };
+
+  fetchNotes();
+
+}, [
+  selectedChapter,
+  chapters,
+  selectedSubject,
+  selectedClass,
+  selectedExam
+]);
 
   /*
   |--------------------------------------------------------------------------
