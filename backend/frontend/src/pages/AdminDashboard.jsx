@@ -409,8 +409,8 @@ const fetchData = async () => {
           'Users'
         ),
         withTimeout(
-          contentAPI.getSubjects(),
-          'Subjects'
+          contentAPI.getNavtaSubjects(),
+          'NAVTA Test subjects'
         ),
         withTimeout(
           adminAPI.getQuestions(),
@@ -649,15 +649,27 @@ const fetchData = async () => {
 
   /*
   |--------------------------------------------------------------------------
-  | Fetch Chapters
+  | Fetch NAVTA Test Chapters for Study Notes
   |--------------------------------------------------------------------------
+  |
+  | IMPORTANT:
+  | Study Notes no longer loads a separate chapter list.
+  | It uses the same NAVTA master chapter source as NAVTA Test:
+  |
+  | Subject + Class -> /api/content/navta-chapters
+  |
   */
 
   useEffect(() => {
 
     const fetchChapters = async () => {
 
-      if (!selectedSubject) {
+      // A class must be selected before we know which
+      // NAVTA Test chapter list should be shown.
+      if (
+        !selectedSubject ||
+        !selectedClass
+      ) {
 
         setChapters([]);
         setSelectedChapter('');
@@ -667,44 +679,115 @@ const fetchData = async () => {
 
       try {
 
-        const res =
-          await contentAPI.getChapters(
-            selectedSubject
+        const subjectObject =
+          subjects.find(
+            (subject) =>
+              String(
+                subject._id ||
+                subject.id ||
+                subject.name
+              ) ===
+              String(selectedSubject)
           );
 
-const chapterData =
-  Array.isArray(res)
-    ? res
-    : Array.isArray(res?.data)
-      ? res.data
-      : Array.isArray(res?.chapters)
-        ? res.chapters
-        : Array.isArray(
-              res?.data?.chapters
+        const subjectName =
+          subjectObject?.name ||
+          selectedSubject;
+
+        const res =
+          await contentAPI.getNavtaChapters(
+            subjectName,
+            selectedClass
+          );
+
+        const chapterData =
+          Array.isArray(res)
+            ? res
+            : Array.isArray(res?.data)
+              ? res.data
+              : Array.isArray(res?.chapters)
+                ? res.chapters
+                : Array.isArray(
+                    res?.data?.chapters
+                  )
+                  ? res.data.chapters
+                  : [];
+
+        const normalizedChapters =
+          chapterData
+            .map(
+              (chapter, index) => {
+
+                const title =
+                  String(
+                    chapter?.title ||
+                    chapter?.name ||
+                    chapter?.chapter ||
+                    ''
+                  ).trim();
+
+                return {
+                  ...chapter,
+
+                  _id:
+                    chapter?._id ||
+                    chapter?.id ||
+                    `navta-${subjectName}-${selectedClass}-${index + 1}`,
+
+                  id:
+                    chapter?.id ||
+                    chapter?._id ||
+                    `navta-${subjectName}-${selectedClass}-${index + 1}`,
+
+                  title,
+
+                  name:
+                    title,
+
+                  chapterNumber:
+                    Number(
+                      chapter?.chapterNumber
+                    ) ||
+                    index + 1,
+
+                  subject:
+                    chapter?.subject ||
+                    subjectName,
+
+                  classLevel:
+                    chapter?.classLevel ||
+                    chapter?.className ||
+                    selectedClass,
+
+                  source:
+                    'navta-test'
+                };
+              }
             )
-          ? res.data.chapters
-          : [];
+            .filter(
+              (chapter) =>
+                Boolean(
+                  chapter.title
+                )
+            );
 
-setChapters(
-  chapterData
-);
+        console.log(
+          `NAVTA Study Notes chapters loaded for ${subjectName} / ${selectedClass}:`,
+          normalizedChapters
+        );
 
-if (
-  chapterData.length > 0
-) {
-  setSelectedChapter(
-    chapterData[0]._id ||
-    chapterData[0].id ||
-    ''
-  );
-} else {
-  setSelectedChapter('');
-}
+        setChapters(
+          normalizedChapters
+        );
+
+        // Do not leave a chapter selected from the
+        // previous subject/class.
+        setSelectedChapter('');
 
       } catch (err) {
 
         console.error(
-          'Failed to load chapters:',
+          'Failed to load NAVTA Test chapters for Study Notes:',
           err
         );
 
@@ -716,7 +799,11 @@ if (
 
     fetchChapters();
 
-  }, [selectedSubject]);
+  }, [
+    selectedSubject,
+    selectedClass,
+    subjects
+  ]);
 
 
   /*
@@ -729,8 +816,12 @@ if (
 
     return subjects.find(
       (subject) =>
-        (subject._id || subject.id) ===
-        selectedSubject
+        String(
+          subject._id ||
+          subject.id ||
+          subject.name
+        ) ===
+        String(selectedSubject)
     );
 
   };
@@ -1377,6 +1468,32 @@ if (
       formData.append(
         'className',
         selectedClass
+      );
+
+      // NAVTA master chapter metadata.
+      // Keep chapterId for compatibility with the current
+      // backend, while also sending the readable names.
+      const selectedChapterObject =
+        chapters.find(
+          (chapter) =>
+            String(
+              chapter._id ||
+              chapter.id
+            ) ===
+            String(selectedChapter)
+        );
+
+      formData.append(
+        'subjectName',
+        selectedSubjectObject?.name ||
+        ''
+      );
+
+      formData.append(
+        'chapterName',
+        selectedChapterObject?.title ||
+        selectedChapterObject?.name ||
+        ''
       );
 
       formData.append(
@@ -2722,8 +2839,8 @@ if (
                   onChange={handleSubjectChange}
                   placeholder="Select Subject"
                   options={subjects.map((s) => ({
-                    value: s._id || s.id,
-                    label: s.name
+                    value: s._id || s.id || s.name,
+                    label: s.displayName || s.name
                   }))}
                 />
 
@@ -2797,7 +2914,7 @@ if (
                 }
                 options={chapters.map((chapter) => ({
                   value: chapter._id || chapter.id,
-                  label: `Ch ${chapter.chapterNumber} — ${chapter.title}`
+                  label: `Ch ${chapter.chapterNumber || ''} — ${chapter.title || chapter.name}`
                 }))}
               />
 
