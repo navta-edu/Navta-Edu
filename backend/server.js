@@ -35,6 +35,8 @@ const panicModeRoutes = require(
   "./routes/panicModeRoutes"
 );
 
+const questionSeparatorRoutes = require("./routes/questionSeparatorRoutes");
+
 // ============================================
 // CONNECT DATABASE
 // ============================================
@@ -180,6 +182,8 @@ app.use(
   "/api/navta-test",
   navtaTestRoutes
 );
+
+app.use("/api/question-separator", questionSeparatorRoutes);
 
 // ============================================
 // MISTAKE NOTEBOOK
