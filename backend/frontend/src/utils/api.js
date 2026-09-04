@@ -4,14 +4,15 @@ import axios from 'axios';
 // API BASE URL
 // ============================================
 //
-// Accepts either:
-//   https://example.com
-//   https://example.com/
-//   https://example.com/api
-//   https://example.com/api/
+// Accepts:
+// https://example.com
+// https://example.com/
+// https://example.com/api
+// https://example.com/api/
 //
-// and guarantees exactly one /api suffix.
-//
+// Guarantees exactly one /api suffix.
+// ============================================
+
 const rawEnvUrl = String(
   import.meta.env.VITE_API_URL || ''
 ).trim();
@@ -20,23 +21,17 @@ const normalizedEnvUrl =
   rawEnvUrl.replace(/\/+$/, '');
 
 const API_URL = normalizedEnvUrl
-  ? (
-      normalizedEnvUrl.endsWith('/api')
-        ? normalizedEnvUrl
-        : `${normalizedEnvUrl}/api`
-    )
+  ? normalizedEnvUrl.endsWith('/api')
+    ? normalizedEnvUrl
+    : `${normalizedEnvUrl}/api`
   : '/api';
 
 const api = axios.create({
   baseURL: API_URL,
-
-  // Prevent a dead backend request from hanging the
-  // whole admin dashboard forever.
-  timeout: 15000,
-
+  timeout: 30000,
   headers: {
-    'Content-Type': 'application/json',
-  },
+    'Content-Type': 'application/json'
+  }
 });
 
 // ============================================
@@ -49,6 +44,9 @@ api.interceptors.request.use(
       localStorage.getItem('token');
 
     if (token) {
+      config.headers =
+        config.headers || {};
+
       config.headers.Authorization =
         `Bearer ${token}`;
     }
@@ -71,18 +69,29 @@ api.interceptors.response.use(
     if (
       error.response?.status === 401
     ) {
-      localStorage.removeItem(
-        'token'
-      );
-
-      localStorage.removeItem(
-        'user'
-      );
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
     }
 
     return Promise.reject(error);
   }
 );
+
+// ============================================
+// ERROR MESSAGE HELPER
+// ============================================
+
+const getApiErrorMessage = (
+  error,
+  fallback = 'Something went wrong.'
+) => {
+  return (
+    error?.response?.data?.message ||
+    error?.response?.data?.error ||
+    error?.message ||
+    fallback
+  );
+};
 
 // ============================================
 // MOCK DATABASE
@@ -141,19 +150,17 @@ const saveMockDB = (db) => {
 
 const mockAPI = {
   // ==========================================
-  // AUTH ROUTES
+  // AUTH
   // ==========================================
 
   auth: {
     register: async (data) => {
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       const existingUser =
         db.users.find(
           (user) =>
-            user.email ===
-            data.email
+            user.email === data.email
         );
 
       if (existingUser) {
@@ -163,29 +170,13 @@ const mockAPI = {
       }
 
       const user = {
-        id:
-          'user_' +
-          Date.now(),
-
-        name:
-          data.name,
-
-        email:
-          data.email,
-
-        password:
-          data.password,
-
-        role:
-          data.role ||
-          'student',
-
-        isVerified:
-          true,
-
-        isProfileComplete:
-          false,
-
+        id: `user_${Date.now()}`,
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        role: data.role || 'student',
+        isVerified: true,
+        isProfileComplete: false,
         createdAt:
           new Date().toISOString()
       };
@@ -195,29 +186,18 @@ const mockAPI = {
       saveMockDB(db);
 
       return {
-        success:
-          true,
+        success: true,
 
         token:
-          'mock_jwt_token_' +
-          user.id,
+          `mock_jwt_token_${user.id}`,
 
         user: {
-          id:
-            user.id,
-
-          name:
-            user.name,
-
-          email:
-            user.email,
-
-          role:
-            user.role,
-
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
           isVerified:
             user.isVerified,
-
           isProfileComplete:
             user.isProfileComplete
         }
@@ -225,8 +205,7 @@ const mockAPI = {
     },
 
     login: async (data) => {
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       const user =
         db.users.find(
@@ -244,29 +223,18 @@ const mockAPI = {
       }
 
       return {
-        success:
-          true,
+        success: true,
 
         token:
-          'mock_jwt_token_' +
-          user.id,
+          `mock_jwt_token_${user.id}`,
 
         user: {
-          id:
-            user.id,
-
-          name:
-            user.name,
-
-          email:
-            user.email,
-
-          role:
-            user.role,
-
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
           isVerified:
             user.isVerified,
-
           isProfileComplete:
             user.isProfileComplete
         }
@@ -275,9 +243,7 @@ const mockAPI = {
 
     getMe: async () => {
       const token =
-        localStorage.getItem(
-          'token'
-        );
+        localStorage.getItem('token');
 
       if (
         !token ||
@@ -296,14 +262,12 @@ const mockAPI = {
           ''
         );
 
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       const user =
         db.users.find(
           (item) =>
-            item.id ===
-            userId
+            item.id === userId
         );
 
       if (!user) {
@@ -313,9 +277,7 @@ const mockAPI = {
       }
 
       return {
-        success:
-          true,
-
+        success: true,
         user: {
           ...user
         }
@@ -325,13 +287,11 @@ const mockAPI = {
     googleLogin: async (
       credential
     ) => {
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       const user = {
         id:
-          'google_' +
-          Date.now(),
+          `google_${Date.now()}`,
 
         name:
           'Google User',
@@ -357,53 +317,20 @@ const mockAPI = {
 
       db.users.push(user);
 
-      db.students[
-        user.id
-      ] = {
-        user:
-          user.id,
-
-        coins:
-          0,
-
-        xp:
-          0,
-
-        level:
-          1,
-
-        stream:
-          'General',
-
-        badges: [
-          {
-            name:
-              'Welcome Aboard',
-
-            icon:
-              'award',
-
-            earnedAt:
-              new Date().toISOString()
-          }
-        ],
-
-        rewardsRedeemed:
-          []
+      db.students[user.id] = {
+        user: user.id,
+        coins: 0,
+        xp: 0,
+        level: 1,
+        stream: 'General',
+        badges: [],
+        rewardsRedeemed: []
       };
 
-      db.streaks[
-        user.id
-      ] = {
-        user:
-          user.id,
-
-        currentStreak:
-          1,
-
-        longestStreak:
-          1,
-
+      db.streaks[user.id] = {
+        user: user.id,
+        currentStreak: 1,
+        longestStreak: 1,
         lastActiveDate:
           new Date().toISOString()
       };
@@ -411,334 +338,228 @@ const mockAPI = {
       saveMockDB(db);
 
       return {
-        success:
-          true,
+        success: true,
 
         token:
-          'mock_jwt_token_' +
-          user.id,
+          `mock_jwt_token_${user.id}`,
 
         user: {
-          id:
-            user.id,
-
-          name:
-            user.name,
-
-          email:
-            user.email,
-
-          role:
-            user.role,
-
-          isVerified:
-            user.isVerified,
-
-          isProfileComplete:
-            user.isProfileComplete
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isVerified: true,
+          isProfileComplete: false
         }
       };
     },
 
-    completeProfile: async (
-      data
-    ) => {
-      const token =
-        localStorage.getItem(
-          'token'
-        );
+    completeProfile:
+      async (data) => {
+        const token =
+          localStorage.getItem(
+            'token'
+          );
 
-      if (
-        !token ||
-        !token.startsWith(
-          'mock_jwt_token_'
-        )
-      ) {
-        throw new Error(
-          'Not authorized'
-        );
-      }
-
-      const userId =
-        token.replace(
-          'mock_jwt_token_',
-          ''
-        );
-
-      const db =
-        getMockDB();
-
-      const user =
-        db.users.find(
-          (u) =>
-            u.id === userId
-        );
-
-      if (!user) {
-        throw new Error(
-          'User not found'
-        );
-      }
-
-      if (data.role) {
-        user.role =
-          data.role;
-      }
-
-      if (data.stream) {
-        user.stream =
-          data.stream;
-      }
-
-      if (data.department) {
-        user.department =
-          data.department;
-      }
-
-      if (data.schoolName) {
-        user.schoolName =
-          data.schoolName;
-      }
-
-      if (data.address) {
-        user.address =
-          data.address;
-      }
-
-      user.isProfileComplete =
-        true;
-
-      if (
-        user.role ===
-          'student' &&
-        !db.students[
-          userId
-        ]
-      ) {
-        db.students[
-          userId
-        ] = {
-          user:
-            userId,
-
-          coins:
-            0,
-
-          xp:
-            0,
-
-          level:
-            1,
-
-          stream:
-            data.stream ||
-            'General',
-
-          badges:
-            [],
-
-          rewardsRedeemed:
-            []
-        };
-      } else if (
-        user.role ===
-          'teacher' &&
-        !db.teachers[
-          userId
-        ]
-      ) {
-        db.teachers[
-          userId
-        ] = {
-          user:
-            userId,
-
-          qualification:
-            'Qualified Educator',
-
-          bio:
-            '',
-
-          subjects:
-            []
-        };
-      }
-
-      saveMockDB(db);
-
-      return {
-        success:
-          true,
-
-        user: {
-          ...user
+        if (
+          !token ||
+          !token.startsWith(
+            'mock_jwt_token_'
+          )
+        ) {
+          throw new Error(
+            'Not authorized'
+          );
         }
-      };
-    }
+
+        const userId =
+          token.replace(
+            'mock_jwt_token_',
+            ''
+          );
+
+        const db = getMockDB();
+
+        const user =
+          db.users.find(
+            (item) =>
+              item.id === userId
+          );
+
+        if (!user) {
+          throw new Error(
+            'User not found'
+          );
+        }
+
+        Object.assign(
+          user,
+          data,
+          {
+            isProfileComplete:
+              true
+          }
+        );
+
+        if (
+          user.role ===
+            'student' &&
+          !db.students[userId]
+        ) {
+          db.students[userId] = {
+            user: userId,
+            coins: 0,
+            xp: 0,
+            level: 1,
+            stream:
+              data.stream ||
+              'General',
+            badges: [],
+            rewardsRedeemed: []
+          };
+        }
+
+        if (
+          user.role ===
+            'teacher' &&
+          !db.teachers[userId]
+        ) {
+          db.teachers[userId] = {
+            user: userId,
+            qualification:
+              'Qualified Educator',
+            bio: '',
+            subjects: []
+          };
+        }
+
+        saveMockDB(db);
+
+        return {
+          success: true,
+          user: {
+            ...user
+          }
+        };
+      }
   },
 
   // ==========================================
-  // CONTENT ROUTES
+  // CONTENT
   // ==========================================
 
   content: {
     getSubjects: async () => {
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       return {
-        success:
-          true,
-
-        data:
-          db.subjects
+        success: true,
+        data: db.subjects
       };
     },
 
-    getChapters: async (
-      subjectId
-    ) => {
-      const db =
-        getMockDB();
+    getChapters:
+      async (subjectId) => {
+        const db = getMockDB();
 
-      const chapters =
-        db.chapters.filter(
-          (chapter) =>
-            chapter.subject ===
-            subjectId
-        );
+        return {
+          success: true,
 
-      return {
-        success:
-          true,
-
-        data:
-          chapters
-      };
-    },
-
-    getNotes: async (
-      chapterId
-    ) => {
-      const db =
-        getMockDB();
-
-      const notes =
-        db.notes.filter(
-          (note) =>
-            note.chapter ===
-            chapterId
-        );
-
-      return {
-        success:
-          true,
-
-        data:
-          notes
-      };
-    },
-
-    getPYQs: async (
-      subjectId
-    ) => {
-      const db =
-        getMockDB();
-
-      const pyqs =
-        db.pyqs.filter(
-          (pyq) =>
-            pyq.subject ===
-            subjectId
-        );
-
-      return {
-        success:
-          true,
-
-        data:
-          pyqs
-      };
-    },
-
-    getTests: async (
-      subjectId,
-      chapterId = null
-    ) => {
-      const db =
-        getMockDB();
-
-      let tests =
-        db.tests.filter(
-          (test) =>
-            test.subject ===
-            subjectId
-        );
-
-      if (chapterId) {
-        tests =
-          tests.filter(
-            (test) =>
-              test.chapter &&
-              test.chapter._id ===
-                chapterId
-          );
-      }
-
-      return {
-        success:
-          true,
-
-        data:
-          tests
-      };
-    },
-
-    getTestDetail: async (
-      testId
-    ) => {
-      const db =
-        getMockDB();
-
-      const test =
-        db.tests.find(
-          (item) =>
-            item._id ===
-            testId
-        );
-
-      if (!test) {
-        throw new Error(
-          'Test not found'
-        );
-      }
-
-      const questionsList =
-        test.questions.map(
-          (questionId) =>
-            db.questions.find(
-              (question) =>
-                question._id ===
-                questionId
+          data:
+            db.chapters.filter(
+              (chapter) =>
+                chapter.subject ===
+                subjectId
             )
-        );
+        };
+      },
 
-      return {
-        success:
-          true,
+    getNotes:
+      async (chapterId) => {
+        const db = getMockDB();
 
-        data: {
-          ...test,
+        return {
+          success: true,
 
-          questions:
-            questionsList
+          data:
+            db.notes.filter(
+              (note) =>
+                note.chapter ===
+                chapterId
+            )
+        };
+      },
+
+    getPYQs:
+      async (subjectId) => {
+        const db = getMockDB();
+
+        return {
+          success: true,
+
+          data:
+            db.pyqs.filter(
+              (pyq) =>
+                pyq.subject ===
+                subjectId
+            )
+        };
+      },
+
+    getTests:
+      async (
+        subjectId,
+        chapterId = null
+      ) => {
+        const db = getMockDB();
+
+        let tests =
+          db.tests.filter(
+            (test) =>
+              test.subject ===
+              subjectId
+          );
+
+        if (chapterId) {
+          tests =
+            tests.filter(
+              (test) =>
+                test.chapter?._id ===
+                chapterId
+            );
         }
-      };
-    }
+
+        return {
+          success: true,
+          data: tests
+        };
+      },
+
+    getTestDetail:
+      async (testId) => {
+        const db = getMockDB();
+
+        const test =
+          db.tests.find(
+            (item) =>
+              item._id === testId
+          );
+
+        if (!test) {
+          throw new Error(
+            'Test not found'
+          );
+        }
+
+        return {
+          success: true,
+          data: test
+        };
+      }
   },
 
   // ==========================================
-  // STUDENT ROUTES
+  // STUDENT
   // ==========================================
 
   student: {
@@ -754,41 +575,24 @@ const mockAPI = {
           ''
         );
 
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       const student =
-        db.students[
-          userId
-        ] || {
-          coins:
-            0,
-
-          xp:
-            0,
-
-          level:
-            1,
-
-          badges:
-            []
+        db.students[userId] || {
+          coins: 0,
+          xp: 0,
+          level: 1,
+          badges: []
         };
 
       const streak =
-        db.streaks[
-          userId
-        ] || {
-          currentStreak:
-            0,
-
-          longestStreak:
-            0
+        db.streaks[userId] || {
+          currentStreak: 0,
+          longestStreak: 0
         };
 
       return {
-        success:
-          true,
-
+        success: true,
         data: {
           student,
           streak
@@ -808,103 +612,74 @@ const mockAPI = {
           ''
         );
 
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       const user =
         db.users.find(
           (item) =>
-            item.id ===
-            userId
+            item.id === userId
         );
 
-      const student =
-        db.students[
-          userId
-        ];
-
       return {
-        success:
-          true,
+        success: true,
 
         data: {
           ...user,
-          ...student
+          ...db.students[userId]
         }
       };
     },
 
-    updateProfile: async (
-      data
-    ) => {
-      const token =
-        localStorage.getItem(
-          'token'
-        );
+    updateProfile:
+      async (data) => {
+        const token =
+          localStorage.getItem(
+            'token'
+          );
 
-      const userId =
-        token?.replace(
-          'mock_jwt_token_',
-          ''
-        );
+        const userId =
+          token?.replace(
+            'mock_jwt_token_',
+            ''
+          );
 
-      const db =
-        getMockDB();
+        const db = getMockDB();
 
-      const userIndex =
-        db.users.findIndex(
-          (item) =>
-            item.id ===
-            userId
-        );
+        const index =
+          db.users.findIndex(
+            (item) =>
+              item.id === userId
+          );
 
-      if (
-        userIndex !== -1
-      ) {
-        db.users[
-          userIndex
-        ] = {
-          ...db.users[
-            userIndex
-          ],
-
-          ...data
-        };
-      }
-
-      if (
-        db.students[
-          userId
-        ]
-      ) {
-        db.students[
-          userId
-        ] = {
-          ...db.students[
-            userId
-          ],
-
-          ...data
-        };
-      }
-
-      saveMockDB(db);
-
-      return {
-        success:
-          true,
-
-        data: {
-          ...db.users[
-            userIndex
-          ],
-
-          ...db.students[
-            userId
-          ]
+        if (index !== -1) {
+          db.users[index] = {
+            ...db.users[index],
+            ...data
+          };
         }
-      };
-    },
+
+        if (db.students[userId]) {
+          db.students[userId] = {
+            ...db.students[
+              userId
+            ],
+            ...data
+          };
+        }
+
+        saveMockDB(db);
+
+        return {
+          success: true,
+          data: {
+            ...(db.users[index] ||
+              {}),
+            ...(db.students[
+              userId
+            ] || {})
+          }
+        };
+      },
 
     getStreak: async () => {
       const token =
@@ -918,26 +693,16 @@ const mockAPI = {
           ''
         );
 
-      const db =
-        getMockDB();
-
-      const streak =
-        db.streaks[
-          userId
-        ] || {
-          currentStreak:
-            0,
-
-          longestStreak:
-            0
-        };
+      const db = getMockDB();
 
       return {
-        success:
-          true,
+        success: true,
 
         data:
-          streak
+          db.streaks[userId] || {
+            currentStreak: 0,
+            longestStreak: 0
+          }
       };
     },
 
@@ -953,37 +718,21 @@ const mockAPI = {
           ''
         );
 
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
-      if (
-        !db.streaks[
-          userId
-        ]
-      ) {
-        db.streaks[
-          userId
-        ] = {
-          user:
-            userId,
-
-          currentStreak:
-            1,
-
-          longestStreak:
-            1,
-
+      if (!db.streaks[userId]) {
+        db.streaks[userId] = {
+          user: userId,
+          currentStreak: 1,
+          longestStreak: 1,
           lastActiveDate:
             new Date().toISOString()
         };
       } else {
         const streak =
-          db.streaks[
-            userId
-          ];
+          db.streaks[userId];
 
-        streak.currentStreak +=
-          1;
+        streak.currentStreak += 1;
 
         streak.longestStreak =
           Math.max(
@@ -998,215 +747,173 @@ const mockAPI = {
       saveMockDB(db);
 
       return {
-        success:
-          true,
-
+        success: true,
         data:
-          db.streaks[
-            userId
-          ]
+          db.streaks[userId]
       };
     },
 
     getRewards: async () => {
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       return {
-        success:
-          true,
-
-        data:
-          db.rewards
+        success: true,
+        data: db.rewards
       };
     },
 
-    redeemReward: async (
-      rewardId
-    ) => {
-      const token =
-        localStorage.getItem(
-          'token'
-        );
+    redeemReward:
+      async (rewardId) => {
+        const token =
+          localStorage.getItem(
+            'token'
+          );
 
-      const userId =
-        token?.replace(
-          'mock_jwt_token_',
-          ''
-        );
+        const userId =
+          token?.replace(
+            'mock_jwt_token_',
+            ''
+          );
 
-      const db =
-        getMockDB();
+        const db = getMockDB();
 
-      const reward =
-        db.rewards.find(
-          (item) =>
-            item._id ===
-            rewardId
-        );
+        const reward =
+          db.rewards.find(
+            (item) =>
+              item._id === rewardId
+          );
 
-      const student =
-        db.students[
-          userId
-        ];
+        const student =
+          db.students[userId];
 
-      if (
-        !reward ||
-        !student
-      ) {
-        throw new Error(
-          'Reward or student not found'
-        );
-      }
-
-      if (
-        student.coins <
-        reward.cost
-      ) {
-        throw new Error(
-          'Not enough coins'
-        );
-      }
-
-      student.coins -=
-        reward.cost;
-
-      student.rewardsRedeemed =
-        student.rewardsRedeemed ||
-        [];
-
-      student.rewardsRedeemed.push(
-        rewardId
-      );
-
-      saveMockDB(db);
-
-      return {
-        success:
-          true,
-
-        data: {
-          reward,
-          coins:
-            student.coins
+        if (
+          !reward ||
+          !student
+        ) {
+          throw new Error(
+            'Reward or student not found'
+          );
         }
-      };
-    },
 
-    submitTest: async (
-      testId,
-      answers
-    ) => {
-      const token =
-        localStorage.getItem(
-          'token'
+        if (
+          student.coins <
+          reward.cost
+        ) {
+          throw new Error(
+            'Not enough coins'
+          );
+        }
+
+        student.coins -=
+          reward.cost;
+
+        student.rewardsRedeemed =
+          student.rewardsRedeemed ||
+          [];
+
+        student.rewardsRedeemed.push(
+          rewardId
         );
 
-      const userId =
-        token?.replace(
-          'mock_jwt_token_',
-          ''
-        );
+        saveMockDB(db);
 
-      const db =
-        getMockDB();
-
-      const test =
-        db.tests.find(
-          (item) =>
-            item._id ===
-            testId
-        );
-
-      if (!test) {
-        throw new Error(
-          'Test not found'
-        );
-      }
-
-      let correct = 0;
-
-      test.questions.forEach(
-        (questionId) => {
-          const question =
-            db.questions.find(
-              (item) =>
-                item._id ===
-                questionId
-            );
-
-          if (
-            question &&
-            answers[
-              questionId
-            ] ===
-              question.correctAnswer
-          ) {
-            correct += 1;
+        return {
+          success: true,
+          data: {
+            reward,
+            coins:
+              student.coins
           }
+        };
+      },
+
+    submitTest:
+      async (
+        testId,
+        answers
+      ) => {
+        const token =
+          localStorage.getItem(
+            'token'
+          );
+
+        const userId =
+          token?.replace(
+            'mock_jwt_token_',
+            ''
+          );
+
+        const db = getMockDB();
+
+        const test =
+          db.tests.find(
+            (item) =>
+              item._id === testId
+          );
+
+        if (!test) {
+          throw new Error(
+            'Test not found'
+          );
         }
-      );
 
-      const total =
-        test.questions.length;
+        let correct = 0;
 
-      const score =
-        total > 0
-          ? Math.round(
-              (correct /
-                total) *
-                100
-            )
-          : 0;
+        test.questions.forEach(
+          (questionId) => {
+            const question =
+              db.questions.find(
+                (item) =>
+                  item._id ===
+                  questionId
+              );
 
-      const result = {
-        _id:
-          'result_' +
-          Date.now(),
+            if (
+              question &&
+              answers[
+                questionId
+              ] ===
+                question.correctAnswer
+            ) {
+              correct += 1;
+            }
+          }
+        );
 
-        user:
-          userId,
+        const total =
+          test.questions.length;
 
-        test:
-          testId,
+        const score =
+          total > 0
+            ? Math.round(
+                (correct /
+                  total) *
+                  100
+              )
+            : 0;
 
-        answers,
+        const result = {
+          _id:
+            `result_${Date.now()}`,
+          user: userId,
+          test: testId,
+          answers,
+          correct,
+          total,
+          score,
+          createdAt:
+            new Date().toISOString()
+        };
 
-        correct,
+        db.results.push(result);
 
-        total,
+        saveMockDB(db);
 
-        score,
-
-        createdAt:
-          new Date().toISOString()
-      };
-
-      db.results.push(
-        result
-      );
-
-      if (
-        db.students[
-          userId
-        ]
-      ) {
-        db.students[
-          userId
-        ].xp +=
-          correct * 10;
-      }
-
-      saveMockDB(db);
-
-      return {
-        success:
-          true,
-
-        data:
-          result
-      };
-    },
+        return {
+          success: true,
+          data: result
+        };
+      },
 
     getResults: async () => {
       const token =
@@ -1220,12 +927,10 @@ const mockAPI = {
           ''
         );
 
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       return {
-        success:
-          true,
+        success: true,
 
         data:
           db.results.filter(
@@ -1238,8 +943,7 @@ const mockAPI = {
 
     getLeaderboard:
       async () => {
-        const db =
-          getMockDB();
+        const db = getMockDB();
 
         const leaderboard =
           Object.entries(
@@ -1259,19 +963,15 @@ const mockAPI = {
 
                 return {
                   userId,
-
                   name:
                     user?.name ||
                     'Student',
-
                   xp:
                     student.xp ||
                     0,
-
                   level:
                     student.level ||
                     1,
-
                   coins:
                     student.coins ||
                     0
@@ -1280,22 +980,18 @@ const mockAPI = {
             )
             .sort(
               (a, b) =>
-                b.xp -
-                a.xp
+                b.xp - a.xp
             );
 
         return {
-          success:
-            true,
-
-          data:
-            leaderboard
+          success: true,
+          data: leaderboard
         };
       }
   },
 
   // ==========================================
-  // TEACHER ROUTES
+  // TEACHER
   // ==========================================
 
   teacher: {
@@ -1311,124 +1007,88 @@ const mockAPI = {
           ''
         );
 
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       const user =
         db.users.find(
           (item) =>
-            item.id ===
-            userId
+            item.id === userId
         );
 
-      const teacher =
-        db.teachers[
-          userId
-        ];
-
       return {
-        success:
-          true,
+        success: true,
 
         data: {
           ...user,
-          ...teacher
+          ...db.teachers[userId]
         }
       };
     },
 
-    updateProfile: async (
-      data
-    ) => {
-      const token =
-        localStorage.getItem(
-          'token'
+    updateProfile:
+      async (data) => {
+        const token =
+          localStorage.getItem(
+            'token'
+          );
+
+        const userId =
+          token?.replace(
+            'mock_jwt_token_',
+            ''
         );
 
-      const userId =
-        token?.replace(
-          'mock_jwt_token_',
-          ''
-        );
+        const db = getMockDB();
 
-      const db =
-        getMockDB();
+        if (!db.teachers[userId]) {
+          db.teachers[userId] = {
+            user: userId
+          };
+        }
 
-      if (
-        !db.teachers[
-          userId
-        ]
-      ) {
-        db.teachers[
-          userId
-        ] = {
-          user:
+        db.teachers[userId] = {
+          ...db.teachers[
             userId
+          ],
+          ...data
         };
-      }
 
-      db.teachers[
-        userId
-      ] = {
-        ...db.teachers[
-          userId
-        ],
+        saveMockDB(db);
 
-        ...data
-      };
+        return {
+          success: true,
+          data:
+            db.teachers[userId]
+        };
+      },
 
-      saveMockDB(db);
+    createNote:
+      async (data) => {
+        const db = getMockDB();
 
-      return {
-        success:
-          true,
+        const note = {
+          _id:
+            `note_${Date.now()}`,
+          ...data
+        };
 
-        data:
-          db.teachers[
-            userId
-          ]
-      };
-    },
+        db.notes.push(note);
 
-    createNote: async (
-      data
-    ) => {
-      const db =
-        getMockDB();
+        saveMockDB(db);
 
-      const note = {
-        _id:
-          'note_' +
-          Date.now(),
-
-        ...data
-      };
-
-      db.notes.push(
-        note
-      );
-
-      saveMockDB(db);
-
-      return {
-        success:
-          true,
-
-        data:
-          note
-      };
-    },
+        return {
+          success: true,
+          data: note
+        };
+      },
 
     createQuestion:
       async (data) => {
-        const db =
-          getMockDB();
+        const db = getMockDB();
 
         const question = {
           _id:
-            'question_' +
-            Date.now(),
-
+            `question_${Date.now()}`,
           ...data
         };
 
@@ -1439,82 +1099,60 @@ const mockAPI = {
         saveMockDB(db);
 
         return {
-          success:
-            true,
-
-          data:
-            question
+          success: true,
+          data: question
         };
       },
 
-    createTest: async (
-      data
-    ) => {
-      const db =
-        getMockDB();
+    createTest:
+      async (data) => {
+        const db = getMockDB();
 
-      const test = {
-        _id:
-          'test_' +
-          Date.now(),
+        const test = {
+          _id:
+            `test_${Date.now()}`,
+          ...data
+        };
 
-        ...data
-      };
+        db.tests.push(test);
 
-      db.tests.push(
-        test
-      );
+        saveMockDB(db);
 
-      saveMockDB(db);
-
-      return {
-        success:
-          true,
-
-        data:
-          test
-      };
-    },
+        return {
+          success: true,
+          data: test
+        };
+      },
 
     getTests: async () => {
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       return {
-        success:
-          true,
-
-        data:
-          db.tests
+        success: true,
+        data: db.tests
       };
     },
 
     getResults: async () => {
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       return {
-        success:
-          true,
-
-        data:
-          db.results
+        success: true,
+        data: db.results
       };
     }
   },
 
   // ==========================================
-  // ADMIN ROUTES
+  // ADMIN MOCK
   // ==========================================
 
   admin: {
     getDashboard: async () => {
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       return {
-        success:
-          true,
+        success: true,
 
         data: {
           totalUsers:
@@ -1543,197 +1181,198 @@ const mockAPI = {
     },
 
     getUsers: async () => {
-      const db =
-        getMockDB();
+      const db = getMockDB();
 
       return {
-        success:
-          true,
-
-        data:
-          db.users
+        success: true,
+        data: db.users
       };
     },
 
-    updateUser: async (
-      userId,
-      data
-    ) => {
-      const db =
-        getMockDB();
+    createUser:
+      async (data) => {
+        const db = getMockDB();
 
-      const index =
-        db.users.findIndex(
-          (user) =>
-            user.id ===
-            userId
-        );
+        const user = {
+          id:
+            `user_${Date.now()}`,
+          ...data,
+          createdAt:
+            new Date().toISOString()
+        };
 
-      if (
-        index === -1
-      ) {
-        throw new Error(
-          'User not found'
-        );
-      }
+        db.users.push(user);
 
-      db.users[
-        index
-      ] = {
-        ...db.users[
-          index
-        ],
+        saveMockDB(db);
 
-        ...data
-      };
+        return {
+          success: true,
+          data: user
+        };
+      },
 
-      saveMockDB(db);
+    updateUser:
+      async (
+        userId,
+        data
+      ) => {
+        const db = getMockDB();
 
-      return {
-        success:
-          true,
+        const index =
+          db.users.findIndex(
+            (user) =>
+              user.id === userId
+          );
 
-        data:
-          db.users[
-            index
-          ]
-      };
-    },
+        if (index === -1) {
+          throw new Error(
+            'User not found'
+          );
+        }
 
-    deleteUser: async (
-      userId
-    ) => {
-      const db =
-        getMockDB();
+        db.users[index] = {
+          ...db.users[index],
+          ...data
+        };
 
-      db.users =
-        db.users.filter(
-          (user) =>
-            user.id !==
-            userId
-        );
+        saveMockDB(db);
 
-      delete db.students[
-        userId
-      ];
+        return {
+          success: true,
+          data:
+            db.users[index]
+        };
+      },
 
-      delete db.teachers[
-        userId
-      ];
+    deleteUser:
+      async (userId) => {
+        const db = getMockDB();
 
-      delete db.streaks[
-        userId
-      ];
+        db.users =
+          db.users.filter(
+            (user) =>
+              user.id !== userId
+          );
 
-      saveMockDB(db);
+        delete db.students[
+          userId
+        ];
 
-      return {
-        success:
-          true,
+        delete db.teachers[
+          userId
+        ];
 
-        message:
-          'User deleted'
-      };
-    },
+        delete db.streaks[
+          userId
+        ];
 
-    createSubject: async (
-      data
-    ) => {
-      const db =
-        getMockDB();
+        saveMockDB(db);
 
-      const subject = {
-        _id:
-          'subject_' +
-          Date.now(),
+        return {
+          success: true
+        };
+      },
 
-        ...data
-      };
+    createSubject:
+      async (data) => {
+        const db = getMockDB();
 
-      db.subjects.push(
-        subject
-      );
+        const subject = {
+          _id:
+            `subject_${Date.now()}`,
+          ...data
+        };
 
-      saveMockDB(db);
-
-      return {
-        success:
-          true,
-
-        data:
+        db.subjects.push(
           subject
-      };
-    },
+        );
 
-    createChapter: async (
-      data
-    ) => {
-      const db =
-        getMockDB();
+        saveMockDB(db);
 
-      const chapter = {
-        _id:
-          'chapter_' +
-          Date.now(),
+        return {
+          success: true,
+          data: subject
+        };
+      },
 
-        ...data
-      };
+    createChapter:
+      async (data) => {
+        const db = getMockDB();
 
-      db.chapters.push(
-        chapter
-      );
+        const chapter = {
+          _id:
+            `chapter_${Date.now()}`,
+          ...data
+        };
 
-      saveMockDB(db);
-
-      return {
-        success:
-          true,
-
-        data:
+        db.chapters.push(
           chapter
-      };
-    },
+        );
 
-    createReward: async (
-      data
-    ) => {
-      const db =
-        getMockDB();
+        saveMockDB(db);
 
-      const reward = {
-        _id:
-          'reward_' +
-          Date.now(),
+        return {
+          success: true,
+          data: chapter
+        };
+      },
 
-        ...data
-      };
+    createReward:
+      async (data) => {
+        const db = getMockDB();
 
-      db.rewards.push(
-        reward
-      );
+        const reward = {
+          _id:
+            `reward_${Date.now()}`,
+          ...data
+        };
 
-      saveMockDB(db);
-
-      return {
-        success:
-          true,
-
-        data:
+        db.rewards.push(
           reward
-      };
-    },
+        );
+
+        saveMockDB(db);
+
+        return {
+          success: true,
+          data: reward
+        };
+      },
+
+    // ========================================
+    // IMPORTANT FIX:
+    // ADMIN CREATE STUDY NOTE
+    // ========================================
+
+    createNote:
+      async (data) => {
+        const db = getMockDB();
+
+        const note = {
+          _id:
+            `note_${Date.now()}`,
+          ...data,
+          createdAt:
+            new Date().toISOString()
+        };
+
+        db.notes.push(note);
+
+        saveMockDB(db);
+
+        return {
+          success: true,
+          data: note
+        };
+      },
 
     getAllResults:
       async () => {
-        const db =
-          getMockDB();
+        const db = getMockDB();
 
         return {
-          success:
-            true,
-
-          data:
-            db.results
+          success: true,
+          data: db.results
         };
       }
   }
@@ -1769,10 +1408,11 @@ const executeRequest = async (
 export const authAPI = {
   register: async (data) => {
     try {
-      const response = await api.post(
-        '/auth/register',
-        data
-      );
+      const response =
+        await api.post(
+          '/auth/register',
+          data
+        );
 
       return response.data;
     } catch (error) {
@@ -1791,10 +1431,11 @@ export const authAPI = {
 
   login: async (data) => {
     try {
-      const response = await api.post(
-        '/auth/login',
-        data
-      );
+      const response =
+        await api.post(
+          '/auth/login',
+          data
+        );
 
       return response.data;
     } catch (error) {
@@ -1813,9 +1454,10 @@ export const authAPI = {
 
   getMe: async () => {
     try {
-      const response = await api.get(
-        '/auth/me'
-      );
+      const response =
+        await api.get(
+          '/auth/me'
+        );
 
       return response.data;
     } catch (error) {
@@ -1830,53 +1472,55 @@ export const authAPI = {
     }
   },
 
-  googleLogin: async (
-    credential
-  ) => {
-    try {
-      const response = await api.post(
-        '/auth/google',
-        {
-          credential
+  googleLogin:
+    async (credential) => {
+      try {
+        const response =
+          await api.post(
+            '/auth/google',
+            {
+              credential
+            }
+          );
+
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.auth.googleLogin(
+            credential
+          );
         }
-      );
 
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.auth.googleLogin(
-          credential
-        );
+        throw error;
       }
+    },
 
-      throw error;
-    }
-  },
+  completeProfile:
+    async (data) => {
+      try {
+        const response =
+          await api.put(
+            '/auth/complete-profile',
+            data
+          );
 
-  completeProfile: async (data) => {
-    try {
-      const response = await api.put(
-        '/auth/complete-profile',
-        data
-      );
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.auth.completeProfile(
+            data
+          );
+        }
 
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.auth.completeProfile(
-          data
-        );
+        throw error;
       }
-
-      throw error;
     }
-  }
 };
 
 // ============================================
@@ -1886,35 +1530,23 @@ export const authAPI = {
 export const contentAPI = {
   getSubjects: async () => {
     try {
-      const response = await api.get(
-        '/content/subjects'
-      );
-
-      const payload =
-        response?.data;
+      const response =
+        await api.get(
+          '/content/subjects'
+        );
 
       console.log(
-        'NAVTA API /content/subjects:',
-        payload
+        'NAVTA subjects response:',
+        response.data
       );
 
-      return payload;
+      return response.data;
     } catch (error) {
       console.error(
         'NAVTA getSubjects failed:',
-        {
-          url:
-            `${API_URL}/content/subjects`,
-
-          status:
-            error?.response?.status,
-
-          data:
-            error?.response?.data,
-
-          message:
-            error?.message
-        }
+        getApiErrorMessage(
+          error
+        )
       );
 
       if (
@@ -1928,126 +1560,135 @@ export const contentAPI = {
     }
   },
 
-  getChapters: async (subjectId) => {
-    try {
-      const response = await api.get(
-        `/content/subjects/${subjectId}/chapters`
-      );
+  getChapters:
+    async (subjectId) => {
+      try {
+        const response =
+          await api.get(
+            `/content/subjects/${subjectId}/chapters`
+          );
 
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.content.getChapters(
-          subjectId
-        );
-      }
-
-      throw error;
-    }
-  },
-
-  getNotes: async (chapterId) => {
-    try {
-      const response = await api.get(
-        `/content/chapters/${chapterId}/notes`
-      );
-
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.content.getNotes(
-          chapterId
-        );
-      }
-
-      throw error;
-    }
-  },
-
-  getPYQs: async (subjectId) => {
-    try {
-      const response = await api.get(
-        `/content/subjects/${subjectId}/pyqs`
-      );
-
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.content.getPYQs(
-          subjectId
-        );
-      }
-
-      throw error;
-    }
-  },
-
-  getTests: async (
-    subjectId,
-    chapterId = null
-  ) => {
-    try {
-      const params = {};
-
-      if (chapterId) {
-        params.chapterId =
-          chapterId;
-      }
-
-      const response = await api.get(
-        `/content/subjects/${subjectId}/tests`,
-        {
-          params
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.content.getChapters(
+            subjectId
+          );
         }
-      );
 
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.content.getTests(
-          subjectId,
-          chapterId
-        );
+        throw error;
       }
+    },
 
-      throw error;
-    }
-  },
+  getNotes:
+    async (chapterId) => {
+      try {
+        const response =
+          await api.get(
+            `/content/chapters/${chapterId}/notes`
+          );
 
-  getTestDetail: async (testId) => {
-    try {
-      const response = await api.get(
-        `/content/tests/${testId}`
-      );
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.content.getNotes(
+            chapterId
+          );
+        }
 
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.content.getTestDetail(
-          testId
-        );
+        throw error;
       }
+    },
 
-      throw error;
+  getPYQs:
+    async (subjectId) => {
+      try {
+        const response =
+          await api.get(
+            `/content/subjects/${subjectId}/pyqs`
+          );
+
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.content.getPYQs(
+            subjectId
+          );
+        }
+
+        throw error;
+      }
+    },
+
+  getTests:
+    async (
+      subjectId,
+      chapterId = null
+    ) => {
+      try {
+        const params = {};
+
+        if (chapterId) {
+          params.chapterId =
+            chapterId;
+        }
+
+        const response =
+          await api.get(
+            `/content/subjects/${subjectId}/tests`,
+            {
+              params
+            }
+          );
+
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.content.getTests(
+            subjectId,
+            chapterId
+          );
+        }
+
+        throw error;
+      }
+    },
+
+  getTestDetail:
+    async (testId) => {
+      try {
+        const response =
+          await api.get(
+            `/content/tests/${testId}`
+          );
+
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.content.getTestDetail(
+            testId
+          );
+        }
+
+        throw error;
+      }
     }
-  }
 };
-
 // ============================================
 // STUDENT API
 // ============================================
@@ -2055,9 +1696,10 @@ export const contentAPI = {
 export const studentAPI = {
   getDashboard: async () => {
     try {
-      const response = await api.get(
-        '/student/dashboard'
-      );
+      const response =
+        await api.get(
+          '/student/dashboard'
+        );
 
       return response.data;
     } catch (error) {
@@ -2074,9 +1716,10 @@ export const studentAPI = {
 
   getProfile: async () => {
     try {
-      const response = await api.get(
-        '/student/profile'
-      );
+      const response =
+        await api.get(
+          '/student/profile'
+        );
 
       return response.data;
     } catch (error) {
@@ -2091,33 +1734,36 @@ export const studentAPI = {
     }
   },
 
-  updateProfile: async (data) => {
-    try {
-      const response = await api.put(
-        '/student/profile',
-        data
-      );
+  updateProfile:
+    async (data) => {
+      try {
+        const response =
+          await api.put(
+            '/student/profile',
+            data
+          );
 
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.student.updateProfile(
-          data
-        );
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.student.updateProfile(
+            data
+          );
+        }
+
+        throw error;
       }
-
-      throw error;
-    }
-  },
+    },
 
   getStreak: async () => {
     try {
-      const response = await api.get(
-        '/student/streak'
-      );
+      const response =
+        await api.get(
+          '/student/streak'
+        );
 
       return response.data;
     } catch (error) {
@@ -2134,9 +1780,10 @@ export const studentAPI = {
 
   updateStreak: async () => {
     try {
-      const response = await api.post(
-        '/student/streak'
-      );
+      const response =
+        await api.post(
+          '/student/streak'
+        );
 
       return response.data;
     } catch (error) {
@@ -2153,9 +1800,10 @@ export const studentAPI = {
 
   getRewards: async () => {
     try {
-      const response = await api.get(
-        '/student/rewards'
-      );
+      const response =
+        await api.get(
+          '/student/rewards'
+        );
 
       return response.data;
     } catch (error) {
@@ -2170,62 +1818,67 @@ export const studentAPI = {
     }
   },
 
-  redeemReward: async (
-    rewardId
-  ) => {
-    try {
-      const response = await api.post(
-        `/student/rewards/${rewardId}/redeem`
-      );
+  redeemReward:
+    async (rewardId) => {
+      try {
+        const response =
+          await api.post(
+            `/student/rewards/${rewardId}/redeem`
+          );
 
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.student.redeemReward(
-          rewardId
-        );
-      }
-
-      throw error;
-    }
-  },
-
-  submitTest: async (
-    testId,
-    answers
-  ) => {
-    try {
-      const response = await api.post(
-        `/student/tests/${testId}/submit`,
-        {
-          answers
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.student.redeemReward(
+            rewardId
+          );
         }
-      );
 
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.student.submitTest(
-          testId,
-          answers
-        );
+        throw error;
       }
+    },
 
-      throw error;
-    }
-  },
+  submitTest:
+    async (
+      testId,
+      answers,
+      timeTaken = null
+    ) => {
+      try {
+        const response =
+          await api.post(
+            `/student/tests/${testId}/submit`,
+            {
+              answers,
+              timeTaken
+            }
+          );
+
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.student.submitTest(
+            testId,
+            answers
+          );
+        }
+
+        throw error;
+      }
+    },
 
   getResults: async () => {
     try {
-      const response = await api.get(
-        '/student/results'
-      );
+      const response =
+        await api.get(
+          '/student/results'
+        );
 
       return response.data;
     } catch (error) {
@@ -2240,24 +1893,45 @@ export const studentAPI = {
     }
   },
 
-  getLeaderboard: async () => {
-    try {
-      const response = await api.get(
-        '/student/leaderboard'
-      );
+  getResultDetail:
+    async (resultId) => {
+      const response =
+        await api.get(
+          `/student/results/${resultId}`
+        );
 
       return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.student.getLeaderboard();
-      }
+    },
 
-      throw error;
+  getAnalytics: async () => {
+    const response =
+      await api.get(
+        '/student/analytics'
+      );
+
+    return response.data;
+  },
+
+  getLeaderboard:
+    async () => {
+      try {
+        const response =
+          await api.get(
+            '/student/leaderboard'
+          );
+
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.student.getLeaderboard();
+        }
+
+        throw error;
+      }
     }
-  }
 };
 
 // ============================================
@@ -2267,9 +1941,10 @@ export const studentAPI = {
 export const teacherAPI = {
   getProfile: async () => {
     try {
-      const response = await api.get(
-        '/teacher/profile'
-      );
+      const response =
+        await api.get(
+          '/teacher/profile'
+        );
 
       return response.data;
     } catch (error) {
@@ -2284,99 +1959,98 @@ export const teacherAPI = {
     }
   },
 
-  updateProfile: async (data) => {
-    try {
-      const response = await api.put(
-        '/teacher/profile',
-        data
-      );
+  updateProfile:
+    async (data) => {
+      try {
+        const response =
+          await api.put(
+            '/teacher/profile',
+            data
+          );
 
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
       ) {
-        return mockAPI.teacher.updateProfile(
+          return mockAPI.teacher.updateProfile(
+            data
+          );
+        }
+
+        throw error;
+      }
+    },
+
+  createChapter:
+    async (data) => {
+      const response =
+        await api.post(
+          '/teacher/chapters',
           data
         );
-      }
-
-      throw error;
-    }
-  },
-
-  createNote: async (data) => {
-    try {
-      const response = await api.post(
-        '/teacher/notes',
-        data
-      );
 
       return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.teacher.createNote(
-          data
+    },
+
+  // ==========================================
+  // TEACHER STUDY NOTE
+  // Supports JSON and FormData
+  // ==========================================
+
+  createNote:
+    async (data) => {
+      const isFormData =
+        typeof FormData !==
+          'undefined' &&
+        data instanceof FormData;
+
+      const response =
+        await api.post(
+          '/teacher/notes',
+          data,
+          isFormData
+            ? {
+                headers: {
+                  'Content-Type':
+                    undefined
+                }
+              }
+            : undefined
         );
-      }
-
-      throw error;
-    }
-  },
-
-  createQuestion: async (data) => {
-    try {
-      const response = await api.post(
-        '/teacher/questions',
-        data
-      );
 
       return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.teacher.createQuestion(
+    },
+
+  createPYQ:
+    async (data) => {
+      const response =
+        await api.post(
+          '/teacher/pyqs',
           data
         );
-      }
-
-      throw error;
-    }
-  },
-
-  createTest: async (data) => {
-    try {
-      const response = await api.post(
-        '/teacher/tests',
-        data
-      );
 
       return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.teacher.createTest(
+    },
+
+  createTest:
+    async (data) => {
+      const response =
+        await api.post(
+          '/teacher/tests',
           data
         );
-      }
 
-      throw error;
-    }
-  },
+      return response.data;
+    },
 
   getTests: async () => {
     try {
-      const response = await api.get(
-        '/teacher/tests'
-      );
+      const response =
+        await api.get(
+          '/teacher/tests'
+        );
 
       return response.data;
     } catch (error) {
@@ -2393,9 +2067,10 @@ export const teacherAPI = {
 
   getResults: async () => {
     try {
-      const response = await api.get(
-        '/teacher/results'
-      );
+      const response =
+        await api.get(
+          '/teacher/results'
+        );
 
       return response.data;
     } catch (error) {
@@ -2408,7 +2083,47 @@ export const teacherAPI = {
 
       throw error;
     }
-  }
+  },
+
+  getStudentMetrics:
+    async () => {
+      const response =
+        await api.get(
+          '/teacher/student-metrics'
+        );
+
+      return response.data;
+    },
+
+  getQuestions: async () => {
+    const response =
+      await api.get(
+        '/teacher/questions'
+      );
+
+    return response.data;
+  },
+
+  createQuestion:
+    async (data) => {
+      const response =
+        await api.post(
+          '/teacher/questions',
+          data
+        );
+
+      return response.data;
+    },
+
+  deleteQuestion:
+    async (id) => {
+      const response =
+        await api.delete(
+          `/teacher/questions/${id}`
+        );
+
+      return response.data;
+    }
 };
 
 // ============================================
@@ -2416,32 +2131,12 @@ export const teacherAPI = {
 // ============================================
 
 export const adminAPI = {
-  // AdminDashboard.jsx uses getDashboardStats().
-  // Keep getDashboard() as well for older components.
-  getDashboardStats: async () => {
-    try {
-      const response = await api.get(
-        '/admin/dashboard'
-      );
-
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.admin.getDashboard();
-      }
-
-      throw error;
-    }
-  },
-
   getDashboard: async () => {
     try {
-      const response = await api.get(
-        '/admin/dashboard'
-      );
+      const response =
+        await api.get(
+          '/admin/dashboard'
+        );
 
       return response.data;
     } catch (error) {
@@ -2455,12 +2150,34 @@ export const adminAPI = {
       throw error;
     }
   },
+
+  getDashboardStats:
+    async () => {
+      try {
+        const response =
+          await api.get(
+            '/admin/dashboard-stats'
+          );
+
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.admin.getDashboard();
+        }
+
+        throw error;
+      }
+    },
 
   getUsers: async () => {
     try {
-      const response = await api.get(
-        '/admin/users'
-      );
+      const response =
+        await api.get(
+          '/admin/users'
+        );
 
       return response.data;
     } catch (error) {
@@ -2475,187 +2192,401 @@ export const adminAPI = {
     }
   },
 
-  createUser: async (data) => {
-    try {
-      const response = await api.post(
-        '/admin/users',
-        data
-      );
+  createUser:
+    async (data) => {
+      try {
+        const response =
+          await api.post(
+            '/admin/users',
+            data
+          );
 
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.admin.createUser(
-          data
-        );
-      }
-
-      throw error;
-    }
-  },
-
-  updateUser: async (
-    userId,
-    data
-  ) => {
-    try {
-      const response = await api.put(
-        `/admin/users/${userId}`,
-        data
-      );
-
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.admin.updateUser(
-          userId,
-          data
-        );
-      }
-
-      throw error;
-    }
-  },
-
-  deleteUser: async (userId) => {
-    try {
-      const response = await api.delete(
-        `/admin/users/${userId}`
-      );
-
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.admin.deleteUser(
-          userId
-        );
-      }
-
-      throw error;
-    }
-  },
-
-  // AdminDashboard.jsx uses getQuestions().
-  // NAVTA Test questions are managed under /navta-test/questions.
-  getQuestions: async () => {
-    try {
-      const response = await api.get(
-        '/navta-test/questions'
-      );
-
-      return response.data;
-    } catch (error) {
-      console.error(
-        'NAVTA admin getQuestions failed:',
-        {
-          status:
-            error?.response?.status,
-
-          data:
-            error?.response?.data,
-
-          message:
-            error?.message
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.admin.createUser(
+            data
+          );
         }
-      );
 
-      throw error;
-    }
-  },
+        throw error;
+      }
+    },
 
-  createSubject: async (data) => {
-    try {
-      const response = await api.post(
-        '/admin/subjects',
-        data
-      );
+  updateUser:
+    async (
+      userId,
+      data
+    ) => {
+      try {
+        const response =
+          await api.put(
+            `/admin/users/${userId}`,
+            data
+          );
 
-      return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.admin.createSubject(
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.admin.updateUser(
+            userId,
+            data
+          );
+        }
+
+        throw error;
+      }
+    },
+
+  updateStudentProfile:
+    async (
+      userId,
+      data
+    ) => {
+      const response =
+        await api.put(
+          `/admin/students/${userId}`,
           data
         );
-      }
-
-      throw error;
-    }
-  },
-
-  createChapter: async (data) => {
-    try {
-      const response = await api.post(
-        '/admin/chapters',
-        data
-      );
 
       return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.admin.createChapter(
-          data
+    },
+
+  deleteUser:
+    async (userId) => {
+      try {
+        const response =
+          await api.delete(
+            `/admin/users/${userId}`
+          );
+
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.admin.deleteUser(
+            userId
+          );
+        }
+
+        throw error;
+      }
+    },
+
+  // ==========================================
+  // SUBJECTS
+  // ==========================================
+
+  createSubject:
+    async (data) => {
+      try {
+        const response =
+          await api.post(
+            '/admin/subjects',
+            data
+          );
+
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.admin.createSubject(
+            data
+          );
+        }
+
+        throw error;
+      }
+    },
+
+  deleteSubject:
+    async (id) => {
+      const response =
+        await api.delete(
+          `/admin/subjects/${id}`
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // CHAPTERS
+  // ==========================================
+
+  createChapter:
+    async (data) => {
+      try {
+        const response =
+          await api.post(
+            '/teacher/chapters',
+            data
+          );
+
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.admin.createChapter(
+            data
+          );
+        }
+
+        throw error;
+      }
+    },
+
+  deleteChapter:
+    async (id) => {
+      const response =
+        await api.delete(
+          `/admin/chapters/${id}`
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // STUDY NOTES
+  //
+  // IMPORTANT FIX
+  //
+  // AdminDashboard.jsx sends FormData:
+  //
+  // chapterId
+  // subjectId
+  // exam
+  // className
+  // title
+  // content
+  // pdf
+  // OR pdfUrl
+  //
+  // Do NOT manually set multipart/form-data.
+  // Browser/Axios must generate the boundary.
+  // ==========================================
+
+  createNote:
+    async (data) => {
+      try {
+        const isFormData =
+          typeof FormData !==
+            'undefined' &&
+          data instanceof FormData;
+
+        let response;
+
+        if (isFormData) {
+          response =
+            await api.post(
+              '/teacher/notes',
+              data,
+              {
+                headers: {
+                  // Remove the default JSON
+                  // Content-Type so Axios/browser
+                  // can generate:
+                  //
+                  // multipart/form-data;
+                  // boundary=...
+                  //
+                  'Content-Type':
+                    undefined
+                }
+              }
+            );
+        } else {
+          response =
+            await api.post(
+              '/teacher/notes',
+              data
+            );
+        }
+
+        return response.data;
+      } catch (error) {
+        console.error(
+          'NAVTA createNote failed:',
+          error.response?.data ||
+            error.message
+        );
+
+        // FormData containing a File cannot
+        // meaningfully be persisted to the
+        // local mock database as the actual
+        // uploaded server PDF.
+        //
+        // Only use mock fallback for normal
+        // JSON note data.
+
+        const isFormData =
+          typeof FormData !==
+            'undefined' &&
+          data instanceof FormData;
+
+        if (
+          import.meta.env.DEV &&
+          !error.response &&
+          !isFormData
+        ) {
+          return mockAPI.admin.createNote(
+            data
+          );
+        }
+
+        throw new Error(
+          getApiErrorMessage(
+            error,
+            'Failed to upload study note.'
+          )
         );
       }
+    },
 
-      throw error;
-    }
-  },
-
-  createReward: async (data) => {
-    try {
-      const response = await api.post(
-        '/admin/rewards',
-        data
-      );
+  deleteNote:
+    async (id) => {
+      const response =
+        await api.delete(
+          `/admin/notes/${id}`
+        );
 
       return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.admin.createReward(
+    },
+
+  // ==========================================
+  // PYQ
+  // ==========================================
+
+  createPYQ:
+    async (data) => {
+      const response =
+        await api.post(
+          '/teacher/pyqs',
           data
         );
-      }
-
-      throw error;
-    }
-  },
-
-  getAllResults: async () => {
-    try {
-      const response = await api.get(
-        '/admin/results'
-      );
 
       return response.data;
-    } catch (error) {
-      if (
-        import.meta.env.DEV &&
-        !error.response
-      ) {
-        return mockAPI.admin.getAllResults();
-      }
+    },
 
-      throw error;
+  deletePYQ:
+    async (id) => {
+      const response =
+        await api.delete(
+          `/admin/pyqs/${id}`
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // REWARDS
+  // ==========================================
+
+  createReward:
+    async (data) => {
+      try {
+        const response =
+          await api.post(
+            '/admin/rewards',
+            data
+          );
+
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.admin.createReward(
+            data
+          );
+        }
+
+        throw error;
+      }
+    },
+
+  // ==========================================
+  // QUESTIONS
+  // ==========================================
+
+  getQuestions:
+    async () => {
+      const response =
+        await api.get(
+          '/admin/questions'
+        );
+
+      return response.data;
+    },
+
+  createQuestion:
+    async (data) => {
+      const response =
+        await api.post(
+          '/admin/questions',
+          data
+        );
+
+      return response.data;
+    },
+
+  deleteQuestion:
+    async (id) => {
+      const response =
+        await api.delete(
+          `/admin/questions/${id}`
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // TESTS
+  // ==========================================
+
+  createTest:
+    async (data) => {
+      const response =
+        await api.post(
+          '/teacher/tests',
+          data
+        );
+
+      return response.data;
+    },
+
+  getAllResults:
+    async () => {
+      try {
+        const response =
+          await api.get(
+            '/admin/results'
+          );
+
+        return response.data;
+      } catch (error) {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.admin.getAllResults();
+        }
+
+        throw error;
+      }
     }
-  }
 };
 
 // ============================================
@@ -2663,93 +2594,163 @@ export const adminAPI = {
 // ============================================
 
 export const navtaTestAPI = {
-  getConfig: async () => {
-    const response = await api.get(
-      '/navta-test/config'
-    );
+  // ==========================================
+  // GENERATE STANDARD TEST
+  // ==========================================
 
-    return response.data;
-  },
+  generateTest:
+    async (data) => {
+      const response =
+        await api.post(
+          '/navta-test/generate',
+          data
+        );
 
-  getChapters: async ({
-    subject,
-    exam,
-    classLevel
-  }) => {
-    const response = await api.get(
-      '/navta-test/chapters',
-      {
-        params: {
-          subject,
-          exam,
-          classLevel
-        }
-      }
-    );
+      return response.data;
+    },
 
-    return response.data;
-  },
+  // Alias used by some older components
+  generate:
+    async (data) => {
+      const response =
+        await api.post(
+          '/navta-test/generate',
+          data
+        );
 
-  getQuestionCount: async ({
-    subject,
-    exam,
-    classLevel,
-    chapter,
-    difficulty,
-    questionType
-  }) => {
-    const response = await api.get(
-      '/navta-test/question-count',
-      {
-        params: {
-          subject,
-          exam,
-          classLevel,
-          chapter,
-          difficulty,
-          questionType
-        }
-      }
-    );
+      return response.data;
+    },
 
-    return response.data;
-  },
+  // ==========================================
+  // GET QUESTIONS
+  // ==========================================
 
-  getQuestions: async ({
-    subject,
-    exam,
-    classLevel,
-    chapter,
-    difficulty,
-    questionType,
-    limit
-  }) => {
-    const response = await api.get(
-      '/navta-test/questions',
-      {
-        params: {
-          subject,
-          exam,
-          classLevel,
-          chapter,
-          difficulty,
-          questionType,
-          limit
-        }
-      }
-    );
+  getQuestions:
+    async (params = {}) => {
+      const response =
+        await api.get(
+          '/navta-test/questions',
+          {
+            params
+          }
+        );
 
-    return response.data;
-  },
+      return response.data;
+    },
 
-  completeTest: async (data) => {
-    const response = await api.post(
-      '/navta-test/complete',
-      data
-    );
+  // ==========================================
+  // CHECK MCQ ANSWER
+  // ==========================================
 
-    return response.data;
-  }
+  checkAnswer:
+    async (data) => {
+      const response =
+        await api.post(
+          '/navta-test/check-answer',
+          data
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // EVALUATE WRITTEN ANSWER
+  // ==========================================
+
+  evaluateWrittenAnswer:
+    async (data) => {
+      const response =
+        await api.post(
+          '/navta-test/evaluate-written',
+          data
+        );
+
+      return response.data;
+    },
+
+  // Alias
+  evaluateWritten:
+    async (data) => {
+      const response =
+        await api.post(
+          '/navta-test/evaluate-written',
+          data
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // SUBMIT TEST
+  // ==========================================
+
+  submitTest:
+    async (data) => {
+      const response =
+        await api.post(
+          '/navta-test/submit',
+          data
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // SAVE RESULT
+  // ==========================================
+
+  saveResult:
+    async (data) => {
+      const response =
+        await api.post(
+          '/navta-test/results',
+          data
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // BOSS BATTLE
+  // ==========================================
+
+  generateBossBattle:
+    async (data) => {
+      const response =
+        await api.post(
+          '/navta-test/boss-battle',
+          data
+        );
+
+      return response.data;
+    },
+
+  // Alias
+  generateBoss:
+    async (data) => {
+      const response =
+        await api.post(
+          '/navta-test/boss-battle',
+          data
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // REVENGE BATTLE
+  // ==========================================
+
+  generateRevenge:
+    async (data) => {
+      const response =
+        await api.post(
+          '/navta-test/revenge',
+          data
+        );
+
+      return response.data;
+    }
 };
 
 // ============================================
@@ -2757,50 +2758,148 @@ export const navtaTestAPI = {
 // ============================================
 
 export const mistakeNotebookAPI = {
-  getMistakes: async (
-    params = {}
-  ) => {
-    const response = await api.get(
-      '/mistake-notebook',
-      {
-        params
-      }
-    );
+  // ==========================================
+  // GET ALL MISTAKES
+  // ==========================================
 
-    return response.data;
-  },
+  getMistakes:
+    async (params = {}) => {
+      const response =
+        await api.get(
+          '/mistake-notebook',
+          {
+            params
+          }
+        );
 
-  getMistakeDetail: async (
-    mistakeId
-  ) => {
-    const response = await api.get(
-      `/mistake-notebook/${mistakeId}`
-    );
+      return response.data;
+    },
 
-    return response.data;
-  },
+  // Alias
+  getAll:
+    async (params = {}) => {
+      const response =
+        await api.get(
+          '/mistake-notebook',
+          {
+            params
+          }
+        );
 
-  updateMistake: async (
-    mistakeId,
-    data
-  ) => {
-    const response = await api.patch(
-      `/mistake-notebook/${mistakeId}`,
+      return response.data;
+    },
+
+  // ==========================================
+  // GET ONE MISTAKE
+  // ==========================================
+
+  getMistake:
+    async (id) => {
+      const response =
+        await api.get(
+          `/mistake-notebook/${id}`
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // SAVE MISTAKE
+  // ==========================================
+
+  addMistake:
+    async (data) => {
+      const response =
+        await api.post(
+          '/mistake-notebook',
+          data
+        );
+
+      return response.data;
+    },
+
+  // Aliases used by different versions
+  saveMistake:
+    async (data) => {
+      const response =
+        await api.post(
+          '/mistake-notebook',
+          data
+        );
+
+      return response.data;
+    },
+
+  create:
+    async (data) => {
+      const response =
+        await api.post(
+          '/mistake-notebook',
+          data
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // UPDATE MISTAKE
+  // ==========================================
+
+  updateMistake:
+    async (
+      id,
       data
-    );
+    ) => {
+      const response =
+        await api.put(
+          `/mistake-notebook/${id}`,
+          data
+        );
 
-    return response.data;
-  },
+      return response.data;
+    },
 
-  deleteMistake: async (
-    mistakeId
-  ) => {
-    const response = await api.delete(
-      `/mistake-notebook/${mistakeId}`
-    );
+  // ==========================================
+  // DELETE MISTAKE
+  // ==========================================
 
-    return response.data;
-  }
+  deleteMistake:
+    async (id) => {
+      const response =
+        await api.delete(
+          `/mistake-notebook/${id}`
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // MARK MASTERED
+  // ==========================================
+
+  markMastered:
+    async (id) => {
+      const response =
+        await api.patch(
+          `/mistake-notebook/${id}/mastered`
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // STATS
+  // ==========================================
+
+  getStats:
+    async () => {
+      const response =
+        await api.get(
+          '/mistake-notebook/stats'
+        );
+
+      return response.data;
+    }
 };
 
 // ============================================
@@ -2808,135 +2907,221 @@ export const mistakeNotebookAPI = {
 // ============================================
 
 export const panicModeAPI = {
-  getPlan: async () => {
-    const response = await api.get(
-      '/panic-mode/plan'
-    );
+  // ==========================================
+  // GET CURRENT PLAN
+  // ==========================================
 
-    return response.data;
-  },
+  getPlan:
+    async () => {
+      const response =
+        await api.get(
+          '/panic-mode/plan'
+        );
 
-  createPlan: async (data) => {
-    const response = await api.post(
-      '/panic-mode/plan',
+      return response.data;
+    },
+
+  // ==========================================
+  // CREATE PLAN
+  // ==========================================
+
+  createPlan:
+    async (data) => {
+      const response =
+        await api.post(
+          '/panic-mode/plan',
+          data
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // RESET PLAN
+  // ==========================================
+
+  resetPlan:
+    async () => {
+      const response =
+        await api.delete(
+          '/panic-mode/plan'
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // UPDATE CHAPTER PROGRESS
+  // ==========================================
+
+  updateChapterProgress:
+    async (
+      chapterId,
       data
-    );
+    ) => {
+      const response =
+        await api.patch(
+          `/panic-mode/chapters/${chapterId}`,
+          data
+        );
 
-    return response.data;
-  },
+      return response.data;
+    },
 
-  updateChapterProgress: async (
-    chapterId,
-    data
-  ) => {
-    const response = await api.patch(
-      `/panic-mode/chapters/${chapterId}`,
-      data
-    );
-
-    return response.data;
-  },
-    // ------------------------------------------
+  // ==========================================
   // GENERATE TARGETED PRACTICE
-  // ------------------------------------------
+  // ==========================================
 
-  generatePractice: async (
-    chapterId,
-    data = {}
-  ) => {
-    const response = await api.post(
-      `/panic-mode/chapters/${chapterId}/practice`,
+  generatePractice:
+    async (
+      chapterId,
+      data = {}
+    ) => {
+      const response =
+        await api.post(
+          `/panic-mode/chapters/${chapterId}/practice`,
+          data
+        );
+
+      return response.data;
+    },
+
+  // ==========================================
+  // CHECK PRACTICE ANSWER
+  // ==========================================
+
+  checkPracticeAnswer:
+    async (
+      chapterId,
       data
-    );
+    ) => {
+      const response =
+        await api.post(
+          `/panic-mode/chapters/${chapterId}/practice/check`,
+          data
+        );
 
-    return response.data;
-  },
+      return response.data;
+    },
 
-  // ------------------------------------------
-  // CHECK TARGETED PRACTICE ANSWER
-  // ------------------------------------------
+  // ==========================================
+  // COMPLETE PRACTICE
+  // ==========================================
 
-  checkPracticeAnswer: async (
-    chapterId,
-    data
-  ) => {
-    const response = await api.post(
-      `/panic-mode/chapters/${chapterId}/practice/check`,
-      data
-    );
+  completePractice:
+    async (
+      chapterId,
+      questionIds = []
+    ) => {
+      const response =
+        await api.post(
+          `/panic-mode/chapters/${chapterId}/practice/complete`,
+          {
+            questionIds
+          }
+        );
 
-    return response.data;
-  },
+      return response.data;
+    },
 
-  // ------------------------------------------
-  // COMPLETE TARGETED PRACTICE
-  // ------------------------------------------
+  // ==========================================
+  // START FIX TEST
+  // ==========================================
 
-  completePractice: async (
-    chapterId,
-    questionIds
-  ) => {
-    const response = await api.post(
-      `/panic-mode/chapters/${chapterId}/practice/complete`,
-      {
-        questionIds
-      }
-    );
+  startFixTest:
+    async (chapterId) => {
+      const response =
+        await api.post(
+          `/panic-mode/chapters/${chapterId}/fix-test/start`
+        );
 
-    return response.data;
-  },
+      return response.data;
+    },
 
-  // ------------------------------------------
-  // START SECURE FIX TEST
-  // ------------------------------------------
+  // ==========================================
+  // SUBMIT FIX TEST
+  // ==========================================
 
-  startFixTest: async (
-    chapterId,
-    data = {}
-  ) => {
-    const response = await api.post(
-      `/panic-mode/chapters/${chapterId}/fix-test/start`,
-      data
-    );
+  submitFixTest:
+    async (
+      chapterId,
+      attemptId,
+      answers
+    ) => {
+      const response =
+        await api.post(
+          `/panic-mode/chapters/${chapterId}/fix-test/submit`,
+          {
+            attemptId,
+            answers
+          }
+        );
 
-    return response.data;
-  },
+      return response.data;
+    },
 
-  // ------------------------------------------
-  // SUBMIT SECURE FIX TEST
-  // ------------------------------------------
+  // ==========================================
+  // GET PANIC MODE STATS
+  // ==========================================
 
-  submitFixTest: async (
-    chapterId,
-    attemptId,
-    answers
-  ) => {
-    const response = await api.post(
-      `/panic-mode/chapters/${chapterId}/fix-test/submit`,
-      {
-        attemptId,
-        answers
-      }
-    );
+  getStats:
+    async () => {
+      const response =
+        await api.get(
+          '/panic-mode/stats'
+        );
 
-    return response.data;
-  },
+      return response.data;
+    }
+};
 
-  // ------------------------------------------
-  // RESET PANIC PLAN
-  // ------------------------------------------
+// ============================================
+// NAVTA AI API
+// ============================================
 
-  resetPlan: async () => {
-    const response = await api.delete(
-      '/panic-mode/plan'
-    );
+export const navtaAIAPI = {
+  chat:
+    async (data) => {
+      const response =
+        await api.post(
+          '/ai/chat',
+          data
+        );
+
+      return response.data;
+    },
+
+  ask:
+    async (message) => {
+      const response =
+        await api.post(
+          '/ai/chat',
+          {
+            message
+          }
+        );
+
+      return response.data;
+    }
+};
+
+// ============================================
+// HEALTH API
+// ============================================
+
+export const healthAPI = {
+  check: async () => {
+    const response =
+      await api.get(
+        '/health'
+      );
 
     return response.data;
   }
 };
 
 // ============================================
-// DEFAULT AXIOS INSTANCE
+// DEFAULT AXIOS EXPORT
 // ============================================
 
 export default api;
