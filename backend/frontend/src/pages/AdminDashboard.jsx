@@ -581,6 +581,9 @@ const fetchData = async () => {
 
   setLoading(false);
 };
+  useEffect(() => {
+  fetchData();
+}, []);
 
 
   /*
@@ -644,20 +647,34 @@ const fetchData = async () => {
             selectedSubject
           );
 
-        setChapters(res.data || []);
+const chapterData =
+  Array.isArray(res)
+    ? res
+    : Array.isArray(res?.data)
+      ? res.data
+      : Array.isArray(res?.chapters)
+        ? res.chapters
+        : Array.isArray(
+              res?.data?.chapters
+            )
+          ? res.data.chapters
+          : [];
 
-        if (res.data?.length > 0) {
+setChapters(
+  chapterData
+);
 
-          setSelectedChapter(
-            res.data[0]._id ||
-            res.data[0].id
-          );
-
-        } else {
-
-          setSelectedChapter('');
-
-        }
+if (
+  chapterData.length > 0
+) {
+  setSelectedChapter(
+    chapterData[0]._id ||
+    chapterData[0].id ||
+    ''
+  );
+} else {
+  setSelectedChapter('');
+}
 
       } catch (err) {
 
