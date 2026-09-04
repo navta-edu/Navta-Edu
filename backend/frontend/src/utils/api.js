@@ -1526,62 +1526,418 @@ export const authAPI = {
 // ============================================
 // CONTENT API
 // ============================================
+//
+// NAVTA MASTER SUBJECT / CHAPTER SOURCE
+//
+// Study Notes and NAVTA Test now use the same backend
+// chapter configuration exposed by:
+//
+//   GET /api/content/navta-subjects
+//   GET /api/content/navta-chapters
+//
+// Existing MongoDB content routes are preserved for
+// notes, PYQs, tests and compatibility.
+// ============================================
+
+const navtaSubjectIdToName =
+  new Map();
+
+const normalizeNavtaSubjectName = (
+  value = ''
+) => {
+  const raw =
+    String(value || '').trim();
+
+  const lower =
+    raw.toLowerCase();
+
+  if (lower === 'physics') {
+    return 'Physics';
+  }
+
+  if (lower === 'chemistry') {
+    return 'Chemistry';
+  }
+
+  if (
+    lower === 'maths' ||
+    lower === 'math' ||
+    lower === 'mathematics'
+  ) {
+    return 'Maths';
+  }
+
+  if (
+    lower === 'biology' ||
+    lower === 'bio'
+  ) {
+    return 'Biology';
+  }
+
+  return raw;
+};
+
+const extractApiArray = (
+  payload,
+  preferredKey = ''
+) => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (
+    preferredKey &&
+    Array.isArray(
+      payload?.[preferredKey]
+    )
+  ) {
+    return payload[preferredKey];
+  }
+
+  if (Array.isArray(payload?.data)) {
+    return payload.data;
+  }
+
+  return [];
+};
 
 export const contentAPI = {
+  // ==========================================
+  // MASTER NAVTA SUBJECTS
+  // ==========================================
+  //
+  // This intentionally uses navta-subjects rather than
+  // the old MongoDB /content/subjects list so the
+  // Study Notes subject list always matches NAVTA Test.
+  // ==========================================
+
   getSubjects: async () => {
     try {
       const response =
         await api.get(
-          '/content/subjects'
+          '/content/navta-subjects'
+        );
+
+      const payload =
+        response.data || {};
+
+      const rawSubjects =
+        extractApiArray(
+          payload,
+          'subjects'
+        );
+
+      const subjects =
+        rawSubjects.map(
+          (subject, index) => {
+            const name =
+              normalizeNavtaSubjectName(
+                subject?.name ||
+                subject?.displayName ||
+                subject
+              );
+
+            const id =
+              String(
+                subject?._id ||
+                subject?.id ||
+                name ||
+                `navta-subject-${index + 1}`
+              );
+
+            if (name) {
+              navtaSubjectIdToName.set(
+                id,
+                name
+              );
+
+              navtaSubjectIdToName.set(
+                name,
+                name
+              );
+            }
+
+            return {
+              ...(typeof subject === 'object'
+                ? subject
+                : {}),
+
+              _id:
+                id,
+
+              id,
+
+              name,
+
+              displayName:
+                name === 'Maths'
+                  ? 'Mathematics'
+                  : name,
+
+              source:
+                'navta-test'
+            };
+          }
+        )
+        .filter(
+          (subject) =>
+            Boolean(subject.name)
         );
 
       console.log(
-        'NAVTA subjects response:',
-        response.data
+        'NAVTA master subjects loaded:',
+        subjects
       );
 
-      return response.data;
+      return {
+        success: true,
+        count: subjects.length,
+        data: subjects,
+        subjects
+      };
     } catch (error) {
       console.error(
         'NAVTA getSubjects failed:',
-        getApiErrorMessage(
-          error
-        )
+        getApiErrorMessage(error)
       );
+
+      // Keep the original endpoint as a compatibility
+      // fallback if an older backend is temporarily live.
+      try {
+        const fallbackResponse =
+          await api.get(
+            '/content/subjects'
+          );
+
+        return fallbackResponse.data;
+      } catch {
+        if (
+          import.meta.env.DEV &&
+          !error.response
+        ) {
+          return mockAPI.content.getSubjects();
+        }
+
+        throw error;
+      }
+    }
+  },
+
+  // Explicit alias for pages that want to clearly state
+  // that they are loading the NAVTA Test subject source.
+  getNavtaSubjects: async () => {
+    return contentAPI.getSubjects();
+  },
+
+  // ==========================================
+  // MASTER NAVTA CHAPTERS
+  // ==========================================
+  //
+  // Accepts either:
+  //
+  //   getChapters('Maths', 'Class 12')
+  //
+  // or the selected subject ID returned by getSubjects:
+  //
+  //   getChapters('navta-subject-3', 'Class 12')
+  //
+  // The ID is translated back to the real subject name.
+  // ==========================================
+
+  getChapters: async (
+    subjectOrId,
+    classLevel = ''
+  ) => {
+    const rawSubject =
+      String(subjectOrId || '').trim();
+
+    let subject =
+      navtaSubjectIdToName.get(
+        rawSubject
+      ) ||
+      normalizeNavtaSubjectName(
+        rawSubject
+      );
+
+    // Support backend IDs such as navta-subject-1 even
+    // when the in-memory map has not been populated yet.
+    // This is only a fallback; normally getSubjects()
+    // populates the exact mapping first.
+    const fallbackIdMap = {
+      'navta-subject-1': 'Physics',
+      'navta-subject-2': 'Chemistry',
+      'navta-subject-3': 'Maths',
+      'navta-subject-4': 'Biology'
+    };
+
+    subject =
+      fallbackIdMap[rawSubject] ||
+      subject;
+
+    try {
+      const params = {};
+
+      if (subject) {
+        params.subject =
+          subject;
+      }
+
+      if (classLevel) {
+        params.classLevel =
+          classLevel;
+      }
+
+      const response =
+        await api.get(
+          '/content/navta-chapters',
+          {
+            params
+          }
+        );
+
+      const payload =
+        response.data || {};
+
+      const rawChapters =
+        extractApiArray(
+          payload,
+          'chapters'
+        );
+
+      const chapters =
+        rawChapters.map(
+          (chapter, index) => {
+            const title =
+              String(
+                chapter?.title ||
+                chapter?.name ||
+                chapter?.chapter ||
+                ''
+              ).trim();
+
+            const chapterClass =
+              String(
+                chapter?.classLevel ||
+                chapter?.className ||
+                chapter?.class ||
+                classLevel ||
+                ''
+              ).trim();
+
+            const id =
+              String(
+                chapter?._id ||
+                chapter?.id ||
+                `${subject}-${chapterClass}-${index + 1}`
+              );
+
+            return {
+              ...chapter,
+
+              _id: id,
+              id,
+
+              title,
+              name: title,
+              chapter: title,
+
+              subject:
+                chapter?.subject ||
+                subject,
+
+              classLevel:
+                chapterClass,
+
+              className:
+                chapterClass,
+
+              chapterNumber:
+                Number(
+                  chapter?.chapterNumber
+                ) ||
+                index + 1,
+
+              source:
+                'navta-test'
+            };
+          }
+        )
+        .filter(
+          (chapter) =>
+            Boolean(chapter.title)
+        );
+
+      console.log(
+        `NAVTA master chapters loaded for ${subject || 'all subjects'}${
+          classLevel
+            ? ` / ${classLevel}`
+            : ''
+        }:`,
+        chapters
+      );
+
+      return {
+        success: true,
+        count: chapters.length,
+        subject,
+        classLevel,
+        data: chapters,
+        chapters
+      };
+    } catch (error) {
+      console.error(
+        'NAVTA getChapters failed:',
+        getApiErrorMessage(error)
+      );
+
+      // Compatibility fallback for older MongoDB chapter
+      // endpoints when a real MongoDB subject ObjectId is
+      // supplied.
+      if (
+        rawSubject &&
+        !rawSubject.startsWith(
+          'navta-subject-'
+        )
+      ) {
+        try {
+          const fallbackResponse =
+            await api.get(
+              `/content/subjects/${rawSubject}/chapters`
+            );
+
+          return fallbackResponse.data;
+        } catch {
+          // continue to final error handling
+        }
+      }
 
       if (
         import.meta.env.DEV &&
         !error.response
       ) {
-        return mockAPI.content.getSubjects();
+        return mockAPI.content.getChapters(
+          rawSubject
+        );
       }
 
       throw error;
     }
   },
 
-  getChapters:
-    async (subjectId) => {
-      try {
-        const response =
-          await api.get(
-            `/content/subjects/${subjectId}/chapters`
-          );
+  // Explicit alias used by the Study Notes/Admin flow.
+  getNavtaChapters: async (
+    subject,
+    classLevel = ''
+  ) => {
+    return contentAPI.getChapters(
+      subject,
+      classLevel
+    );
+  },
 
-        return response.data;
-      } catch (error) {
-        if (
-          import.meta.env.DEV &&
-          !error.response
-        ) {
-          return mockAPI.content.getChapters(
-            subjectId
-          );
-        }
-
-        throw error;
-      }
-    },
+  // ==========================================
+  // NOTES
+  // ==========================================
 
   getNotes:
     async (chapterId) => {
@@ -1606,6 +1962,10 @@ export const contentAPI = {
       }
     },
 
+  // ==========================================
+  // PYQS
+  // ==========================================
+
   getPYQs:
     async (subjectId) => {
       try {
@@ -1628,6 +1988,10 @@ export const contentAPI = {
         throw error;
       }
     },
+
+  // ==========================================
+  // TESTS
+  // ==========================================
 
   getTests:
     async (
@@ -1689,6 +2053,7 @@ export const contentAPI = {
       }
     }
 };
+
 // ============================================
 // STUDENT API
 // ============================================
