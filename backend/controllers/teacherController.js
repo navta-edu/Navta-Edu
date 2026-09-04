@@ -489,8 +489,48 @@ exports.createChapter = async (req, res) => {
 //
 // =====================================================
 
+// =====================================================
+// CREATE STUDY NOTE
+// =====================================================
+
 exports.createNote = async (req, res) => {
   try {
+    console.log('======================================');
+    console.log('NAVTA CREATE NOTE REQUEST');
+    console.log('======================================');
+
+    console.log('BODY:', req.body);
+
+    console.log(
+      'FILE:',
+      req.file
+        ? {
+            fieldname: req.file.fieldname,
+            originalname: req.file.originalname,
+            mimetype: req.file.mimetype,
+            size: req.file.size,
+            filename: req.file.filename,
+            path: req.file.path,
+            location: req.file.location
+          }
+        : null
+    );
+
+    console.log(
+      'USER:',
+      req.user
+        ? {
+            id: req.user.id,
+            _id: req.user._id,
+            role: req.user.role
+          }
+        : null
+    );
+
+    // =================================================
+    // BODY VALUES
+    // =================================================
+
     const {
       chapterId,
       chapterName,
@@ -503,52 +543,109 @@ exports.createNote = async (req, res) => {
       title,
       content,
       pdfUrl
-    } = req.body;
+    } = req.body || {};
 
-    // -----------------------------------------
-    // Validate title
-    // -----------------------------------------
+    // =================================================
+    // TITLE
+    // =================================================
 
-    if (!cleanString(title)) {
+    const finalTitle = cleanString(title);
+
+    if (!finalTitle) {
       return res.status(400).json({
         success: false,
-
-        message:
-          'Study Note title is required.'
+        message: 'Study Note title is required.'
       });
     }
 
-    // -----------------------------------------
-    // Validate content
-    // -----------------------------------------
+    // =================================================
+    // CONTENT
+    // =================================================
 
-    if (!cleanString(content)) {
+    const finalContent = cleanString(content);
+
+    if (!finalContent) {
       return res.status(400).json({
         success: false,
-
-        message:
-          'Study Note content is required.'
+        message: 'Study Note content is required.'
       });
     }
 
-    // -----------------------------------------
-    // 1. Try genuine MongoDB chapter ID
-    // -----------------------------------------
+    // =================================================
+    // USER
+    // =================================================
+
+    const uploadedBy =
+      req.user?._id ||
+      req.user?.id;
+
+    if (!uploadedBy) {
+      console.error(
+        'CREATE NOTE ERROR: req.user does not contain an ID.'
+      );
+
+      return res.status(401).json({
+        success: false,
+        message:
+          'Authenticated user ID was not found. Please log in again.'
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(uploadedBy)) {
+      console.error(
+        'CREATE NOTE ERROR: Invalid uploadedBy:',
+        uploadedBy
+      );
+
+      return res.status(400).json({
+        success: false,
+        message:
+          'Authenticated user has an invalid MongoDB ID.'
+      });
+    }
+
+    // =================================================
+    // FIND EXISTING CHAPTER BY REAL OBJECT ID
+    // =================================================
 
     let chapter = null;
 
-    if (isMongoObjectId(chapterId)) {
-      chapter =
-        await Chapter.findById(
-          chapterId
+    if (
+      chapterId &&
+      mongoose.Types.ObjectId.isValid(
+        cleanString(chapterId)
+      )
+    ) {
+      chapter = await Chapter.findById(
+        cleanString(chapterId)
+      );
+
+      if (chapter) {
+        console.log(
+          'Found chapter using MongoDB ID:',
+          chapter._id,
+          chapter.title
         );
+      }
     }
 
-    // -----------------------------------------
-    // 2. Resolve NAVTA master chapter
-    // -----------------------------------------
+    // =================================================
+    // RESOLVE NAVTA CHAPTER
+    // =================================================
 
     if (!chapter) {
+      console.log(
+        'Resolving NAVTA chapter:',
+        {
+          subjectId,
+          subjectName,
+          chapterName,
+          className,
+          classLevel,
+          exam
+        }
+      );
+
       const subject =
         await resolveSubjectForNavta({
           subjectId,
@@ -558,11 +655,16 @@ exports.createNote = async (req, res) => {
       if (!subject) {
         return res.status(400).json({
           success: false,
-
           message:
             'Subject could not be resolved for this Study Note.'
         });
       }
+
+      console.log(
+        'Resolved subject:',
+        subject._id,
+        subject.name
+      );
 
       chapter =
         await resolveChapterForNavta({
@@ -582,130 +684,220 @@ exports.createNote = async (req, res) => {
         });
     }
 
+    // =================================================
+    // CHAPTER MUST EXIST
+    // =================================================
+
     if (!chapter) {
+      console.error(
+        'CREATE NOTE ERROR: chapter could not be resolved.'
+      );
+
       return res.status(400).json({
         success: false,
-
         message:
           'Chapter could not be resolved. Please select the chapter again.'
       });
     }
 
-    // -----------------------------------------
-    // 3. Resolve PDF
-    // -----------------------------------------
+    console.log(
+      'Resolved chapter:',
+      chapter._id,
+      chapter.title
+    );
 
-    const uploadedPdfUrl =
-      cleanString(pdfUrl) ||
+    // =================================================
+    // PDF URL / FILE
+    // =================================================
 
-      cleanString(
-        req.file?.secure_url
-      ) ||
+    let finalPdfUrl =
+      cleanString(pdfUrl);
 
-      cleanString(
-        req.file?.url
-      ) ||
-
-      cleanString(
-        req.file?.location
-      ) ||
-
-      cleanString(
-        req.file?.path
-      ) ||
-
-      cleanString(
-        req.file?.filename
-      );
-
-    // -----------------------------------------
-    // Create Study Note
-    // -----------------------------------------
-
-    const notePayload = {
-      chapter:
-        chapter._id,
-
-      title:
-        cleanString(title),
-
-      content:
-        cleanString(content),
-
-      pdfUrl:
-        uploadedPdfUrl,
-
-      uploadedBy:
-        req.user?.id ||
-        req.user?._id
-    };
-
-    const note =
-      await Note.create(
-        notePayload
-      );
+    if (!finalPdfUrl && req.file) {
+      finalPdfUrl =
+        cleanString(req.file.secure_url) ||
+        cleanString(req.file.url) ||
+        cleanString(req.file.location) ||
+        cleanString(req.file.path) ||
+        cleanString(req.file.filename);
+    }
 
     console.log(
-      'NAVTA STUDY NOTE CREATED:',
-      {
-        noteId:
-          String(note._id),
-
-        chapterId:
-          String(chapter._id),
-
-        chapter:
-          chapter.title,
-
-        subject:
-          subjectName || '',
-
-        className:
-          className ||
-          classLevel ||
-          '',
-
-        exam:
-          exam || ''
-      }
+      'Resolved PDF value:',
+      finalPdfUrl || 'NO PDF'
     );
+
+    // =================================================
+    // FINAL PAYLOAD
+    // =================================================
+
+    const notePayload = {
+      chapter: chapter._id,
+
+      title: finalTitle,
+
+      content: finalContent,
+
+      uploadedBy:
+        new mongoose.Types.ObjectId(
+          String(uploadedBy)
+        )
+    };
+
+    if (finalPdfUrl) {
+      notePayload.pdfUrl =
+        finalPdfUrl;
+    }
+
+    console.log(
+      'NOTE PAYLOAD BEFORE DATABASE INSERT:',
+      notePayload
+    );
+
+    // =================================================
+    // DATABASE INSERT
+    // =================================================
+
+    const note =
+      new Note(notePayload);
+
+    console.log(
+      'Mongoose validation starting...'
+    );
+
+    await note.validate();
+
+    console.log(
+      'Mongoose validation successful.'
+    );
+
+    console.log(
+      'Saving Study Note to MongoDB...'
+    );
+
+    const savedNote =
+      await note.save();
+
+    // =================================================
+    // VERIFY INSERT
+    // =================================================
+
+    const verification =
+      await Note.findById(
+        savedNote._id
+      ).lean();
+
+    if (!verification) {
+      console.error(
+        'CRITICAL: Note.save() completed but verification failed.'
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          'Study Note could not be verified after saving.'
+      });
+    }
+
+    console.log('======================================');
+    console.log('STUDY NOTE SAVED SUCCESSFULLY');
+    console.log('NOTE ID:', savedNote._id);
+    console.log('TITLE:', savedNote.title);
+    console.log('CHAPTER:', savedNote.chapter);
+    console.log('PDF:', savedNote.pdfUrl || 'NONE');
+    console.log('======================================');
+
+    // =================================================
+    // SUCCESS
+    // =================================================
 
     return res.status(201).json({
       success: true,
 
       message:
-        'Study Note uploaded successfully.',
+        'Study Note uploaded and saved successfully.',
 
-      data:
-        note,
+      data: savedNote,
+
+      note: savedNote,
 
       resolvedChapter: {
-        _id:
-          chapter._id,
-
-        title:
-          chapter.title,
-
+        _id: chapter._id,
+        title: chapter.title,
         chapterNumber:
           chapter.chapterNumber
       }
     });
+
   } catch (error) {
+
+    console.error('======================================');
+    console.error('CREATE STUDY NOTE FAILED');
+    console.error('======================================');
+
     console.error(
-      'CREATE NOTE ERROR:',
-      error
+      'NAME:',
+      error?.name
     );
+
+    console.error(
+      'MESSAGE:',
+      error?.message
+    );
+
+    console.error(
+      'STACK:',
+      error?.stack
+    );
+
+    if (error?.errors) {
+      console.error(
+        'MONGOOSE VALIDATION ERRORS:',
+        error.errors
+      );
+    }
+
+    // Mongoose validation
+    if (error?.name === 'ValidationError') {
+      const validationMessages =
+        Object.values(
+          error.errors || {}
+        )
+          .map(
+            (item) =>
+              item.message
+          )
+          .filter(Boolean);
+
+      return res.status(400).json({
+        success: false,
+
+        message:
+          validationMessages.join(', ') ||
+          error.message ||
+          'Study Note validation failed.'
+      });
+    }
+
+    // Invalid MongoDB ObjectId
+    if (error?.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+
+        message:
+          `Invalid ${error.path || 'MongoDB'} value.`
+      });
+    }
 
     return res.status(500).json({
       success: false,
 
       message:
-        error.message ||
+        error?.message ||
         'Failed to create Study Note.'
     });
   }
 };
-
 // =====================================================
 // CREATE PYQ
 // =====================================================
