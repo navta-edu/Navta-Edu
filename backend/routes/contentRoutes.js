@@ -22,7 +22,7 @@ const {
 // =====================================================
 
 const chapterConfig = require(
-  "../config/navtachapters"
+  "../config/navtaChapters"
 );
 
 const router =
