@@ -2020,28 +2020,69 @@ export const contentAPI = {
   // NOTES
   // ==========================================
 
-  getNotes:
-    async (chapterId) => {
-      try {
-        const response =
-          await api.get(
-            `/content/chapters/${chapterId}/notes`
-          );
+getNotes: async (
+  chapterId,
+  {
+    chapterName = '',
+    subjectName = '',
+    className = '',
+    classLevel = '',
+    exam = ''
+  } = {}
+) => {
+  try {
+    const params = {};
 
-        return response.data;
-      } catch (error) {
-        if (
-          import.meta.env.DEV &&
-          !error.response
-        ) {
-          return mockAPI.content.getNotes(
-            chapterId
-          );
+    if (chapterName) {
+      params.chapterName = chapterName;
+    }
+
+    if (subjectName) {
+      params.subjectName = subjectName;
+    }
+
+    if (className) {
+      params.className = className;
+    }
+
+    if (classLevel) {
+      params.classLevel = classLevel;
+    }
+
+    if (exam) {
+      params.exam = exam;
+    }
+
+    const response =
+      await api.get(
+        `/content/chapters/${encodeURIComponent(
+          chapterId || 'local'
+        )}/notes`,
+        {
+          params
         }
+      );
 
-        throw error;
-      }
-    },
+    return response.data;
+  } catch (error) {
+    console.error(
+      'NAVTA getNotes failed:',
+      error?.response?.data ||
+      error?.message
+    );
+
+    if (
+      import.meta.env.DEV &&
+      !error.response
+    ) {
+      return mockAPI.content.getNotes(
+        chapterId
+      );
+    }
+
+    throw error;
+  }
+},
 
   // ==========================================
   // PYQS
