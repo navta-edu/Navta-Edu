@@ -365,225 +365,250 @@ export default function AdminDashboard() {
   */
 
 const fetchData = async () => {
-  setLoading(true);
+    setLoading(true);
 
-  // ===================================================
-  // LOAD EACH ADMIN RESOURCE INDEPENDENTLY
-  // ===================================================
-  //
-  // IMPORTANT:
-  // One failed API must NOT stop Subjects from loading.
-  // ===================================================
-
-  const [
-    statsResult,
-    usersResult,
-    subjectsResult,
-    questionsResult
-  ] = await Promise.allSettled([
-    adminAPI.getDashboardStats(),
-    adminAPI.getUsers(),
-    contentAPI.getSubjects(),
-    adminAPI.getQuestions()
-  ]);
-
-  // ===================================================
-  // DASHBOARD STATS
-  // ===================================================
-
-  if (statsResult.status === 'fulfilled') {
-    const response = statsResult.value;
-
-    console.log(
-      'NAVTA admin stats response:',
-      response
-    );
-
-    setStats(
-      response?.stats ||
-      response?.data?.stats ||
-      response?.data ||
-      null
-    );
-  } else {
-    console.error(
-      'Failed to load dashboard stats:',
-      statsResult.reason
-    );
-
-    setStats(null);
-  }
-
-  // ===================================================
-  // USERS
-  // ===================================================
-
-  if (usersResult.status === 'fulfilled') {
-    const response = usersResult.value;
-
-    console.log(
-      'NAVTA admin users response:',
-      response
-    );
-
-    const userData =
-      Array.isArray(response)
-        ? response
-        : Array.isArray(response?.data)
-          ? response.data
-          : Array.isArray(response?.users)
-            ? response.users
-            : [];
-
-    setUsers(userData);
-  } else {
-    console.error(
-      'Failed to load admin users:',
-      usersResult.reason
-    );
-
-    setUsers([]);
-  }
-
-  // ===================================================
-  // SUBJECTS
-  // ===================================================
-
-  if (subjectsResult.status === 'fulfilled') {
-    const response = subjectsResult.value;
-
-    console.log(
-      'NAVTA SUBJECT API RESPONSE:',
-      response
-    );
-
-    // Supports all common backend response formats:
+    // ===================================================
+    // NAVTA ADMIN SAFE API LOADER
+    // ===================================================
     //
-    // [...]
+    // A single slow or broken API request must NEVER keep
+    // the complete admin dashboard stuck on the spinner.
     //
-    // { data: [...] }
-    //
-    // { subjects: [...] }
-    //
-    // { success: true, data: [...] }
+    // Each request gets a 10 second timeout and all four
+    // resources are handled independently.
+    // ===================================================
 
-    let subjectData = [];
-
-    if (Array.isArray(response)) {
-      subjectData = response;
-    } else if (
-      Array.isArray(response?.data)
-    ) {
-      subjectData = response.data;
-    } else if (
-      Array.isArray(response?.subjects)
-    ) {
-      subjectData = response.subjects;
-    } else if (
-      Array.isArray(response?.data?.subjects)
-    ) {
-      subjectData =
-        response.data.subjects;
-    }
-
-    console.log(
-      `NAVTA loaded ${subjectData.length} subject(s):`,
-      subjectData
-    );
-
-    setSubjects(subjectData);
-
-    if (
-      subjectData.length > 0
-    ) {
-      setSelectedSubject(
-        (currentSubject) => {
-          // Keep current selection if it is valid.
-          const exists =
-            subjectData.some(
-              (subject) =>
-                String(
-                  subject._id ||
-                  subject.id
-                ) ===
-                String(currentSubject)
+    const withTimeout = (promise, name, timeoutMs = 10000) =>
+      Promise.race([
+        promise,
+        new Promise((_, reject) => {
+          const timer = setTimeout(() => {
+            clearTimeout(timer);
+            reject(
+              new Error(
+                `${name} request timed out after ${timeoutMs / 1000} seconds`
+              )
             );
+          }, timeoutMs);
+        })
+      ]);
 
-          if (
-            currentSubject &&
-            exists
-          ) {
-            return currentSubject;
-          }
+    try {
+      const [
+        statsResult,
+        usersResult,
+        subjectsResult,
+        questionsResult
+      ] = await Promise.allSettled([
+        withTimeout(
+          adminAPI.getDashboardStats(),
+          'Dashboard stats'
+        ),
+        withTimeout(
+          adminAPI.getUsers(),
+          'Users'
+        ),
+        withTimeout(
+          contentAPI.getSubjects(),
+          'Subjects'
+        ),
+        withTimeout(
+          adminAPI.getQuestions(),
+          'Questions'
+        )
+      ]);
 
-          return (
-            subjectData[0]._id ||
-            subjectData[0].id ||
-            ''
+      // =================================================
+      // DASHBOARD STATS
+      // =================================================
+
+      if (statsResult.status === 'fulfilled') {
+        const response = statsResult.value;
+
+        console.log(
+          'NAVTA STATS RESPONSE:',
+          response
+        );
+
+        setStats(
+          response?.stats ||
+          response?.data?.stats ||
+          response?.data ||
+          null
+        );
+      } else {
+        console.error(
+          'NAVTA STATS FAILED:',
+          statsResult.reason
+        );
+
+        setStats(null);
+      }
+
+      // =================================================
+      // USERS
+      // =================================================
+
+      if (usersResult.status === 'fulfilled') {
+        const response = usersResult.value;
+
+        console.log(
+          'NAVTA USERS RESPONSE:',
+          response
+        );
+
+        const userData =
+          Array.isArray(response)
+            ? response
+            : Array.isArray(response?.data)
+              ? response.data
+              : Array.isArray(response?.users)
+                ? response.users
+                : Array.isArray(response?.data?.users)
+                  ? response.data.users
+                  : [];
+
+        setUsers(userData);
+      } else {
+        console.error(
+          'NAVTA USERS FAILED:',
+          usersResult.reason
+        );
+
+        setUsers([]);
+      }
+
+      // =================================================
+      // SUBJECTS
+      // =================================================
+
+      if (subjectsResult.status === 'fulfilled') {
+        const response = subjectsResult.value;
+
+        console.log(
+          'NAVTA SUBJECT API RESPONSE:',
+          response
+        );
+
+        let subjectData = [];
+
+        if (Array.isArray(response)) {
+          subjectData = response;
+        } else if (Array.isArray(response?.data)) {
+          subjectData = response.data;
+        } else if (Array.isArray(response?.subjects)) {
+          subjectData = response.subjects;
+        } else if (
+          Array.isArray(response?.data?.subjects)
+        ) {
+          subjectData = response.data.subjects;
+        }
+
+        console.log(
+          `NAVTA loaded ${subjectData.length} subject(s):`,
+          subjectData
+        );
+
+        setSubjects(subjectData);
+
+        if (subjectData.length > 0) {
+          setSelectedSubject((currentSubject) => {
+            const currentStillExists =
+              subjectData.some(
+                (subject) =>
+                  String(
+                    subject._id ||
+                    subject.id
+                  ) ===
+                  String(currentSubject)
+              );
+
+            if (
+              currentSubject &&
+              currentStillExists
+            ) {
+              return currentSubject;
+            }
+
+            return (
+              subjectData[0]._id ||
+              subjectData[0].id ||
+              ''
+            );
+          });
+        } else {
+          setSelectedSubject('');
+
+          console.error(
+            'NAVTA SUBJECT ERROR: API completed but returned zero subjects.'
           );
         }
-      );
-    } else {
-      setSelectedSubject('');
+      } else {
+        console.error(
+          'NAVTA SUBJECTS FAILED:',
+          subjectsResult.reason
+        );
 
+        setSubjects([]);
+        setSelectedSubject('');
+      }
+
+      // =================================================
+      // QUESTIONS
+      // =================================================
+
+      if (
+        questionsResult.status ===
+        'fulfilled'
+      ) {
+        const response =
+          questionsResult.value;
+
+        console.log(
+          'NAVTA QUESTIONS RESPONSE:',
+          response
+        );
+
+        const questionData =
+          Array.isArray(response)
+            ? response
+            : Array.isArray(response?.data)
+              ? response.data
+              : Array.isArray(response?.questions)
+                ? response.questions
+                : Array.isArray(response?.data?.questions)
+                  ? response.data.questions
+                  : [];
+
+        setQuestions(
+          questionData
+        );
+      } else {
+        console.error(
+          'NAVTA QUESTIONS FAILED:',
+          questionsResult.reason
+        );
+
+        setQuestions([]);
+      }
+    } catch (error) {
       console.error(
-        'NAVTA SUBJECT ERROR: API succeeded but returned zero subjects.'
+        'NAVTA ADMIN DASHBOARD LOAD ERROR:',
+        error
       );
+    } finally {
+      // ===============================================
+      // CRITICAL:
+      // Spinner ALWAYS stops even when an API fails.
+      // ===============================================
+      setLoading(false);
     }
-  } else {
-    console.error(
-      'Failed to load NAVTA subjects:',
-      subjectsResult.reason
-    );
+  };
 
-    setSubjects([]);
-    setSelectedSubject('');
-  }
 
-  // ===================================================
-  // QUESTIONS
-  // ===================================================
-
-  if (
-    questionsResult.status ===
-    'fulfilled'
-  ) {
-    const response =
-      questionsResult.value;
-
-    console.log(
-      'NAVTA admin questions response:',
-      response
-    );
-
-    const questionData =
-      Array.isArray(response)
-        ? response
-        : Array.isArray(response?.data)
-          ? response.data
-          : Array.isArray(
-                response?.questions
-              )
-            ? response.questions
-            : [];
-
-    setQuestions(
-      questionData
-    );
-  } else {
-    console.error(
-      'Failed to load admin questions:',
-      questionsResult.reason
-    );
-
-    setQuestions([]);
-  }
-
-  setLoading(false);
-};
   useEffect(() => {
-  fetchData();
-}, []);
+    fetchData();
+  }, []);
 
 
   /*
