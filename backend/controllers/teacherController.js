@@ -1983,3 +1983,357 @@ exports.getNavtaTestChapters = async (req, res) => {
 // =====================================================
 // END OF teacherController.js
 // =====================================================
+// =====================================================
+// HELPER - NORMALISE QUESTION TYPE
+// =====================================================
+
+const normalizeQuestionType = (value) => {
+  if (!value) {
+    return 'mcq';
+  }
+
+  const type = String(value)
+    .trim()
+    .toLowerCase();
+
+  if (
+    [
+      'short',
+      'short answer',
+      'short-answer',
+      'short_answer',
+      'shortanswer'
+    ].includes(type)
+  ) {
+    return 'short';
+  }
+
+  if (
+    [
+      'long',
+      'long answer',
+      'long-answer',
+      'long_answer',
+      'longanswer'
+    ].includes(type)
+  ) {
+    return 'long';
+  }
+
+  return 'mcq';
+};
+
+// =====================================================
+// NAVTA TEST QUESTION BANK
+// PAPER BUILDER
+// =====================================================
+
+exports.getQuestionBank = async (req, res) => {
+  try {
+    const {
+      subject,
+      exam,
+      classLevel,
+      chapter,
+      difficulty,
+      questionType,
+      search
+    } = req.query;
+
+    const chapterFilter = {
+      isActive: true
+    };
+
+    if (subject) {
+      chapterFilter.subject = subject;
+    }
+
+    if (exam) {
+      chapterFilter.exam = exam;
+    }
+
+    if (classLevel) {
+      chapterFilter.classLevel = classLevel;
+    }
+
+    const chapterRecords =
+      await NavtaQuestion.find(
+        chapterFilter
+      )
+        .select('chapter')
+        .lean();
+
+    const chapters = [
+      ...new Set(
+        chapterRecords
+          .map(
+            (item) =>
+              item.chapter
+          )
+          .filter(
+            (item) =>
+              item &&
+              String(item).trim()
+          )
+          .map(
+            (item) =>
+              String(item).trim()
+          )
+      )
+    ].sort(
+      (a, b) =>
+        a.localeCompare(b)
+    );
+
+    const conditions = [
+      {
+        isActive: true
+      }
+    ];
+
+    if (subject) {
+      conditions.push({
+        subject
+      });
+    }
+
+    if (exam) {
+      conditions.push({
+        exam
+      });
+    }
+
+    if (classLevel) {
+      conditions.push({
+        classLevel
+      });
+    }
+
+    if (chapter) {
+      conditions.push({
+        chapter
+      });
+    }
+
+    if (difficulty) {
+      conditions.push({
+        difficulty
+      });
+    }
+
+    if (questionType) {
+      const type =
+        normalizeQuestionType(
+          questionType
+        );
+
+      if (type === 'mcq') {
+        conditions.push({
+          $or: [
+            {
+              questionType: 'mcq'
+            },
+            {
+              questionType: 'MCQ'
+            },
+            {
+              questionType: 'objective'
+            },
+            {
+              questionType: 'Objective'
+            },
+            {
+              questionType: {
+                $exists: false
+              }
+            },
+            {
+              questionType: null
+            },
+            {
+              questionType: ''
+            }
+          ]
+        });
+      }
+
+      if (type === 'short') {
+        conditions.push({
+          questionType: {
+            $in: [
+              'short',
+              'Short',
+              'short answer',
+              'Short Answer',
+              'short-answer',
+              'short_answer'
+            ]
+          }
+        });
+      }
+
+      if (type === 'long') {
+        conditions.push({
+          questionType: {
+            $in: [
+              'long',
+              'Long',
+              'long answer',
+              'Long Answer',
+              'long-answer',
+              'long_answer'
+            ]
+          }
+        });
+      }
+    }
+
+    if (
+      search &&
+      String(search).trim()
+    ) {
+      const regex =
+        new RegExp(
+          String(search).trim(),
+          'i'
+        );
+
+      conditions.push({
+        $or: [
+          {
+            question: regex
+          },
+          {
+            chapter: regex
+          },
+          {
+            subject: regex
+          }
+        ]
+      });
+    }
+
+    const mongoFilter =
+      conditions.length === 1
+        ? conditions[0]
+        : {
+            $and:
+              conditions
+          };
+
+    const questions =
+      await NavtaQuestion.find(
+        mongoFilter
+      )
+        .sort({
+          createdAt: -1
+        })
+        .lean();
+
+    const formattedQuestions =
+      questions.map(
+        (question) => {
+          const type =
+            normalizeQuestionType(
+              question.questionType
+            );
+
+          let defaultMarks =
+            Number(
+              question.maxMarks
+            );
+
+          if (
+            !Number.isFinite(
+              defaultMarks
+            ) ||
+            defaultMarks <= 0
+          ) {
+            if (
+              type === 'short'
+            ) {
+              defaultMarks = 3;
+            } else if (
+              type === 'long'
+            ) {
+              defaultMarks = 5;
+            } else {
+              defaultMarks = 1;
+            }
+          }
+
+          return {
+            _id:
+              question._id,
+
+            subject:
+              question.subject,
+
+            exam:
+              question.exam,
+
+            classLevel:
+              question.classLevel,
+
+            chapter:
+              question.chapter,
+
+            difficulty:
+              question.difficulty,
+
+            questionType:
+              type,
+
+            question:
+              question.question,
+
+            options:
+              Array.isArray(
+                question.options
+              )
+                ? question.options
+                : [],
+
+            maxMarks:
+              defaultMarks,
+
+            source:
+              'NAVTA Admin Bank',
+
+            sourceType:
+              'navta-test',
+
+            createdAt:
+              question.createdAt
+          };
+        }
+      );
+
+    return res.status(200).json({
+      success: true,
+
+      count:
+        formattedQuestions.length,
+
+      questions:
+        formattedQuestions,
+
+      chapters
+    });
+  } catch (error) {
+    console.error(
+      'GET NAVTA QUESTION BANK ERROR:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+
+      message:
+        'Failed to load NAVTA question bank.',
+
+      error:
+        error.message
+    });
+  }
+};
