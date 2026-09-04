@@ -1062,25 +1062,60 @@ const mockAPI = {
         };
       },
 
-    createNote:
-      async (data) => {
-        const db = getMockDB();
+createNote:
+  async (data) => {
+    try {
+      const isFormData =
+        typeof FormData !==
+          'undefined' &&
+        data instanceof FormData;
 
-        const note = {
-          _id:
-            `note_${Date.now()}`,
-          ...data
-        };
+      const response =
+        await api.post(
+          '/teacher/notes',
+          data,
+          {
+            // Study-note PDF uploads may take longer
+            // than normal API requests.
+            timeout: 180000,
 
-        db.notes.push(note);
+            headers:
+              isFormData
+                ? {
+                    'Content-Type':
+                      undefined
+                  }
+                : undefined
+          }
+        );
 
-        saveMockDB(db);
+      return response.data;
+    } catch (error) {
+      console.error(
+        'NAVTA createNote failed:',
+        {
+          status:
+            error?.response?.status,
 
-        return {
-          success: true,
-          data: note
-        };
-      },
+          data:
+            error?.response?.data,
+
+          message:
+            error?.message,
+
+          code:
+            error?.code
+        }
+      );
+
+      throw new Error(
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        'Failed to upload study note.'
+      );
+    }
+  },
 
     createQuestion:
       async (data) => {
