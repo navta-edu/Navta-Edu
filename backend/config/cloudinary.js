@@ -1,24 +1,4 @@
-const { v2: cloudinary } =
-  require("cloudinary");
-
-const requiredVariables = [
-  "CLOUDINARY_CLOUD_NAME",
-  "CLOUDINARY_API_KEY",
-  "CLOUDINARY_API_SECRET",
-];
-
-const missingVariables =
-  requiredVariables.filter(
-    (key) => !process.env[key]
-  );
-
-if (missingVariables.length > 0) {
-  console.warn(
-    `Cloudinary configuration missing: ${missingVariables.join(
-      ", "
-    )}`
-  );
-}
+const { v2: cloudinary } = require('cloudinary');
 
 cloudinary.config({
   cloud_name:
@@ -30,7 +10,7 @@ cloudinary.config({
   api_secret:
     process.env.CLOUDINARY_API_SECRET,
 
-  secure: true,
+  secure: true
 });
 
 module.exports = cloudinary;
