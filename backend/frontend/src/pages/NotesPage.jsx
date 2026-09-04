@@ -56,6 +56,26 @@ const SUBJECT_CONFIG = {
 
 const CLASSES = ["Class 11", "Class 12"];
 
+// Backend may return "Maths", "Math", or "Mathematics".
+// Study Notes uses "Mathematics" as the canonical local key.
+const getSubjectConfigKey = (subjectName = "") => {
+  const value = String(subjectName || "").trim().toLowerCase();
+
+  if (
+    value === "maths" ||
+    value === "math" ||
+    value === "mathematics"
+  ) {
+    return "Mathematics";
+  }
+
+  const matchingKey = Object.keys(SUBJECT_CONFIG).find(
+    (key) => key.toLowerCase() === value
+  );
+
+  return matchingKey || String(subjectName || "").trim();
+};
+
 /*
 |--------------------------------------------------------------------------
 | CHAPTER DATABASE
@@ -319,7 +339,7 @@ const findClassForChapter = (
   chapterName
 ) => {
   const subjectData =
-    STUDY_CHAPTERS[subjectName];
+    STUDY_CHAPTERS[getSubjectConfigKey(subjectName)];
 
   if (!subjectData) {
     return "";
@@ -485,7 +505,7 @@ export default function NotesPage() {
 
     const config =
       SUBJECT_CONFIG[
-        subjectName
+        getSubjectConfigKey(subjectName)
       ];
 
     let examForNotes =
@@ -548,7 +568,7 @@ export default function NotesPage() {
         const subjectName = selectedSubject.name;
 
         const localChapterNames =
-          STUDY_CHAPTERS[subjectName]?.[selectedClass] || [];
+          STUDY_CHAPTERS[getSubjectConfigKey(subjectName)]?.[selectedClass] || [];
 
         let backendChapters = [];
 
@@ -1064,13 +1084,8 @@ export default function NotesPage() {
             {subjects.map((subject) => {
 
               const config =
-                SUBJECT_CONFIG[subject.name] ||
                 SUBJECT_CONFIG[
-                  Object.keys(SUBJECT_CONFIG).find(
-                    (key) =>
-                      key.toLowerCase() ===
-                      subject.name?.toLowerCase()
-                  )
+                  getSubjectConfigKey(subject.name)
                 ];
 
               const Icon = config?.icon || BookOpen;
@@ -1140,7 +1155,7 @@ export default function NotesPage() {
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 sm:gap-4">
 
-            {(SUBJECT_CONFIG[selectedSubject.name]?.exams || []).map(
+            {(SUBJECT_CONFIG[getSubjectConfigKey(selectedSubject.name)]?.exams || []).map(
               (exam) => (
                 <button
                   key={exam}
