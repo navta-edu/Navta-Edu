@@ -28,7 +28,11 @@ const API_URL = normalizedEnvUrl
 
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 30000,
+
+  // 3 minutes.
+  // Needed for PDF Study Note uploads.
+  timeout: 180000,
+
   headers: {
     'Content-Type': 'application/json'
   }
@@ -43,12 +47,54 @@ api.interceptors.request.use(
     const token =
       localStorage.getItem('token');
 
-    if (token) {
-      config.headers =
-        config.headers || {};
+    config.headers =
+      config.headers || {};
 
+    if (token) {
       config.headers.Authorization =
         `Bearer ${token}`;
+    }
+
+    // ========================================
+    // FORM DATA / PDF UPLOAD FIX
+    // ========================================
+    //
+    // Do not send:
+    //
+    // Content-Type: application/json
+    //
+    // for FormData.
+    //
+    // The browser must generate:
+    //
+    // multipart/form-data;
+    // boundary=...
+    //
+    // automatically.
+    // ========================================
+
+    const isFormData =
+      typeof FormData !== 'undefined' &&
+      config.data instanceof FormData;
+
+    if (isFormData) {
+      if (
+        config.headers &&
+        typeof config.headers.delete ===
+          'function'
+      ) {
+        config.headers.delete(
+          'Content-Type'
+        );
+      } else {
+        delete config.headers[
+          'Content-Type'
+        ];
+
+        delete config.headers[
+          'content-type'
+        ];
+      }
     }
 
     return config;
@@ -2399,28 +2445,51 @@ export const teacherAPI = {
   // Supports JSON and FormData
   // ==========================================
 
+  // ==========================================
+  // TEACHER STUDY NOTE
+  // ==========================================
+
   createNote:
     async (data) => {
-      const isFormData =
-        typeof FormData !==
-          'undefined' &&
-        data instanceof FormData;
+      try {
+        const response =
+          await api.post(
+            '/teacher/notes',
+            data,
+            {
+              timeout: 180000
+            }
+          );
 
-      const response =
-        await api.post(
-          '/teacher/notes',
-          data,
-          isFormData
-            ? {
-                headers: {
-                  'Content-Type':
-                    undefined
-                }
-              }
-            : undefined
+        return response.data;
+      } catch (error) {
+        console.error(
+          'NAVTA TEACHER NOTE UPLOAD ERROR:',
+          {
+            status:
+              error?.response?.status,
+
+            data:
+              error?.response?.data,
+
+            message:
+              error?.message,
+
+            code:
+              error?.code,
+
+            timeout:
+              error?.config?.timeout
+          }
         );
 
-      return response.data;
+        throw new Error(
+          error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.message ||
+          'Failed to upload study note.'
+        );
+      }
     },
 
   createPYQ:
