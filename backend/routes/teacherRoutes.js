@@ -1,4 +1,5 @@
 const express = require('express');
+const multer = require('multer');
 
 const {
   protect,
@@ -24,12 +25,220 @@ const router = express.Router();
 
 
 // =====================================================
-// SAFETY CHECK
+// STUDY NOTE PDF UPLOAD
 // =====================================================
 //
-// This gives a clear startup error if teacherController
-// is missing one of the functions required below.
+// IMPORTANT:
 //
+// AdminDashboard sends Study Notes using FormData:
+//
+// title
+// content
+// subjectId
+// subjectName
+// chapterId
+// chapterName
+// exam
+// className
+// classLevel
+// pdf
+// pdfUrl
+//
+// express.json() does NOT parse multipart/form-data.
+//
+// Multer is therefore required before createNote.
+//
+// We use memory storage here so:
+// - req.body is parsed correctly
+// - req.file is available
+// - no missing uploads directory can crash Hostinger
+//
+// =====================================================
+
+const studyNoteUpload = multer({
+  storage: multer.memoryStorage(),
+
+  limits: {
+    // 25 MB PDF limit
+    fileSize: 25 * 1024 * 1024,
+
+    // Reasonable multipart field limits
+    fields: 30,
+    files: 1
+  },
+
+  fileFilter: (req, file, cb) => {
+    if (!file) {
+      return cb(null, true);
+    }
+
+    const mimeType =
+      String(
+        file.mimetype || ''
+      ).toLowerCase();
+
+    const fileName =
+      String(
+        file.originalname || ''
+      ).toLowerCase();
+
+    const isPdf =
+      mimeType ===
+        'application/pdf' ||
+      fileName.endsWith('.pdf');
+
+    if (!isPdf) {
+      return cb(
+        new Error(
+          'Only PDF files are allowed for Study Notes.'
+        )
+      );
+    }
+
+    return cb(null, true);
+  }
+});
+
+
+// =====================================================
+// MULTER ERROR WRAPPER
+// =====================================================
+
+const handleStudyNoteUpload = (
+  req,
+  res,
+  next
+) => {
+  studyNoteUpload.single('pdf')(
+    req,
+    res,
+    (error) => {
+      if (!error) {
+        return next();
+      }
+
+      console.error(
+        'STUDY NOTE UPLOAD ERROR:',
+        error
+      );
+
+      if (
+        error instanceof
+        multer.MulterError
+      ) {
+        if (
+          error.code ===
+          'LIMIT_FILE_SIZE'
+        ) {
+          return res.status(400).json({
+            success: false,
+
+            message:
+              'Study Note PDF is too large. Maximum size is 25 MB.'
+          });
+        }
+
+        return res.status(400).json({
+          success: false,
+
+          message:
+            `Study Note upload failed: ${error.message}`
+        });
+      }
+
+      return res.status(400).json({
+        success: false,
+
+        message:
+          error.message ||
+          'Unable to process Study Note PDF.'
+      });
+    }
+  );
+};
+
+
+// =====================================================
+// DEBUG STUDY NOTE REQUEST
+// =====================================================
+//
+// This runs AFTER Multer.
+//
+// It confirms that title/content/chapter metadata have
+// actually reached the backend.
+//
+// Do not log PDF bytes.
+//
+// =====================================================
+
+const debugStudyNoteRequest = (
+  req,
+  res,
+  next
+) => {
+  console.log(
+    'NAVTA STUDY NOTE REQUEST:',
+    {
+      title:
+        req.body?.title || '',
+
+      contentLength:
+        String(
+          req.body?.content ||
+          ''
+        ).length,
+
+      subjectId:
+        req.body?.subjectId ||
+        '',
+
+      subjectName:
+        req.body?.subjectName ||
+        '',
+
+      chapterId:
+        req.body?.chapterId ||
+        '',
+
+      chapterName:
+        req.body?.chapterName ||
+        '',
+
+      exam:
+        req.body?.exam ||
+        '',
+
+      className:
+        req.body?.className ||
+        '',
+
+      classLevel:
+        req.body?.classLevel ||
+        '',
+
+      hasPdf:
+        Boolean(req.file),
+
+      pdfName:
+        req.file?.originalname ||
+        '',
+
+      pdfSize:
+        req.file?.size ||
+        0,
+
+      pdfUrl:
+        req.body?.pdfUrl ||
+        ''
+    }
+  );
+
+  next();
+};
+
+
+// =====================================================
+// SAFETY CHECK
 // =====================================================
 
 const requiredTeacherControllers = {
@@ -41,10 +250,16 @@ const requiredTeacherControllers = {
   getQuestionBank
 };
 
-for (const [name, handler] of Object.entries(
-  requiredTeacherControllers
-)) {
-  if (typeof handler !== 'function') {
+for (
+  const [name, handler]
+  of Object.entries(
+    requiredTeacherControllers
+  )
+) {
+  if (
+    typeof handler !==
+    'function'
+  ) {
     throw new Error(
       `teacherRoutes.js: teacherController.${name} is missing or is not exported correctly.`
     );
@@ -62,10 +277,16 @@ const requiredAdminControllers = {
   deleteQuestion
 };
 
-for (const [name, handler] of Object.entries(
-  requiredAdminControllers
-)) {
-  if (typeof handler !== 'function') {
+for (
+  const [name, handler]
+  of Object.entries(
+    requiredAdminControllers
+  )
+) {
+  if (
+    typeof handler !==
+    'function'
+  ) {
     throw new Error(
       `teacherRoutes.js: adminController.${name} is missing or is not exported correctly.`
     );
@@ -74,7 +295,7 @@ for (const [name, handler] of Object.entries(
 
 
 // =====================================================
-// LOGIN REQUIRED FOR ALL TEACHER ROUTES
+// LOGIN REQUIRED
 // =====================================================
 
 router.use(protect);
@@ -82,25 +303,6 @@ router.use(protect);
 
 // =====================================================
 // NAVTA QUESTION BANK / PAPER BUILDER
-// =====================================================
-//
-// Reads questions directly from the NAVTA Test
-// question bank.
-//
-// Available to:
-// - Teacher
-// - External Teacher
-// - Admin
-//
-// Example:
-//
-// GET /api/teacher/question-bank
-//
-// GET /api/teacher/question-bank
-//   ?subject=Physics
-//   &exam=JEE
-//   &classLevel=Class%2012
-//
 // =====================================================
 
 router.get(
@@ -169,14 +371,6 @@ router.delete(
 // =====================================================
 // CREATE / RESOLVE CHAPTER
 // =====================================================
-//
-// Used by Study Notes.
-//
-// Your updated teacherController can resolve NAVTA Test
-// chapter names and create/find the corresponding
-// MongoDB Chapter.
-//
-// =====================================================
 
 router.post(
   '/chapters',
@@ -194,23 +388,17 @@ router.post(
 // CREATE STUDY NOTE
 // =====================================================
 //
-// Expected body can contain:
+// Order is important:
 //
-// title
-// content
-// chapterId
-// chapterName
-// subjectId
-// subjectName
-// exam
-// className
-// classLevel
-// chapterNumber
-// pdfUrl
-//
-// NAVTA Test chapter names can therefore be resolved by
-// teacherController instead of requiring the frontend
-// to already have a MongoDB Chapter ObjectId.
+// authorize
+//   ↓
+// Multer parses multipart/form-data
+//   ↓
+// req.body becomes available
+//   ↓
+// req.file becomes available
+//   ↓
+// controller receives title/content/chapter data
 //
 // =====================================================
 
@@ -221,6 +409,10 @@ router.post(
     'teacher',
     'admin'
   ),
+
+  handleStudyNoteUpload,
+
+  debugStudyNoteRequest,
 
   createNote
 );
