@@ -28,10 +28,22 @@ const NAVTA_AI_TIMEOUT_MS = Math.max(
 const NAVTA_AI_PAGES_PER_REQUEST = Math.max(
   1,
   Math.min(
-    8,
+    3,
     Number(
-      process.env.NAVTA_AI_PAGES_PER_REQUEST || 5
-    ) || 5
+      process.env.NAVTA_AI_PAGES_PER_REQUEST || 1
+    ) || 1
+  )
+);
+
+// Retry only pages/batches that unexpectedly return zero questions.
+// This improves completeness without doubling every Gemini request.
+const NAVTA_AI_EMPTY_BATCH_RETRIES = Math.max(
+  0,
+  Math.min(
+    2,
+    Number(
+      process.env.NAVTA_AI_EMPTY_BATCH_RETRIES || 1
+    ) || 1
   )
 );
 
@@ -887,6 +899,18 @@ TASK:
 
 Detect every COMPLETE and READABLE academic question on every supplied page.
 
+COMPLETENESS RULES — VERY IMPORTANT:
+
+- Scan EACH page from top to bottom and left to right.
+- Do not stop after finding the first few questions.
+- Return every visible complete question on the supplied page(s).
+- Treat every visible question number / numbered stem as a separate candidate.
+- If a page contains 12 readable questions, return 12 questions.
+- Never invent a duplicate question to increase the count.
+- Do not repeat the same question with slightly different wording.
+- Preserve the original question number whenever it is visible.
+- If the same question is visible more than once due to page overlap, return it only once.
+
 IMPORTANT RULES:
 
 1. The original rendered page is authoritative.
@@ -1442,57 +1466,371 @@ const analyseNavtaPage =
   };
 
 // =====================================================
-// REMOVE DUPLICATES
+// STRONG QUESTION DEDUPLICATION
+// =====================================================
+//
+// Gemini can occasionally return the same question twice with:
+// - different whitespace
+// - different LaTeX delimiters
+// - a slightly different question-number prefix
+// - tiny punctuation differences
+//
+// NAVTA therefore creates a canonical fingerprint and also
+// performs a conservative near-duplicate comparison.
 // =====================================================
 
-const removeExactDuplicates = (
+const normalizeQuestionForFingerprint = (
+  value = ""
+) => {
+  return cleanString(
+    value
+  )
+    .toLowerCase()
+    .replace(
+      /^\s*(?:q(?:uestion)?\.?\s*)?\d+[a-z]?\s*[\).:\-]\s*/i,
+      ""
+    )
+    .replace(
+      /\$\$?/g,
+      " "
+    )
+    .replace(
+      /\\(?:left|right|mathrm|mathbf|mathit|text)\b/g,
+      ""
+    )
+    .replace(
+      /\\begin\{[^}]+\}|\\end\{[^}]+\}/g,
+      " "
+    )
+    .replace(
+      /\\[,;:! ]/g,
+      " "
+    )
+    .replace(
+      /[^a-z0-9]+/g,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+};
+
+const getQuestionFingerprint = (
+  question = {}
+) => {
+  const stem =
+    normalizeQuestionForFingerprint(
+      question?.question
+    );
+
+  const options =
+    safeArray(
+      question?.options
+    )
+      .map(
+        normalizeQuestionForFingerprint
+      )
+      .filter(Boolean)
+      .join("|");
+
+  if (
+    !stem
+  ) {
+    return "";
+  }
+
+  return [
+    stem,
+    options,
+  ].join("||");
+};
+
+const tokenSet = (
+  value = ""
+) => {
+  return new Set(
+    normalizeQuestionForFingerprint(
+      value
+    )
+      .split(" ")
+      .filter(
+        (token) =>
+          token.length > 1
+      )
+  );
+};
+
+const jaccardSimilarity = (
+  left = "",
+  right = ""
+) => {
+  const a =
+    tokenSet(left);
+
+  const b =
+    tokenSet(right);
+
+  if (
+    a.size === 0 ||
+    b.size === 0
+  ) {
+    return 0;
+  }
+
+  let intersection =
+    0;
+
+  for (
+    const token of a
+  ) {
+    if (
+      b.has(token)
+    ) {
+      intersection +=
+        1;
+    }
+  }
+
+  const union =
+    a.size +
+    b.size -
+    intersection;
+
+  return union > 0
+    ? intersection / union
+    : 0;
+};
+
+const sameOptions = (
+  a = {},
+  b = {}
+) => {
+  const left =
+    safeArray(
+      a?.options
+    )
+      .map(
+        normalizeQuestionForFingerprint
+      );
+
+  const right =
+    safeArray(
+      b?.options
+    )
+      .map(
+        normalizeQuestionForFingerprint
+      );
+
+  if (
+    left.length !==
+      right.length
+  ) {
+    return false;
+  }
+
+  if (
+    left.length ===
+      0
+  ) {
+    return true;
+  }
+
+  return left.every(
+    (value, index) =>
+      value ===
+      right[index]
+  );
+};
+
+const areLikelyDuplicateQuestions = (
+  a = {},
+  b = {}
+) => {
+  const aFingerprint =
+    getQuestionFingerprint(
+      a
+    );
+
+  const bFingerprint =
+    getQuestionFingerprint(
+      b
+    );
+
+  if (
+    !aFingerprint ||
+    !bFingerprint
+  ) {
+    return false;
+  }
+
+  if (
+    aFingerprint ===
+    bFingerprint
+  ) {
+    return true;
+  }
+
+  const aNumber =
+    cleanString(
+      a?.questionNumber
+    ).toLowerCase();
+
+  const bNumber =
+    cleanString(
+      b?.questionNumber
+    ).toLowerCase();
+
+  const sameNumber =
+    aNumber &&
+    bNumber &&
+    aNumber ===
+      bNumber;
+
+  const similarity =
+    jaccardSimilarity(
+      a?.question,
+      b?.question
+    );
+
+  // Strong rule: same visible question number and very similar stem.
+  if (
+    sameNumber &&
+    similarity >= 0.88
+  ) {
+    return true;
+  }
+
+  // Conservative rule for duplicates where Gemini changed the number
+  // or one result lost the number. Require almost identical wording
+  // AND identical options so genuinely different questions survive.
+  if (
+    similarity >= 0.96 &&
+    sameOptions(
+      a,
+      b
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
+const questionCompletenessScore = (
+  question = {}
+) => {
+  let score =
+    normalizeQuestionForFingerprint(
+      question?.question
+    ).length;
+
+  score +=
+    safeArray(
+      question?.options
+    )
+      .filter(Boolean)
+      .length *
+    80;
+
+  if (
+    Number.isInteger(
+      question?.correctAnswer
+    )
+  ) {
+    score +=
+      40;
+  }
+
+  if (
+    question?.questionBoundingBox
+  ) {
+    score +=
+      30;
+  }
+
+  if (
+    question?.hasVisual &&
+    question?.visualBoundingBox
+  ) {
+    score +=
+      30;
+  }
+
+  if (
+    cleanString(
+      question?.chapter
+    )
+  ) {
+    score +=
+      10;
+  }
+
+  return score;
+};
+
+const removeQuestionDuplicates = (
   questions = []
 ) => {
-  const seen =
-    new Set();
-
   const result =
     [];
 
+  let removed =
+    0;
+
   for (
-    const question of
+    const candidate of
     safeArray(
       questions
     )
   ) {
-    const key = [
-      Number(
-        question?.sourcePage
-      ) || 0,
-
-      cleanString(
-        question?.questionNumber
-      ).toLowerCase(),
-
-      cleanString(
-        question?.question
-      )
-        .replace(
-          /\s+/g,
-          " "
-        )
-        .toLowerCase(),
-    ].join("|");
+    const duplicateIndex =
+      result.findIndex(
+        (existing) =>
+          areLikelyDuplicateQuestions(
+            existing,
+            candidate
+          )
+      );
 
     if (
-      seen.has(
-        key
-      )
+      duplicateIndex ===
+      -1
     ) {
+      result.push(
+        candidate
+      );
+
       continue;
     }
 
-    seen.add(
-      key
-    );
+    removed +=
+      1;
 
-    result.push(
-      question
+    // Keep whichever copy contains more useful information.
+    if (
+      questionCompletenessScore(
+        candidate
+      ) >
+      questionCompletenessScore(
+        result[
+          duplicateIndex
+        ]
+      )
+    ) {
+      result[
+        duplicateIndex
+      ] =
+        candidate;
+    }
+  }
+
+  if (
+    removed > 0
+  ) {
+    console.log(
+      `NAVTA AI removed ${removed} duplicate question(s) before admin review.`
     );
   }
 
@@ -1587,15 +1925,85 @@ const analyseRenderedPages =
         `NAVTA AI analysing page batch: ${pageNumbers}`
       );
 
-      const batchQuestions =
-        await analyseRenderedPageBatch({
-          pages:
-            batch,
+      let batchQuestions =
+        [];
 
-          text,
+      let lastError =
+        null;
 
-          hints,
-        });
+      const attempts =
+        1 +
+        NAVTA_AI_EMPTY_BATCH_RETRIES;
+
+      for (
+        let attempt = 1;
+        attempt <=
+          attempts;
+        attempt += 1
+      ) {
+        try {
+          batchQuestions =
+            await analyseRenderedPageBatch({
+              pages:
+                batch,
+
+              text,
+
+              hints,
+            });
+
+          lastError =
+            null;
+
+          if (
+            batchQuestions.length >
+              0
+          ) {
+            break;
+          }
+
+          if (
+            attempt <
+            attempts
+          ) {
+            console.warn(
+              `NAVTA AI batch ${pageNumbers} returned 0 questions; retrying once for completeness.`
+            );
+          }
+        } catch (
+          error
+        ) {
+          lastError =
+            error;
+
+          // Do not silently skip a page. A partial import is worse
+          // than a clear failure because the admin may assume all
+          // questions were captured.
+          if (
+            attempt >=
+            attempts
+          ) {
+            throw error;
+          }
+
+          if (
+            error?.statusCode ===
+              429
+          ) {
+            throw error;
+          }
+
+          console.warn(
+            `NAVTA AI batch ${pageNumbers} failed on attempt ${attempt}; retrying. ${error?.message || ""}`
+          );
+        }
+      }
+
+      if (
+        lastError
+      ) {
+        throw lastError;
+      }
 
       allQuestions.push(
         ...batchQuestions
@@ -1606,9 +2014,12 @@ const analyseRenderedPages =
       );
     }
 
-    return removeExactDuplicates(
-      allQuestions
-    ).sort(
+    const deduplicated =
+      removeQuestionDuplicates(
+        allQuestions
+      );
+
+    return deduplicated.sort(
       (a, b) => {
         const pageDifference =
           (
