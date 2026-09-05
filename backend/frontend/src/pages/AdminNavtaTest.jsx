@@ -4,6 +4,13 @@ import React, {
   useState
 } from "react";
 
+import {
+  InlineMath,
+  BlockMath
+} from "react-katex";
+
+import "katex/dist/katex.min.css";
+
 // =====================================================
 // NAVTA CLASSIFICATION DATA
 // =====================================================
@@ -228,6 +235,426 @@ function buildAdminHeaders(extraHeaders = {}) {
         }
       : {}),
   };
+}
+
+// =====================================================
+// NAVTA LATEX / SCIENCE RENDERER
+// =====================================================
+//
+// This renderer is used for AI-import previews and the
+// saved question bank. Editable fields remain plain text
+// so the admin can still edit the original LaTeX source.
+//
+// It supports:
+// - $...$ and $$...$$
+// - \\( ... \\) and \\[ ... \\]
+// - matrices / determinants / cases / aligned equations
+// - common bare LaTeX commands from older AI imports
+// =====================================================
+
+function normaliseNavtaLatex(input = "") {
+  return String(input ?? "")
+    .replace(/```(?:latex|tex|math)?/gi, "")
+    .replace(/```/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\r\n?/g, "\n")
+    // Some older imports contain two literal backslashes
+    // before LaTeX commands. Reduce only command escapes;
+    // preserve matrix row separators (\\).
+    .replace(
+      /\\\\(?=(?:begin|end|frac|dfrac|tfrac|sqrt|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|psi|omega|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|times|cdot|div|neq|ne|leq|geq|approx|equiv|pm|mp|sum|prod|int|lim|infty|sin|cos|tan|log|ln|vec|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|Rightarrow|therefore|because)\b)/g,
+      "\\"
+    )
+    .trim();
+}
+
+const NAVTA_BLOCK_ENVIRONMENTS =
+  "matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|array|cases|aligned|alignedat|gathered|split";
+
+const NAVTA_LATEX_COMMAND =
+  /\\(?:begin|end|frac|dfrac|tfrac|sqrt|alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|times|cdot|div|neq|ne|leq|geq|approx|equiv|pm|mp|sum|prod|int|iint|iiint|lim|infty|sin|cos|tan|cot|sec|csc|log|ln|exp|vec|overrightarrow|overline|underline|hat|bar|dot|ddot|partial|nabla|therefore|because|implies|Rightarrow|rightarrow|leftarrow|leftrightarrow|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel)\b/;
+
+function renderNavtaInlineMath(math, key) {
+  const cleaned = normaliseNavtaLatex(math)
+    .replace(/^\$|\$$/g, "")
+    .trim();
+
+  if (!cleaned) {
+    return null;
+  }
+
+  return (
+    <span key={key} className="admin-navta-math-inline">
+      <InlineMath
+        math={cleaned}
+        renderError={() => (
+          <span className="admin-navta-math-fallback">
+            {cleaned}
+          </span>
+        )}
+      />
+    </span>
+  );
+}
+
+function renderNavtaBlockMath(math, key) {
+  const cleaned = normaliseNavtaLatex(math)
+    .replace(/^\$\$|\$\$$/g, "")
+    .trim();
+
+  if (!cleaned) {
+    return null;
+  }
+
+  return (
+    <div
+      key={key}
+      className="admin-navta-math-block"
+    >
+      <BlockMath
+        math={cleaned}
+        renderError={() => (
+          <div className="admin-navta-math-fallback">
+            {cleaned}
+          </div>
+        )}
+      />
+    </div>
+  );
+}
+
+function looksLikeWholeMath(value = "") {
+  const text = String(value || "").trim();
+
+  if (!text) {
+    return false;
+  }
+
+  if (
+    NAVTA_LATEX_COMMAND.test(text) &&
+    !/[.!?]\s+[A-Z]/.test(text)
+  ) {
+    const words =
+      text.match(/[A-Za-z]{3,}/g) || [];
+
+    const proseWords =
+      words.filter(
+        (word) =>
+          ![
+            "frac",
+            "dfrac",
+            "tfrac",
+            "sqrt",
+            "alpha",
+            "beta",
+            "gamma",
+            "delta",
+            "theta",
+            "lambda",
+            "sigma",
+            "omega",
+            "times",
+            "cdot",
+            "left",
+            "right",
+            "begin",
+            "end",
+            "matrix",
+            "pmatrix",
+            "bmatrix",
+            "vmatrix",
+            "cases",
+            "aligned",
+            "det",
+            "text",
+            "mathrm",
+            "neq",
+            "leq",
+            "geq",
+            "sin",
+            "cos",
+            "tan",
+            "log",
+            "infty",
+            "adj",
+          ].includes(
+            word.toLowerCase()
+          )
+      );
+
+    if (proseWords.length <= 2) {
+      return true;
+    }
+  }
+
+  return (
+    /^[\sA-Za-z0-9{}()[\]|.,+\-*/=<>_^\\]+$/.test(
+      text
+    ) &&
+    (
+      /[=^_]/.test(text) ||
+      NAVTA_LATEX_COMMAND.test(text)
+    ) &&
+    (
+      text.match(/\s+/g) || []
+    ).length < 10
+  );
+}
+
+function renderLegacyMixedText(
+  text = "",
+  keyPrefix = "legacy"
+) {
+  const value =
+    normaliseNavtaLatex(text);
+
+  if (!value) {
+    return null;
+  }
+
+  if (looksLikeWholeMath(value)) {
+    return renderNavtaInlineMath(
+      value,
+      `${keyPrefix}-whole`
+    );
+  }
+
+  const output = [];
+  let rest = value;
+  let serial = 0;
+
+  const fragmentRegex =
+    /(\\(?:d?frac|tfrac)\s*\{[^{}]*\}\s*\{[^{}]*\}|\\sqrt(?:\[[^\]]*\])?\s*\{[^{}]*\}|\\(?:alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|psi|omega)(?:\s*[_^]\s*(?:\{[^{}]*\}|[A-Za-z0-9+-]+))*|[A-Za-z](?:\s*[_^]\s*(?:\{[^{}]*\}|[A-Za-z0-9+-]+))+|\d+(?:\.\d+)?\s*\\(?:times|cdot|div)\s*\d*(?:\.\d+)?|[A-Za-z0-9{}()^_+\-*/\\. ]{1,120}(?:=|\\neq|\\leq|\\geq)[A-Za-z0-9{}()^_+\-*/\\. ]{1,120})/;
+
+  while (rest) {
+    const match =
+      rest.match(fragmentRegex);
+
+    if (
+      !match ||
+      match.index === undefined
+    ) {
+      output.push(
+        <React.Fragment
+          key={`${keyPrefix}-text-${serial++}`}
+        >
+          {rest}
+        </React.Fragment>
+      );
+
+      break;
+    }
+
+    if (match.index > 0) {
+      output.push(
+        <React.Fragment
+          key={`${keyPrefix}-text-${serial++}`}
+        >
+          {rest.slice(0, match.index)}
+        </React.Fragment>
+      );
+    }
+
+    const candidate =
+      match[0].trim();
+
+    output.push(
+      renderNavtaInlineMath(
+        candidate,
+        `${keyPrefix}-math-${serial++}`
+      )
+    );
+
+    rest = rest.slice(
+      match.index + match[0].length
+    );
+  }
+
+  return output;
+}
+
+function renderNavtaContent(input = "") {
+  let value =
+    normaliseNavtaLatex(input);
+
+  if (!value) {
+    return null;
+  }
+
+  // Convert standard TeX wrappers to NAVTA delimiters.
+  value = value
+    .replace(
+      /\\\[([\s\S]*?)\\\]/g,
+      (_, math) => `$$${math}$$`
+    )
+    .replace(
+      /\\\(([\s\S]*?)\\\)/g,
+      (_, math) => `$${math}$`
+    );
+
+  // A complete bare expression, such as a matrix or
+  // fraction, should be rendered as one mathematical unit.
+  if (
+    !value.includes("$$") &&
+    !value.includes("$") &&
+    looksLikeWholeMath(value)
+  ) {
+    const hasBlockEnvironment =
+      new RegExp(
+        `\\\\begin\\{(?:${NAVTA_BLOCK_ENVIRONMENTS})\\}`
+      ).test(value);
+
+    return hasBlockEnvironment
+      ? renderNavtaBlockMath(
+          value,
+          "whole-block-math"
+        )
+      : renderNavtaInlineMath(
+          value,
+          "whole-inline-math"
+        );
+  }
+
+  const tokens = [];
+  let cursor = 0;
+  let tokenIndex = 0;
+
+  const protectedRegex =
+    new RegExp(
+      `(\\$\\$[\\s\\S]*?\\$\\$|\\$[^$]*?\\$|\\\\begin\\{(${NAVTA_BLOCK_ENVIRONMENTS})\\}[\\s\\S]*?\\\\end\\{\\2\\})`,
+      "g"
+    );
+
+  let match;
+
+  while (
+    (
+      match =
+        protectedRegex.exec(value)
+    ) !== null
+  ) {
+    if (match.index > cursor) {
+      tokens.push({
+        type: "text",
+        value: value.slice(
+          cursor,
+          match.index
+        ),
+        key: tokenIndex++,
+      });
+    }
+
+    const raw = match[0];
+
+    if (raw.startsWith("$$")) {
+      tokens.push({
+        type: "block",
+        value: raw.slice(2, -2),
+        key: tokenIndex++,
+      });
+    } else if (raw.startsWith("$")) {
+      tokens.push({
+        type: "inline",
+        value: raw.slice(1, -1),
+        key: tokenIndex++,
+      });
+    } else {
+      tokens.push({
+        type: "block",
+        value: raw,
+        key: tokenIndex++,
+      });
+    }
+
+    cursor =
+      match.index + raw.length;
+  }
+
+  if (cursor < value.length) {
+    tokens.push({
+      type: "text",
+      value: value.slice(cursor),
+      key: tokenIndex++,
+    });
+  }
+
+  if (tokens.length === 0) {
+    tokens.push({
+      type: "text",
+      value,
+      key: 0,
+    });
+  }
+
+  return tokens.map((token) => {
+    if (token.type === "block") {
+      return renderNavtaBlockMath(
+        token.value,
+        `navta-block-${token.key}`
+      );
+    }
+
+    if (token.type === "inline") {
+      return renderNavtaInlineMath(
+        token.value,
+        `navta-inline-${token.key}`
+      );
+    }
+
+    return (
+      <React.Fragment
+        key={`navta-text-${token.key}`}
+      >
+        {renderLegacyMixedText(
+          token.value,
+          `navta-text-${token.key}`
+        )}
+      </React.Fragment>
+    );
+  });
+}
+
+function getNavtaQuestionImage(question) {
+  const primaryUrl = String(
+    question?.questionImage?.url || ""
+  ).trim();
+
+  if (primaryUrl) {
+    return {
+      url: primaryUrl,
+      altText:
+        String(
+          question?.questionImage?.altText ||
+            question?.questionNumber ||
+            "NAVTA question"
+        ).trim() || "NAVTA question",
+    };
+  }
+
+  const firstImage = Array.isArray(
+    question?.questionImages
+  )
+    ? question.questionImages.find(
+        (image) =>
+          image &&
+          typeof image === "object" &&
+          String(image.url || "").trim()
+      )
+    : null;
+
+  if (firstImage) {
+    return {
+      url: String(firstImage.url || "").trim(),
+      altText:
+        String(
+          firstImage.altText ||
+            question?.questionNumber ||
+            "NAVTA question"
+        ).trim() || "NAVTA question",
+    };
+  }
+
+  return null;
 }
 
 // =====================================================
@@ -1851,6 +2278,57 @@ export default function AdminNavtaTest() {
           line-height: 1.6;
         }
 
+        .admin-navta-rendered-question {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+
+        .admin-navta-question-preview-image-shell {
+          width: 100%;
+          margin-bottom: 14px;
+          padding: 10px;
+          border: 1px solid #334155;
+          border-radius: 12px;
+          background: #ffffff;
+          overflow: hidden;
+        }
+
+        .admin-navta-question-preview-image {
+          display: block;
+          width: 100%;
+          height: auto;
+          max-height: 520px;
+          object-fit: contain;
+          object-position: left center;
+        }
+
+        .admin-navta-math-inline {
+          display: inline-block;
+          max-width: 100%;
+          vertical-align: middle;
+        }
+
+        .admin-navta-math-block {
+          width: 100%;
+          margin: 8px 0;
+          overflow-x: auto;
+          overflow-y: hidden;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        .admin-navta-math-block .katex-display {
+          margin: 0.45em 0;
+          text-align: left;
+        }
+
+        .admin-navta-math-fallback {
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+          font-size: 13px;
+          color: #fbbf24;
+        }
+
         .admin-navta-option-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2400,11 +2878,26 @@ export default function AdminNavtaTest() {
                                     {index + 1}
                                   </span>
 
-                                  <p className="admin-navta-review-text">
-                                    {
-                                      question.question
-                                    }
-                                  </p>
+                                  <div className="admin-navta-review-text">
+                                    {getNavtaQuestionImage(question)?.url && (
+                                      <div className="admin-navta-question-preview-image-shell">
+                                        <img
+                                          src={getNavtaQuestionImage(question).url}
+                                          alt={getNavtaQuestionImage(question).altText}
+                                          className="admin-navta-question-preview-image"
+                                          loading="lazy"
+                                          decoding="async"
+                                        />
+                                      </div>
+                                    )}
+
+                                    <div className="admin-navta-rendered-question">
+                                      {renderNavtaContent(
+                                        question.question ||
+                                          "Question text unavailable"
+                                      )}
+                                    </div>
+                                  </div>
 
                                   <button
                                     type="button"
@@ -3044,11 +3537,15 @@ export default function AdminNavtaTest() {
                               }
                               className="admin-navta-drop-card"
                             >
-                              <p className="admin-navta-drop-question">
-                                {index + 1}.{" "}
-                                {question.question ||
-                                  "Unrecognised question"}
-                              </p>
+                              <div className="admin-navta-drop-question">
+                                <strong>
+                                  {index + 1}.{" "}
+                                </strong>
+                                {renderNavtaContent(
+                                  question.question ||
+                                    "Unrecognised question"
+                                )}
+                              </div>
 
                               <p className="admin-navta-drop-reason">
                                 <strong>
@@ -3370,11 +3867,15 @@ export default function AdminNavtaTest() {
                             )}
                           </div>
 
-                          <p className="admin-navta-bank-question">
-                            {index + 1}.{" "}
-                            {question.question ||
-                              "Question text unavailable"}
-                          </p>
+                          <div className="admin-navta-bank-question">
+                            <strong>
+                              {index + 1}.{" "}
+                            </strong>
+                            {renderNavtaContent(
+                              question.question ||
+                                "Question text unavailable"
+                            )}
+                          </div>
 
                           {Array.isArray(
                             question.options
@@ -3392,7 +3893,10 @@ export default function AdminNavtaTest() {
                                       optionIndex
                                     }
                                   >
-                                    {option}
+                                    {renderNavtaContent(
+                                      option ||
+                                        ""
+                                    )}
                                   </li>
                                 )
                               )}
