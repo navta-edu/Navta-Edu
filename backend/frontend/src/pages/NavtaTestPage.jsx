@@ -6,6 +6,7 @@ import {
   BlockMath,
 } from "react-katex";
 
+import katex from "katex";
 import "katex/dist/katex.min.css";
 import "katex/contrib/mhchem";
 
@@ -296,36 +297,39 @@ function formatSolveTime(totalSeconds) {
 }
 
 // =====================================================
-// NAVTA UNIVERSAL SCIENCE RENDERER
+// NAVTA FINAL UNIVERSAL SCIENCE + MATH RENDERER
 // =====================================================
 //
-// Hardened for:
-// - Physics equations, vectors, units, Greek symbols
-// - Chemistry equations and mhchem \ce{} / \pu{}
-// - Maths matrices, determinants, sums, integrals, limits
-// - Biology notation, plain text and question visuals
+// Robust for Physics, Chemistry, Maths and Biology.
 //
-// Design rule:
-// Never show raw broken LaTeX to the student if KaTeX
-// cannot render it. A readable fallback is used instead.
+// Key improvements:
+// - Uses KaTeX directly with strict parsing.
+// - Renders powers, subscripts, roots, fractions,
+//   summations, products, limits, integrals and vectors.
+// - Renders complete matrices/determinants with KaTeX.
+// - Normalizes common Gemini/OCR mistakes.
+// - Supports chemistry \ce{} and \pu{} via mhchem.
+// - Converts nC_r style combinations to \binom{n}{r}.
+// - Never exposes raw broken LaTeX to students.
 // =====================================================
 
 const NAVTA_LATEX_COMMANDS =
   "begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|cdot|times|div|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|sin|cos|tan|cot|sec|csc|log|ln|exp|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|neq|ne|leq|geq|approx|equiv|sim|propto|pm|mp|infty|vec|overrightarrow|overleftarrow|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|leftrightarrow|Rightarrow|Leftarrow|Leftrightarrow|therefore|because|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|ce|pu";
-
-const NAVTA_MATRIX_ENVIRONMENTS =
-  "matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix";
 
 function normaliseNavtaLatex(input = "") {
   let value = String(input ?? "")
     .replace(/```(?:latex|tex|math)?/gi, "")
     .replace(/```/g, "")
     .replace(/\u00a0/g, " ")
-    .replace(/\r\n?/g, "\n");
+    .replace(/\r\n?/g, "\n")
+    .trim();
 
-  // Gemini / JSON can occasionally leave two slashes in
-  // front of a command. Convert only command escapes.
-  // Matrix row separators (\\) stay intact.
+  if (!value) {
+    return "";
+  }
+
+  // Convert Gemini/JSON double-escaped LaTeX commands
+  // while preserving matrix row separators \\.
   value = value.replace(
     new RegExp(
       `\\\\\\\\(?=(?:${NAVTA_LATEX_COMMANDS})\\b)`,
@@ -334,22 +338,59 @@ function normaliseNavtaLatex(input = "") {
     "\\"
   );
 
-  // Repair accidental "\ sum" -> "\sum".
+  // Repair "\ sum" -> "\sum".
   value = value.replace(
     /\\\s+(?=[A-Za-z])/g,
     "\\"
   );
 
-  // Common OCR / AI variants.
+  // Common command aliases / OCR output.
   value = value
+    .replace(/\\cdotp\b/g, "\\cdot")
     .replace(/\\operatorname\s*\{C\}/g, "C")
-    .replace(/\\cdotp\b/g, "\\cdot");
+    .replace(/\\operatorname\s*\{sin\}/gi, "\\sin")
+    .replace(/\\operatorname\s*\{cos\}/gi, "\\cos")
+    .replace(/\\operatorname\s*\{tan\}/gi, "\\tan")
+    .replace(/\\operatorname\s*\{cot\}/gi, "\\cot");
+
+  // Convert common combinations:
+  // nC_r -> \binom{n}{r}
+  // n C_r -> \binom{n}{r}
+  // {}^nC_r -> \binom{n}{r}
+  value = value.replace(
+    /\{\}\^\{?([A-Za-z0-9+\-]+)\}?\s*C_\{?([A-Za-z0-9+\-]+)\}?/g,
+    "\\binom{$1}{$2}"
+  );
+
+  value = value.replace(
+    /\b([A-Za-z0-9]+)\s*C_\{?([A-Za-z0-9+\-]+)\}?/g,
+    "\\binom{$1}{$2}"
+  );
+
+  // Make unbraced powers/subscripts safer when Gemini
+  // emits simple command or alphanumeric operands.
+  value = value
+    .replace(
+      /\^\\([A-Za-z]+)\b/g,
+      "^{\\$1}"
+    )
+    .replace(
+      /_\\([A-Za-z]+)\b/g,
+      "_{\\$1}"
+    );
 
   return value.trim();
 }
 
 function humaniseNavtaLatex(input = "") {
-  let value = normaliseNavtaLatex(input);
+  let value =
+    normaliseNavtaLatex(
+      input
+    );
+
+  if (!value) {
+    return "";
+  }
 
   const replacements = [
     [/\\alpha\b/g, "α"],
@@ -392,7 +433,6 @@ function humaniseNavtaLatex(input = "") {
     [/\\ne\b/g, "≠"],
     [/\\approx\b/g, "≈"],
     [/\\equiv\b/g, "≡"],
-    [/\\sim\b/g, "∼"],
     [/\\propto\b/g, "∝"],
     [/\\infty\b/g, "∞"],
     [/\\rightarrow\b/g, "→"],
@@ -403,29 +443,30 @@ function humaniseNavtaLatex(input = "") {
     [/\\Leftrightarrow\b/g, "⇔"],
     [/\\therefore\b/g, "∴"],
     [/\\because\b/g, "∵"],
-    [/\\in\b/g, "∈"],
-    [/\\notin\b/g, "∉"],
-    [/\\subseteq\b/g, "⊆"],
-    [/\\supseteq\b/g, "⊇"],
-    [/\\subset\b/g, "⊂"],
-    [/\\supset\b/g, "⊃"],
-    [/\\cup\b/g, "∪"],
-    [/\\cap\b/g, "∩"],
-    [/\\emptyset\b/g, "∅"],
-    [/\\forall\b/g, "∀"],
-    [/\\exists\b/g, "∃"],
     [/\\perp\b/g, "⊥"],
     [/\\parallel\b/g, "∥"],
     [/\\angle\b/g, "∠"],
     [/\\circ\b/g, "°"],
   ];
 
-  for (const [pattern, replacement] of replacements) {
-    value = value.replace(pattern, replacement);
+  for (
+    const [
+      pattern,
+      replacement
+    ] of replacements
+  ) {
+    value =
+      value.replace(
+        pattern,
+        replacement
+      );
   }
 
-  // Readable fallbacks for simple fractions / roots.
   value = value
+    .replace(
+      /\\binom\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g,
+      "C($1,$2)"
+    )
     .replace(
       /\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g,
       "($1)/($2)"
@@ -438,441 +479,171 @@ function humaniseNavtaLatex(input = "") {
       /\\(?:text|mathrm|mathbf|mathit|mathbb|mathcal)\s*\{([^{}]*)\}/g,
       "$1"
     )
-    .replace(/\\left\b/g, "")
-    .replace(/\\right\b/g, "")
     .replace(
       /\\begin\{[^{}]+\}|\\end\{[^{}]+\}/g,
       ""
     )
-    .replace(/\\\\/g, " ; ")
+    .replace(
+      /\\\\/g,
+      " ; "
+    )
     .replace(/&/g, " ")
-    .replace(/\\([A-Za-z]+)\b/g, "$1")
-    .replace(/[{}]/g, "");
-
-  return value
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
-function renderNavtaInlineMath(
-  math,
-  key
-) {
-  const cleaned =
-    normaliseNavtaLatex(math);
-
-  if (!cleaned) {
-    return null;
-  }
-
-  return (
-    <span
-      key={key}
-      style={{
-        display: "inline-block",
-        verticalAlign: "middle",
-        maxWidth: "100%",
-        overflowX: "auto"
-      }}
-    >
-      <InlineMath
-        math={cleaned}
-        renderError={() => (
-          <span>
-            {humaniseNavtaLatex(
-              cleaned
-            )}
-          </span>
-        )}
-      />
-    </span>
-  );
-}
-
-function renderNavtaBlockMath(
-  math,
-  key
-) {
-  const cleaned =
-    normaliseNavtaLatex(math);
-
-  if (!cleaned) {
-    return null;
-  }
-
-  return (
-    <div
-      key={key}
-      style={{
-        overflowX: "auto",
-        maxWidth: "100%",
-        margin: "10px 0"
-      }}
-    >
-      <BlockMath
-        math={cleaned}
-        renderError={() => (
-          <div
-            style={{
-              whiteSpace: "pre-wrap"
-            }}
-          >
-            {humaniseNavtaLatex(
-              cleaned
-            )}
-          </div>
-        )}
-      />
-    </div>
-  );
-}
-
-function NavtaMatrix({
-  environment = "matrix",
-  body = "",
-}) {
-  const rows =
-    String(body || "")
-      .split(/\\\\/)
-      .map((row) =>
-        row
-          .split("&")
-          .map((cell) =>
-            normaliseNavtaLatex(
-              cell
-            ).trim()
-          )
-      )
-      .filter((row) =>
-        row.some(Boolean)
-      );
-
-  if (!rows.length) {
-    return null;
-  }
-
-  const columnCount =
-    Math.max(
-      1,
-      ...rows.map(
-        (row) =>
-          row.length
-      )
+    .replace(
+      /\\([A-Za-z]+)\b/g,
+      "$1"
+    )
+    .replace(/[{}]/g, "")
+    .replace(
+      /\s{2,}/g,
+      " "
     );
 
-  const wrapperMap = {
-    pmatrix: ["(", ")"],
-    bmatrix: ["[", "]"],
-    Bmatrix: ["{", "}"],
-    vmatrix: ["|", "|"],
-    Vmatrix: ["‖", "‖"],
-    matrix: ["", ""],
-    smallmatrix: ["", ""]
-  };
-
-  const [left, right] =
-    wrapperMap[
-      environment
-    ] || ["", ""];
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        verticalAlign: "middle",
-        margin: "3px 7px",
-        maxWidth: "100%"
-      }}
-    >
-      {left ? (
-        <span
-          aria-hidden="true"
-          style={{
-            fontFamily:
-              "Georgia, serif",
-            fontSize:
-              rows.length >= 3
-                ? "2.8em"
-                : "2.25em",
-            lineHeight: 0.8,
-            fontWeight:
-              environment ===
-              "Vmatrix"
-                ? 700
-                : 400
-          }}
-        >
-          {left}
-        </span>
-      ) : null}
-
-      <span
-        style={{
-          display: "grid",
-          gridTemplateColumns:
-            `repeat(${columnCount}, max-content)`,
-          columnGap: "13px",
-          rowGap: "5px",
-          alignItems:
-            "center",
-          justifyItems:
-            "center",
-          padding:
-            "3px 6px"
-        }}
-      >
-        {rows.flatMap(
-          (
-            row,
-            rowIndex
-          ) =>
-            Array.from(
-              {
-                length:
-                  columnCount
-              },
-              (
-                _,
-                columnIndex
-              ) => {
-                const cell =
-                  row[
-                    columnIndex
-                  ] || "";
-
-                return (
-                  <span
-                    key={`${rowIndex}-${columnIndex}`}
-                    style={{
-                      minWidth:
-                        "16px",
-                      textAlign:
-                        "center"
-                    }}
-                  >
-                    {cell
-                      ? renderNavtaInlineMath(
-                          cell,
-                          `matrix-${rowIndex}-${columnIndex}`
-                        )
-                      : "\u00a0"}
-                  </span>
-                );
-              }
-            )
-        )}
-      </span>
-
-      {right ? (
-        <span
-          aria-hidden="true"
-          style={{
-            fontFamily:
-              "Georgia, serif",
-            fontSize:
-              rows.length >= 3
-                ? "2.8em"
-                : "2.25em",
-            lineHeight: 0.8,
-            fontWeight:
-              environment ===
-              "Vmatrix"
-                ? 700
-                : 400
-          }}
-        >
-          {right}
-        </span>
-      ) : null}
-    </span>
-  );
+  return value.trim();
 }
 
-function renderNavtaMathExpression(
-  math = "",
-  keyPrefix = "math"
+function navtaKatexHtml(
+  math,
+  displayMode = false
 ) {
-  const source =
+  const cleaned =
     normaliseNavtaLatex(
       math
     );
 
-  if (!source) {
+  if (!cleaned) {
     return null;
   }
 
-  const matrixRegex =
-    new RegExp(
-      `\\\\begin\\{(${NAVTA_MATRIX_ENVIRONMENTS})\\}([\\s\\S]*?)\\\\end\\{\\1\\}`,
-      "g"
+  try {
+    return katex.renderToString(
+      cleaned,
+      {
+        displayMode,
+        throwOnError: true,
+        strict: "ignore",
+        trust: false,
+        output: "htmlAndMathml",
+      }
+    );
+  } catch (
+    error
+  ) {
+    console.error(
+      "NAVTA KaTeX render error:",
+      error,
+      cleaned
     );
 
-  const output = [];
-  let cursor = 0;
-  let serial = 0;
-  let match;
+    return null;
+  }
+}
 
-  while (
-    (
-      match =
-        matrixRegex.exec(
-          source
-        )
-    ) !== null
-  ) {
-    const before =
-      source
-        .slice(
-          cursor,
-          match.index
-        )
-        .trim();
+function NavtaMath({
+  math = "",
+  display = false,
+  className = "",
+}) {
+  const html =
+    navtaKatexHtml(
+      math,
+      display
+    );
 
-    if (before) {
-      output.push(
-        renderNavtaInlineMath(
-          before,
-          `${keyPrefix}-before-${serial++}`
-        )
+  if (!html) {
+    const fallback =
+      humaniseNavtaLatex(
+        math
       );
-    }
 
-    output.push(
-      <NavtaMatrix
-        key={`${keyPrefix}-matrix-${serial++}`}
-        environment={
-          match[1]
+    return display ? (
+      <div
+        className={
+          className
         }
-        body={
-          match[2]
+        style={{
+          whiteSpace:
+            "pre-wrap",
+          overflowX:
+            "auto",
+          maxWidth:
+            "100%"
+        }}
+      >
+        {fallback}
+      </div>
+    ) : (
+      <span
+        className={
+          className
         }
+        style={{
+          whiteSpace:
+            "pre-wrap"
+        }}
+      >
+        {fallback}
+      </span>
+    );
+  }
+
+  if (display) {
+    return (
+      <div
+        className={
+          className
+        }
+        style={{
+          overflowX:
+            "auto",
+          maxWidth:
+            "100%",
+          margin:
+            "8px 0"
+        }}
+        dangerouslySetInnerHTML={{
+          __html: html
+        }}
       />
     );
-
-    cursor =
-      match.index +
-      match[0].length;
   }
 
-  const after =
-    source
-      .slice(cursor)
-      .trim();
-
-  if (after) {
-    output.push(
-      renderNavtaInlineMath(
-        after,
-        `${keyPrefix}-after-${serial++}`
-      )
-    );
-  }
-
-  if (
-    output.length > 0
-  ) {
-    return output;
-  }
-
-  return renderNavtaInlineMath(
-    source,
-    `${keyPrefix}-single`
+  return (
+    <span
+      className={
+        className
+      }
+      style={{
+        display:
+          "inline-block",
+        verticalAlign:
+          "middle",
+        maxWidth:
+          "100%"
+      }}
+      dangerouslySetInnerHTML={{
+        __html: html
+      }}
+    />
   );
 }
 
-function renderNavtaBareLatexText(
-  input = "",
-  keyPrefix = "text"
+function wrapBareNavtaLatex(
+  input = ""
 ) {
-  const value =
-    normaliseNavtaLatex(
-      input
+  let value =
+    String(
+      input ?? ""
     );
 
-  if (!value) {
-    return null;
-  }
+  // If Gemini forgot $ around a full matrix/determinant,
+  // wrap only that environment.
+  value = value.replace(
+    /(?<!\$)(\\begin\{(?:matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix|cases|array|aligned|gathered)\}[\s\S]*?\\end\{(?:matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix|cases|array|aligned|gathered)\})(?!\$)/g,
+    (math) =>
+      `$${math}$`
+  );
 
-  const matrixRegex =
-    new RegExp(
-      `\\\\begin\\{(${NAVTA_MATRIX_ENVIRONMENTS})\\}([\\s\\S]*?)\\\\end\\{\\1\\}`,
-      "g"
-    );
-
-  const output = [];
-  let cursor = 0;
-  let serial = 0;
-  let match;
-
-  while (
-    (
-      match =
-        matrixRegex.exec(
-          value
-        )
-    ) !== null
-  ) {
-    if (
-      match.index >
-      cursor
-    ) {
-      const plain =
-        value.slice(
-          cursor,
-          match.index
-        );
-
-      output.push(
-        <React.Fragment
-          key={`${keyPrefix}-plain-${serial++}`}
-        >
-          {humaniseNavtaLatex(
-            plain
-          )}
-        </React.Fragment>
-      );
-    }
-
-    output.push(
-      <NavtaMatrix
-        key={`${keyPrefix}-matrix-${serial++}`}
-        environment={
-          match[1]
-        }
-        body={
-          match[2]
-        }
-      />
-    );
-
-    cursor =
-      match.index +
-      match[0].length;
-  }
-
-  if (
-    cursor <
-    value.length
-  ) {
-    output.push(
-      <React.Fragment
-        key={`${keyPrefix}-plain-${serial++}`}
-      >
-        {humaniseNavtaLatex(
-          value.slice(
-            cursor
-          )
-        )}
-      </React.Fragment>
-    );
-  }
-
-  return output.length
-    ? output
-    : humaniseNavtaLatex(
-        value
-      );
+  return value;
 }
 
 function renderNavtaContent(
@@ -887,7 +658,6 @@ function renderNavtaContent(
     return null;
   }
 
-  // Convert TeX wrappers to NAVTA delimiters.
   value = value
     .replace(
       /\\\[([\s\S]*?)\\\]/g,
@@ -898,6 +668,11 @@ function renderNavtaContent(
       /\\\(([\s\S]*?)\\\)/g,
       (_, math) =>
         `$${math}$`
+    );
+
+  value =
+    wrapBareNavtaLatex(
+      value
     );
 
   const parts =
@@ -922,41 +697,17 @@ function renderNavtaContent(
           "$$"
         )
       ) {
-        const math =
-          part.slice(
-            2,
-            -2
-          );
-
-        const hasMatrix =
-          new RegExp(
-            `\\\\begin\\{(?:${NAVTA_MATRIX_ENVIRONMENTS})\\}`
-          ).test(math);
-
-        if (
-          hasMatrix
-        ) {
-          return (
-            <div
-              key={`block-matrix-${index}`}
-              style={{
-                overflowX:
-                  "auto",
-                margin:
-                  "8px 0"
-              }}
-            >
-              {renderNavtaMathExpression(
-                math,
-                `block-${index}`
-              )}
-            </div>
-          );
-        }
-
-        return renderNavtaBlockMath(
-          math,
-          `block-${index}`
+        return (
+          <NavtaMath
+            key={`block-${index}`}
+            math={
+              part.slice(
+                2,
+                -2
+              )
+            }
+            display
+          />
         );
       }
 
@@ -969,15 +720,31 @@ function renderNavtaContent(
         )
       ) {
         return (
-          <React.Fragment
+          <NavtaMath
             key={`inline-${index}`}
-          >
-            {renderNavtaMathExpression(
+            math={
               part.slice(
                 1,
                 -1
-              ),
-              `inline-${index}`
+              )
+            }
+          />
+        );
+      }
+
+      // Plain prose should remain untouched. If raw LaTeX
+      // commands leak into prose, show a readable fallback.
+      if (
+        /\\(?:sum|prod|int|frac|sqrt|binom|sin|cos|tan|cot|alpha|beta|gamma|theta|lambda|mu|sigma|phi|omega|cdot|times|vec|ce|pu)\b/.test(
+          part
+        )
+      ) {
+        return (
+          <React.Fragment
+            key={`text-${index}`}
+          >
+            {humaniseNavtaLatex(
+              part
             )}
           </React.Fragment>
         );
@@ -987,10 +754,7 @@ function renderNavtaContent(
         <React.Fragment
           key={`text-${index}`}
         >
-          {renderNavtaBareLatexText(
-            part,
-            `text-${index}`
-          )}
+          {part}
         </React.Fragment>
       );
     }
