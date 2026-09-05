@@ -107,6 +107,40 @@ const normalizeClassName = (
 };
 
 
+const normalizePreparationName = (
+  value = ''
+) => {
+  const raw =
+    cleanString(value);
+
+  const lower =
+    raw.toLowerCase();
+
+  if (
+    lower === 'jee' ||
+    lower === 'jee main' ||
+    lower === 'jee mains' ||
+    lower === 'jee advanced'
+  ) {
+    return 'JEE';
+  }
+
+  if (lower === 'neet') {
+    return 'NEET';
+  }
+
+  if (
+    lower === 'boards' ||
+    lower === 'board' ||
+    lower === 'cbse'
+  ) {
+    return 'Boards';
+  }
+
+  return raw;
+};
+
+
 const isMongoObjectId = (
   value
 ) => {
@@ -796,6 +830,77 @@ exports.createNote =
           });
       }
 
+      const finalPreparation =
+        normalizePreparationName(
+          exam
+        );
+
+      const finalClassName =
+        normalizeClassName(
+          className ||
+          classLevel
+        );
+
+      const finalSubjectName =
+        normalizeSubjectName(
+          subjectName
+        );
+
+      const finalChapterName =
+        cleanString(
+          chapterName
+        );
+
+      if (!finalPreparation) {
+        return res
+          .status(400)
+          .json({
+            success:
+              false,
+
+            message:
+              'Please select a preparation: NEET, JEE or Boards.'
+          });
+      }
+
+      if (
+        ![
+          'NEET',
+          'JEE',
+          'Boards'
+        ].includes(
+          finalPreparation
+        )
+      ) {
+        return res
+          .status(400)
+          .json({
+            success:
+              false,
+
+            message:
+              'Invalid Study Note preparation. Allowed values are NEET, JEE and Boards.'
+          });
+      }
+
+      // A Study Note MUST store preparation metadata.
+      // Without this field, a Boards PDF would appear in JEE/NEET too.
+      if (
+        !Note.schema.path(
+          'exam'
+        )
+      ) {
+        return res
+          .status(500)
+          .json({
+            success:
+              false,
+
+            message:
+              'Note model is missing the exam field. Update Note.js before uploading Study Notes.'
+          });
+      }
+
       const uploadedBy =
         req.user?._id ||
         req.user?.id;
@@ -910,10 +1015,10 @@ exports.createNote =
             subject,
 
             className:
-              className ||
-              classLevel,
+              finalClassName,
 
-            exam,
+            exam:
+              finalPreparation,
 
             chapterNumber
           });
@@ -983,6 +1088,13 @@ exports.createNote =
         content:
           finalContent,
 
+        // IMPORTANT:
+        // This is the preparation bucket used by Study Notes.
+        // Boards notes stay in Boards, JEE notes stay in JEE,
+        // and NEET notes stay in NEET.
+        exam:
+          finalPreparation,
+
         uploadedBy:
           new mongoose.Types.ObjectId(
             String(
@@ -990,6 +1102,38 @@ exports.createNote =
             )
           )
       };
+
+      // Save the rest of the Study Notes classification metadata
+      // whenever those fields exist in the Note schema.
+      if (
+        Note.schema.path(
+          'className'
+        )
+      ) {
+        notePayload.className =
+          finalClassName;
+      }
+
+      if (
+        Note.schema.path(
+          'subjectName'
+        )
+      ) {
+        notePayload.subjectName =
+          finalSubjectName;
+      }
+
+      if (
+        Note.schema.path(
+          'chapterName'
+        )
+      ) {
+        notePayload.chapterName =
+          finalChapterName ||
+          cleanString(
+            chapter.title
+          );
+      }
 
       if (finalPdfUrl) {
         notePayload.pdfUrl =
