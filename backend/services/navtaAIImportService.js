@@ -61,9 +61,12 @@ const VALID_QUESTION_TYPES = new Set([
 
 const MAX_PDF_PAGES_PER_IMPORT = Math.max(
   1,
-  Number(
-    process.env.NAVTA_AI_MAX_PDF_PAGES || 5
-  ) || 5
+  Math.min(
+    250,
+    Number(
+      process.env.NAVTA_AI_MAX_PDF_PAGES || 100
+    ) || 100
+  )
 );
 
 const QUESTION_PROCESS_CONCURRENCY = Math.max(
@@ -788,6 +791,11 @@ const buildImportQuestion = ({
   visualWarning = null,
 }) => {
   const result = {
+    questionNumber:
+      cleanString(
+        question.questionNumber
+      ),
+
     question:
       question.question,
 
@@ -838,6 +846,10 @@ const buildImportQuestion = ({
       Boolean(
         question.needsReview
       ),
+
+    questionBoundingBox:
+      question.questionBoundingBox ||
+      null,
 
     sourceDocument: {
       fileName:
@@ -1038,6 +1050,134 @@ const mapWithConcurrency = async (
 };
 
 // =====================================================
+// IMPORT-LEVEL DUPLICATE GUARD
+// =====================================================
+//
+// This is a second safety layer after AI-service dedupe.
+// It runs BEFORE visual cropping / Cloudinary upload so a
+// duplicate question does not waste image processing.
+//
+// The controller performs one more database-level check
+// before saving approved questions.
+// =====================================================
+
+const normalizeImportFingerprintText = (
+  value = ""
+) => {
+  return cleanString(
+    value
+  )
+    .toLowerCase()
+    .replace(
+      /^\s*(?:q(?:uestion)?\.?\s*)?\d+[a-z]?\s*[\).:\-]\s*/i,
+      ""
+    )
+    .replace(
+      /\$\$?/g,
+      " "
+    )
+    .replace(
+      /\\(?:left|right|mathrm|mathbf|mathit|text)\b/g,
+      ""
+    )
+    .replace(
+      /\\begin\{[^}]+\}|\\end\{[^}]+\}/g,
+      " "
+    )
+    .replace(
+      /[^a-z0-9]+/g,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+};
+
+const buildImportFingerprint = (
+  question = {}
+) => {
+  const stem =
+    normalizeImportFingerprintText(
+      question?.question
+    );
+
+  const options =
+    safeArray(
+      question?.options
+    )
+      .map(
+        normalizeImportFingerprintText
+      )
+      .filter(Boolean)
+      .join("|");
+
+  return stem
+    ? `${stem}||${options}`
+    : "";
+};
+
+const removeImportDuplicates = (
+  questions = []
+) => {
+  const seen =
+    new Set();
+
+  const result =
+    [];
+
+  let removed =
+    0;
+
+  for (
+    const question of
+    safeArray(
+      questions
+    )
+  ) {
+    const fingerprint =
+      buildImportFingerprint(
+        question
+      );
+
+    if (
+      fingerprint &&
+      seen.has(
+        fingerprint
+      )
+    ) {
+      removed +=
+        1;
+
+      continue;
+    }
+
+    if (
+      fingerprint
+    ) {
+      seen.add(
+        fingerprint
+      );
+    }
+
+    result.push(
+      question
+    );
+  }
+
+  if (
+    removed > 0
+  ) {
+    console.log(
+      `NAVTA import removed ${removed} duplicate question(s) before visual processing.`
+    );
+  }
+
+  return result;
+};
+
+// =====================================================
 // PROCESS PDF
 // =====================================================
 
@@ -1079,7 +1219,7 @@ const processPdfImport =
     // AI ANALYSIS
     // =========================================
 
-    const detectedQuestions =
+    const detectedQuestionsRaw =
       await analyseRenderedPages({
         pages:
           rendered.pages,
@@ -1091,8 +1231,13 @@ const processPdfImport =
         hints,
       });
 
+    const detectedQuestions =
+      removeImportDuplicates(
+        detectedQuestionsRaw
+      );
+
     console.log(
-      `NAVTA AI detected ${detectedQuestions.length} question(s) before validation.`
+      `NAVTA AI detected ${detectedQuestions.length} unique question(s) before validation.`
     );
 
     // =========================================
