@@ -1,29 +1,14 @@
 const path = require("path");
 
-const {
-  processNavtaDocument,
-} = require("./navtaDocumentService");
-
-const {
-  renderPdfPages,
-} = require("./navtaPdfVisualService");
-
+const { processNavtaDocument } = require("./navtaDocumentService");
+const { renderPdfPages } = require("./navtaPdfVisualService");
 const {
   analyseRenderedPages,
+  analyseTextQuestions,
   solveQuestionFromImage,
 } = require("./navtaAIQuestionService");
-
-const {
-  createQuestionDiagram,
-} = require("./navtaDiagramCropService");
-
-const {
-  uploadQuestionImage,
-} = require("./navtaImageService");
-
-// =====================================================
-// CONSTANTS
-// =====================================================
+const { createQuestionDiagram } = require("./navtaDiagramCropService");
+const { uploadQuestionImage } = require("./navtaImageService");
 
 const VALID_SUBJECTS = new Set([
   "Physics",
@@ -32,800 +17,268 @@ const VALID_SUBJECTS = new Set([
   "Biology",
 ]);
 
-const VALID_EXAMS = new Set([
-  "NEET",
-  "JEE",
-  "Boards",
-]);
+const VALID_EXAMS = new Set(["NEET", "JEE", "Boards"]);
+const VALID_CLASSES = new Set(["Class 11", "Class 12"]);
+const VALID_DIFFICULTIES = new Set(["Easy", "Medium", "Hard"]);
+const VALID_QUESTION_TYPES = new Set(["mcq", "short", "long"]);
 
-const VALID_CLASSES = new Set([
-  "Class 11",
-  "Class 12",
-]);
+const MAX_PDF_PAGES_PER_IMPORT = Math.max(
+  1,
+  Number(process.env.NAVTA_AI_MAX_PDF_PAGES || 100) || 100
+);
 
-const VALID_DIFFICULTIES = new Set([
-  "Easy",
-  "Medium",
-  "Hard",
-]);
+const cleanString = (value = "") => String(value ?? "").trim();
+const safeArray = (value) => (Array.isArray(value) ? value : []);
 
-const VALID_QUESTION_TYPES = new Set([
-  "mcq",
-  "short",
-  "long",
-]);
-
-// =====================================================
-// COMPLETE PDF PROCESSING
-// =====================================================
-//
-// OLD:
-//
-// const MAX_PDF_PAGES_PER_IMPORT = 20;
-//
-// NEW:
-//
-// Render the complete PDF.
-//
-// navtaAIQuestionService.js processes the resulting
-// pages sequentially, one rendered page at a time,
-// until the final page.
-//
-// =====================================================
-
-const MAX_PDF_PAGES_PER_IMPORT =
-  Number.MAX_SAFE_INTEGER;
-
-// =====================================================
-// HELPERS
-// =====================================================
-
-const cleanString = (value = "") => {
-  return String(value || "").trim();
-};
-
-const safeArray = (value) => {
-  return Array.isArray(value)
-    ? value
-    : [];
-};
-
-const getFileType = (fileName = "") => {
-  return path
-    .extname(fileName)
-    .toLowerCase()
-    .replace(".", "");
-};
-
-// =====================================================
-// SUBJECT NORMALIZATION
-// =====================================================
+const getFileType = (fileName = "") =>
+  path.extname(fileName).toLowerCase().replace(".", "");
 
 const normalizeSubject = (value) => {
-  const text =
-    cleanString(value).toLowerCase();
-
-  const map = {
-    physics: "Physics",
-    chemistry: "Chemistry",
-    maths: "Maths",
-    math: "Maths",
-    mathematics: "Maths",
-    biology: "Biology",
-  };
-
-  return (
-    map[text] ||
-    cleanString(value)
-  );
+  const text = cleanString(value).toLowerCase();
+  if (text === "physics") return "Physics";
+  if (text === "chemistry") return "Chemistry";
+  if (["math", "maths", "mathematics"].includes(text)) return "Maths";
+  if (text === "biology") return "Biology";
+  return "";
 };
-
-// =====================================================
-// EXAM NORMALIZATION
-// =====================================================
 
 const normalizeExam = (value) => {
-  const text =
-    cleanString(value).toLowerCase();
-
-  if (text === "neet") {
-    return "NEET";
-  }
-
-  if (
-    text === "jee" ||
-    text === "jee main" ||
-    text === "jee mains" ||
-    text === "jee advanced"
-  ) {
-    return "JEE";
-  }
-
-  if (
-    text === "boards" ||
-    text === "board" ||
-    text === "cbse"
-  ) {
-    return "Boards";
-  }
-
-  return cleanString(value);
+  const text = cleanString(value).toLowerCase();
+  if (text.includes("neet")) return "NEET";
+  if (text.includes("jee")) return "JEE";
+  if (text.includes("board") || text.includes("cbse")) return "Boards";
+  return "";
 };
-
-// =====================================================
-// CLASS NORMALIZATION
-// =====================================================
 
 const normalizeClassLevel = (value) => {
-  const text =
-    cleanString(value).toLowerCase();
-
-  if (
-    text === "class 11" ||
-    text === "11" ||
-    text === "xi"
-  ) {
-    return "Class 11";
-  }
-
-  if (
-    text === "class 12" ||
-    text === "12" ||
-    text === "xii"
-  ) {
-    return "Class 12";
-  }
-
-  return cleanString(value);
+  const text = cleanString(value).toLowerCase();
+  if (text.includes("11") || text === "xi") return "Class 11";
+  if (text.includes("12") || text === "xii") return "Class 12";
+  return "";
 };
-
-// =====================================================
-// QUESTION VALIDATION
-// =====================================================
 
 const validateDetectedQuestion = (
   rawQuestion,
-  {
-    requireCorrectAnswer = true,
-  } = {}
+  { requireCorrectAnswer = true, requireScreenshot = false } = {}
 ) => {
   const question = {
     ...rawQuestion,
-
-    question:
-      cleanString(
-        rawQuestion.question
-      ),
-
-    subject:
-      normalizeSubject(
-        rawQuestion.subject
-      ),
-
-    exam:
-      normalizeExam(
-        rawQuestion.exam
-      ),
-
-    classLevel:
-      normalizeClassLevel(
-        rawQuestion.classLevel
-      ),
-
-    chapter:
-      cleanString(
-        rawQuestion.chapter
-      ),
-
-    difficulty:
-      cleanString(
-        rawQuestion.difficulty
-      ),
-
-    questionType:
-      cleanString(
-        rawQuestion.questionType
-      ).toLowerCase(),
-
-    options:
-      safeArray(
-        rawQuestion.options
-      )
-        .map(cleanString)
-        .filter(Boolean),
-
-    explanation:
-      cleanString(
-        rawQuestion.explanation
-      ),
-
-    modelAnswer:
-      cleanString(
-        rawQuestion.modelAnswer
-      ),
-
-    keyPoints:
-      safeArray(
-        rawQuestion.keyPoints
-      )
-        .map(cleanString)
-        .filter(Boolean),
+    question: cleanString(rawQuestion?.question),
+    subject: normalizeSubject(rawQuestion?.subject),
+    exam: normalizeExam(rawQuestion?.exam),
+    classLevel: normalizeClassLevel(rawQuestion?.classLevel),
+    chapter: cleanString(rawQuestion?.chapter),
+    difficulty: cleanString(rawQuestion?.difficulty),
+    questionType: cleanString(rawQuestion?.questionType).toLowerCase(),
+    options: safeArray(rawQuestion?.options).map(cleanString).filter(Boolean),
+    explanation: cleanString(rawQuestion?.explanation),
+    modelAnswer: cleanString(rawQuestion?.modelAnswer),
+    keyPoints: safeArray(rawQuestion?.keyPoints).map(cleanString).filter(Boolean),
   };
 
   const reasons = [];
 
-  // =========================================
-  // AI DROP CHECK
-  // =========================================
-
   if (question.drop) {
     reasons.push(
-      question.dropReason ||
-        "NAVTA AI marked this question as uncertain."
+      cleanString(question.dropReason) || "NAVTA AI marked this question as unusable."
     );
   }
 
-  // =========================================
-  // QUESTION TEXT
-  // =========================================
-
-  if (!question.question) {
-    reasons.push(
-      "Question text is missing."
-    );
+  if (!question.question) reasons.push("Question text is missing.");
+  if (!VALID_SUBJECTS.has(question.subject)) {
+    reasons.push("Subject could not be identified.");
+  }
+  if (!VALID_EXAMS.has(question.exam)) {
+    reasons.push("Exam type could not be identified.");
+  }
+  if (!VALID_CLASSES.has(question.classLevel)) {
+    reasons.push("Class level could not be identified.");
   }
 
-  // =========================================
-  // SUBJECT
-  // =========================================
-
-  if (
-    !VALID_SUBJECTS.has(
-      question.subject
-    )
-  ) {
-    reasons.push(
-      "Invalid or uncertain subject."
-    );
-  }
-
-  // =========================================
-  // EXAM
-  // =========================================
-
-  if (
-    !VALID_EXAMS.has(
-      question.exam
-    )
-  ) {
-    reasons.push(
-      "Invalid or uncertain exam."
-    );
-  }
-
-  // =========================================
-  // CLASS
-  // =========================================
-
-  if (
-    !VALID_CLASSES.has(
-      question.classLevel
-    )
-  ) {
-    reasons.push(
-      "Invalid or uncertain class level."
-    );
-  }
-
-  // =========================================
-  // CHAPTER
-  // =========================================
-
+  // Chapter is important for NAVTA filtering, but do not lose a readable
+  // question solely because chapter classification is uncertain.
   if (!question.chapter) {
-    reasons.push(
-      "Chapter could not be identified."
-    );
+    question.chapter = "Needs Review";
+    question.needsReview = true;
   }
 
-  // =========================================
-  // DIFFICULTY
-  // =========================================
-
-  if (
-    !VALID_DIFFICULTIES.has(
-      question.difficulty
-    )
-  ) {
-    reasons.push(
-      "Difficulty could not be identified."
-    );
+  if (!VALID_DIFFICULTIES.has(question.difficulty)) {
+    question.difficulty = "Medium";
+    question.needsReview = true;
   }
 
-  // =========================================
-  // QUESTION TYPE
-  // =========================================
-
-  if (
-    !VALID_QUESTION_TYPES.has(
-      question.questionType
-    )
-  ) {
-    reasons.push(
-      "Invalid question type."
-    );
+  if (!VALID_QUESTION_TYPES.has(question.questionType)) {
+    reasons.push("Question type could not be identified.");
   }
 
-  // =========================================
-  // JEE / NEET TYPE RULE
-  // =========================================
-
   if (
-    ["JEE", "NEET"].includes(
-      question.exam
-    ) &&
+    ["JEE", "NEET"].includes(question.exam) &&
     question.questionType !== "mcq"
   ) {
-    reasons.push(
-      `${question.exam} questions must be MCQ.`
-    );
+    reasons.push(`${question.exam} questions must be MCQ.`);
   }
 
-  // =========================================
-  // MCQ VALIDATION
-  // =========================================
-
-  if (
-    question.questionType === "mcq"
-  ) {
-    if (
-      question.options.length !== 4
-    ) {
-      reasons.push(
-        "MCQ must contain exactly 4 options."
-      );
+  if (question.questionType === "mcq") {
+    if (question.options.length !== 4) {
+      reasons.push("MCQ must contain exactly 4 options.");
     }
 
     if (
       requireCorrectAnswer &&
-      (
-        !Number.isInteger(
-          rawQuestion.correctAnswer
-        ) ||
+      (!Number.isInteger(rawQuestion?.correctAnswer) ||
         rawQuestion.correctAnswer < 0 ||
-        rawQuestion.correctAnswer > 3
-      )
+        rawQuestion.correctAnswer > 3)
     ) {
-      reasons.push(
-        "MCQ correct answer could not be determined."
-      );
+      reasons.push("MCQ correct answer could not be determined.");
     }
   }
 
+  if (requireScreenshot && !question.questionBoundingBox) {
+    reasons.push("Complete question screenshot boundary is missing.");
+  }
+
   return {
-    valid:
-      reasons.length === 0,
-
+    valid: reasons.length === 0,
     reasons,
-
     question,
   };
 };
 
-// =====================================================
-// PROCESS COMPLETE QUESTION SCREENSHOT
-// =====================================================
-//
-// The complete original printed question screenshot is
-// now the primary student-facing question image.
-//
-// We reuse the existing crop service by temporarily
-// mapping questionBoundingBox -> visualBoundingBox.
-// This keeps all crop math in one tested service.
-//
-// The returned crop buffer is also sent directly to the
-// dedicated Gemini answer solver BEFORE final validation.
-//
-// =====================================================
+const processCompleteQuestionScreenshot = async ({
+  question,
+  renderedPage,
+  sourceFileName,
+}) => {
+  if (!question?.questionBoundingBox) {
+    return {
+      questionImage: null,
+      cropBuffer: null,
+      screenshotWarning: "Complete question screenshot boundary is missing.",
+    };
+  }
 
-const processCompleteQuestionScreenshot =
-  async ({
-    question,
-    renderedPage,
-    sourceFileName,
-  }) => {
+  if (!renderedPage) {
+    return {
+      questionImage: null,
+      cropBuffer: null,
+      screenshotWarning: "Source PDF page could not be located.",
+    };
+  }
+
+  try {
+    // Reuse the existing crop service by treating the full-question box
+    // as the visual box.
+    const cropQuestion = {
+      ...question,
+      hasVisual: true,
+      visualBoundingBox: question.questionBoundingBox,
+      visualDescription:
+        question.question ||
+        `Question ${question.questionNumber || ""}`.trim(),
+    };
+
+    const cropped = await createQuestionDiagram({
+      question: cropQuestion,
+      pageBuffer: renderedPage.buffer,
+    });
+
     if (
-      !question?.questionBoundingBox
+      !cropped ||
+      !Buffer.isBuffer(cropped.buffer) ||
+      cropped.buffer.length === 0
     ) {
       return {
         questionImage: null,
         cropBuffer: null,
-        screenshotWarning:
-          "The complete question screenshot boundary is missing.",
+        screenshotWarning: "Could not create the complete question screenshot.",
       };
     }
 
-    if (!renderedPage) {
+    const safeFileName =
+      cleanString(sourceFileName)
+        .replace(/[^a-zA-Z0-9._-]/g, "-")
+        .slice(0, 80) || "navta-question";
+
+    const questionNumber =
+      cleanString(question.questionNumber)
+        .replace(/[^a-zA-Z0-9_-]/g, "-")
+        .slice(0, 30) || "question";
+
+    const upload = await uploadQuestionImage({
+      buffer: cropped.buffer,
+      fileName: `${safeFileName}-page-${question.sourcePage}-${questionNumber}`,
+      folder: "navta/ai-imports/pending",
+    });
+
+    if (!upload?.url) {
       return {
         questionImage: null,
-        cropBuffer: null,
-        screenshotWarning:
-          "The source PDF page for this question could not be located.",
-      };
-    }
-
-    try {
-      const cropQuestion = {
-        ...question,
-
-        hasVisual:
-          true,
-
-        visualBoundingBox:
-          question.questionBoundingBox,
-
-        visualDescription:
-          question.question ||
-          `Question ${question.questionNumber || ""}`.trim(),
-      };
-
-      const cropped =
-        await createQuestionDiagram({
-          question:
-            cropQuestion,
-
-          pageBuffer:
-            renderedPage.buffer,
-        });
-
-      if (
-        !cropped ||
-        !Buffer.isBuffer(
-          cropped.buffer
-        ) ||
-        cropped.buffer.length === 0
-      ) {
-        return {
-          questionImage: null,
-          cropBuffer: null,
-          screenshotWarning:
-            "NAVTA detected the question boundary but could not create the complete question screenshot.",
-        };
-      }
-
-      const safeFileName =
-        cleanString(
-          sourceFileName
-        )
-          .replace(
-            /[^a-zA-Z0-9._-]/g,
-            "-"
-          )
-          .slice(0, 80) ||
-        "navta-question";
-
-      const questionNumber =
-        cleanString(
-          question.questionNumber
-        )
-          .replace(
-            /[^a-zA-Z0-9_-]/g,
-            "-"
-          )
-          .slice(0, 30) ||
-        "question";
-
-      const upload =
-        await uploadQuestionImage({
-          buffer:
-            cropped.buffer,
-
-          fileName:
-            `${safeFileName}-page-${question.sourcePage}-${questionNumber}-full-question`,
-
-          folder:
-            "navta/ai-imports/pending",
-        });
-
-      if (!upload?.url) {
-        return {
-          questionImage: null,
-          cropBuffer:
-            cropped.buffer,
-          screenshotWarning:
-            "NAVTA created the complete question screenshot but could not upload it.",
-        };
-      }
-
-      return {
-        cropBuffer:
-          cropped.buffer,
-
-        questionImage: {
-          url:
-            upload.url,
-
-          publicId:
-            upload.publicId || "",
-
-          altText:
-            question.question ||
-            `Question ${question.questionNumber || ""}`.trim() ||
-            "NAVTA question",
-
-          sourcePage:
-            question.sourcePage,
-
-          width:
-            upload.width ||
-            cropped.width,
-
-          height:
-            upload.height ||
-            cropped.height,
-
-          bbox:
-            question.questionBoundingBox,
-        },
-      };
-    } catch (error) {
-      console.error(
-        "NAVTA COMPLETE QUESTION SCREENSHOT ERROR:",
-        error
-      );
-
-      return {
-        questionImage: null,
-        cropBuffer: null,
-        screenshotWarning:
-          "NAVTA could not process the complete question screenshot.",
-      };
-    }
-  };
-
-
-// =====================================================
-// SOLVE MCQ FROM COMPLETE QUESTION SCREENSHOT
-// =====================================================
-
-const solveMissingMcqAnswer =
-  async ({
-    question,
-    cropBuffer,
-  }) => {
-    if (
-      question?.questionType !== "mcq"
-    ) {
-      return question;
-    }
-
-    if (
-      Number.isInteger(
-        question.correctAnswer
-      ) &&
-      question.correctAnswer >= 0 &&
-      question.correctAnswer <= 3
-    ) {
-      return question;
-    }
-
-    if (
-      !Buffer.isBuffer(
-        cropBuffer
-      ) ||
-      cropBuffer.length === 0
-    ) {
-      return question;
-    }
-
-    console.log(
-      `NAVTA solving missing MCQ answer from screenshot: page=${question.sourcePage}, question=${question.questionNumber || "?"}.`
-    );
-
-    const solution =
-      await solveQuestionFromImage({
-        imageBuffer:
-          cropBuffer,
-
-        question,
-      });
-
-    if (
-      Number.isInteger(
-        solution?.correctAnswer
-      ) &&
-      solution.correctAnswer >= 0 &&
-      solution.correctAnswer <= 3
-    ) {
-      return {
-        ...question,
-
-        correctAnswer:
-          solution.correctAnswer,
-
-        explanation:
-          cleanString(
-            solution.explanation
-          ) ||
-          question.explanation ||
-          "",
-
-        answerConfidence:
-          cleanString(
-            solution.confidence
-          ) ||
-          "medium",
-
-        answerSolvedFromScreenshot:
-          true,
+        cropBuffer: cropped.buffer,
+        screenshotWarning: "Question screenshot was created but could not be uploaded.",
       };
     }
 
     return {
-      ...question,
-
-      answerConfidence:
-        cleanString(
-          solution?.confidence
-        ) ||
-        "low",
-
-      answerSolvedFromScreenshot:
-        false,
-
-      answerSolverWarning:
-        cleanString(
-          solution?.solverError
-        ) ||
-        "NAVTA could not determine the MCQ answer from the complete question screenshot.",
+      cropBuffer: cropped.buffer,
+      questionImage: {
+        url: upload.url,
+        publicId: upload.publicId || "",
+        altText:
+          question.question ||
+          `Question ${question.questionNumber || ""}`.trim() ||
+          "NAVTA question",
+        sourcePage: question.sourcePage,
+        width: upload.width || cropped.width,
+        height: upload.height || cropped.height,
+        bbox: question.questionBoundingBox,
+      },
     };
-  };
+  } catch (error) {
+    console.error("NAVTA QUESTION SCREENSHOT ERROR:", error);
+    return {
+      questionImage: null,
+      cropBuffer: null,
+      screenshotWarning:
+        error?.message || "NAVTA could not process the question screenshot.",
+    };
+  }
+};
 
+const solveMissingMcqAnswer = async ({ question, cropBuffer }) => {
+  if (question?.questionType !== "mcq") return question;
 
-// =====================================================
-// PROCESS QUESTION DIAGRAM
-// =====================================================
+  if (
+    Number.isInteger(question.correctAnswer) &&
+    question.correctAnswer >= 0 &&
+    question.correctAnswer <= 3
+  ) {
+    return question;
+  }
 
-const processQuestionVisual =
-  async ({
+  if (!Buffer.isBuffer(cropBuffer) || cropBuffer.length === 0) {
+    return question;
+  }
+
+  const solution = await solveQuestionFromImage({
+    imageBuffer: cropBuffer,
     question,
-    renderedPage,
-    sourceFileName,
-  }) => {
-    // No visual was detected.
-    if (
-      !question.hasVisual ||
-      !question.visualBoundingBox
-    ) {
-      return {
-        questionImage: null,
-      };
-    }
+  });
 
-    // Visual exists according to AI but we
-    // cannot locate its source page.
-    if (!renderedPage) {
-      return {
-        questionImage: null,
-
-        visualWarning:
-          "NAVTA AI detected a diagram, but its PDF page could not be located.",
-      };
-    }
-
-    try {
-      // =====================================
-      // CROP THE VISUAL
-      // =====================================
-
-      const cropped =
-        await createQuestionDiagram({
-          question,
-
-          pageBuffer:
-            renderedPage.buffer,
-        });
-
-      if (
-        !cropped ||
-        !Buffer.isBuffer(
-          cropped.buffer
-        ) ||
-        cropped.buffer.length === 0
-      ) {
-        return {
-          questionImage: null,
-
-          visualWarning:
-            "NAVTA detected the diagram but could not create its image.",
-        };
-      }
-
-      // =====================================
-      // SAFE FILE NAME
-      // =====================================
-
-      const safeFileName =
-        cleanString(
-          sourceFileName
-        )
-          .replace(
-            /[^a-zA-Z0-9._-]/g,
-            "-"
-          )
-          .slice(0, 80) ||
-        "navta-question";
-
-      // =====================================
-      // CLOUDINARY UPLOAD
-      // =====================================
-
-      const upload =
-        await uploadQuestionImage({
-          buffer:
-            cropped.buffer,
-
-          fileName:
-            `${safeFileName}-page-${question.sourcePage}-diagram`,
-
-          folder:
-            "navta/ai-imports/pending",
-        });
-
-      if (!upload?.url) {
-        return {
-          questionImage: null,
-
-          visualWarning:
-            "The question diagram could not be uploaded.",
-        };
-      }
-
-      // =====================================
-      // RETURN IMAGE METADATA
-      // =====================================
-
-      return {
-        questionImage: {
-          url:
-            upload.url,
-
-          publicId:
-            upload.publicId || "",
-
-          altText:
-            question.visualDescription ||
-            "Question diagram",
-
-          sourcePage:
-            question.sourcePage,
-
-          width:
-            upload.width ||
-            cropped.width,
-
-          height:
-            upload.height ||
-            cropped.height,
-        },
-      };
-    } catch (error) {
-      console.error(
-        "NAVTA DIAGRAM PROCESSING ERROR:",
-        error
-      );
-
-      return {
-        questionImage: null,
-
-        visualWarning:
-          "Diagram was detected, but NAVTA could not process it.",
-      };
-    }
+  return {
+    ...question,
+    correctAnswer:
+      Number.isInteger(solution?.correctAnswer) &&
+      solution.correctAnswer >= 0 &&
+      solution.correctAnswer <= 3
+        ? solution.correctAnswer
+        : null,
+    explanation:
+      cleanString(solution?.explanation) || question.explanation || "",
+    answerConfidence: cleanString(solution?.confidence) || "low",
+    answerSolvedFromScreenshot: Number.isInteger(solution?.correctAnswer),
+    answerSolverWarning: cleanString(solution?.solverError),
   };
-
-// =====================================================
-// BUILD QUESTION FOR ADMIN REVIEW
-// =====================================================
+};
 
 const buildImportQuestion = ({
   question,
@@ -834,100 +287,37 @@ const buildImportQuestion = ({
   fileType,
 }) => {
   const result = {
-    question:
-      question.question,
-
-    subject:
-      question.subject,
-
-    exam:
-      question.exam,
-
-    classLevel:
-      question.classLevel,
-
-    chapter:
-      question.chapter,
-
-    difficulty:
-      question.difficulty,
-
-    questionType:
-      question.questionType,
-
-    explanation:
-      question.explanation || "",
-
+    question: question.question,
+    subject: question.subject,
+    exam: question.exam,
+    classLevel: question.classLevel,
+    chapter: question.chapter,
+    difficulty: question.difficulty,
+    questionType: question.questionType,
+    explanation: question.explanation || "",
+    needsReview: Boolean(question.needsReview),
     sourceDocument: {
-      fileName:
-        sourceFileName,
-
+      fileName: sourceFileName,
       fileType,
-
-      pageNumber:
-        question.sourcePage,
-
-      importedByAI:
-        true,
+      pageNumber: question.sourcePage || null,
+      importedByAI: true,
     },
   };
 
-  // =========================================
-  // MCQ DATA
-  // =========================================
+  if (question.questionType === "mcq") {
+    result.options = question.options;
+    result.correctAnswer = question.correctAnswer;
+  } else {
+    result.modelAnswer = question.modelAnswer || "";
+    result.keyPoints = question.keyPoints || [];
 
-  if (
-    question.questionType === "mcq"
-  ) {
-    result.options =
-      question.options;
-
-    result.correctAnswer =
-      question.correctAnswer;
+    const marks = Number(question.maxMarks);
+    if (Number.isFinite(marks) && marks > 0) result.maxMarks = marks;
   }
-
-  // =========================================
-  // WRITTEN QUESTION DATA
-  // =========================================
-
-  if (
-    ["short", "long"].includes(
-      question.questionType
-    )
-  ) {
-    result.modelAnswer =
-      question.modelAnswer || "";
-
-    result.keyPoints =
-      question.keyPoints || [];
-
-    if (
-      question.maxMarks !== null &&
-      question.maxMarks !== undefined &&
-      Number.isFinite(
-        Number(
-          question.maxMarks
-        )
-      )
-    ) {
-      result.maxMarks =
-        Number(
-          question.maxMarks
-        );
-    }
-  }
-
-  // =========================================
-  // QUESTION IMAGE
-  // =========================================
 
   if (questionImage?.url) {
-    result.questionImage =
-      questionImage;
-
-    result.questionImages = [
-      questionImage,
-    ];
+    result.questionImage = questionImage;
+    result.questionImages = [questionImage];
   } else {
     result.questionImages = [];
   }
@@ -935,673 +325,228 @@ const buildImportQuestion = ({
   return result;
 };
 
-// =====================================================
-// PROCESS PDF IMPORT
-// =====================================================
+const processPdfImport = async ({ file, documentResult, hints }) => {
+  const rendered = await renderPdfPages({
+    buffer: file.buffer,
+    scale: 1.8,
+    maxPages: MAX_PDF_PAGES_PER_IMPORT,
+  });
 
-const processPdfImport =
-  async ({
-    file,
-    documentResult,
+  if (!rendered?.pages?.length) {
+    throw new Error("NAVTA could not render any pages from this PDF.");
+  }
+
+  const detectedQuestions = await analyseRenderedPages({
+    pages: rendered.pages,
+    text: documentResult?.text || "",
     hints,
-  }) => {
-    // =========================================
-    // RENDER PDF PAGES
-    // =========================================
+  });
 
-    console.log(
-      "====================================================="
-    );
+  const pageMap = new Map(
+    rendered.pages.map((page) => [Number(page.pageNumber), page])
+  );
 
-    console.log(
-      "NAVTA PDF IMPORT STARTING"
-    );
+  const acceptedQuestions = [];
+  const droppedQuestions = [];
 
-    console.log(
-      `File: ${file.originalname}`
-    );
+  for (const rawQuestion of detectedQuestions) {
+    const preliminary = validateDetectedQuestion(rawQuestion, {
+      requireCorrectAnswer: false,
+      requireScreenshot: true,
+    });
 
-    console.log(
-      "Rendering complete PDF..."
-    );
-
-    console.log(
-      "====================================================="
-    );
-
-    const rendered =
-      await renderPdfPages({
-        buffer:
-          file.buffer,
-
-        scale:
-          1.8,
-
-        maxPages:
-          MAX_PDF_PAGES_PER_IMPORT,
+    if (!preliminary.valid) {
+      const reason = preliminary.reasons.join(" ");
+      droppedQuestions.push({
+        ...preliminary.question,
+        reason,
+        dropReason: reason,
       });
+      continue;
+    }
+
+    let question = { ...preliminary.question };
+    const renderedPage = pageMap.get(Number(question.sourcePage));
+
+    const screenshot = await processCompleteQuestionScreenshot({
+      question,
+      renderedPage,
+      sourceFileName: file.originalname,
+    });
 
     if (
-      !rendered ||
-      !Array.isArray(
-        rendered.pages
-      ) ||
-      rendered.pages.length === 0
+      !screenshot.questionImage ||
+      !Buffer.isBuffer(screenshot.cropBuffer) ||
+      screenshot.cropBuffer.length === 0
     ) {
-      throw new Error(
-        "NAVTA could not render any pages from this PDF."
-      );
-    }
+      const reason =
+        screenshot.screenshotWarning ||
+        "NAVTA could not preserve the complete question screenshot.";
 
-    console.log(
-      `NAVTA rendered ${rendered.pages.length} PDF page(s).`
-    );
-
-    console.log(
-      `PDF reports ${rendered.totalPages} total page(s).`
-    );
-
-    // =========================================
-    // NAVTA GEMINI ANALYSIS
-    // =========================================
-    //
-    // analyseRenderedPages() processes each rendered
-    // page sequentially until the final page
-    //
-    // =========================================
-
-    const detectedQuestions =
-      await analyseRenderedPages({
-        pages:
-          rendered.pages,
-
-        text:
-          documentResult.text ||
-          "",
-
-        hints,
+      droppedQuestions.push({
+        ...question,
+        reason,
+        dropReason: reason,
       });
-
-    console.log(
-      `NAVTA AI detected ${detectedQuestions.length} question(s) before validation.`
-    );
-
-    // =========================================
-    // CREATE PAGE LOOKUP
-    // =========================================
-
-    const pageMap =
-      new Map();
-
-    for (
-      const page of
-      rendered.pages
-    ) {
-      pageMap.set(
-        Number(
-          page.pageNumber
-        ),
-        page
-      );
+      continue;
     }
 
-    const acceptedQuestions =
-      [];
+    question = await solveMissingMcqAnswer({
+      question,
+      cropBuffer: screenshot.cropBuffer,
+    });
 
-    const droppedQuestions =
-      [];
+    const finalValidation = validateDetectedQuestion(question, {
+      requireCorrectAnswer: true,
+      requireScreenshot: true,
+    });
 
-    // =========================================
-    // PROCESS EACH DETECTED QUESTION
-    // =========================================
-    //
-    // ORDER IS IMPORTANT:
-    //
-    // 1. Validate structure WITHOUT requiring MCQ answer.
-    // 2. Find original rendered page.
-    // 3. Crop the COMPLETE question screenshot.
-    // 4. If MCQ answer is missing, solve from screenshot.
-    // 5. Run FINAL validation including correctAnswer.
-    // 6. Build admin-review object.
-    // 7. Accept only after all required checks pass.
-    //
-    // This prevents valid MCQs from being dropped before
-    // the screenshot solver gets a chance to solve them.
-    // =========================================
-
-    for (
-      const rawQuestion of
-      detectedQuestions
-    ) {
-      // =====================================
-      // STAGE 1 VALIDATION
-      // =====================================
-
-      const preliminaryValidation =
-        validateDetectedQuestion(
-          rawQuestion,
-          {
-            requireCorrectAnswer:
-              false,
-          }
-        );
-
-      if (
-        !preliminaryValidation.valid
-      ) {
-        const reason =
-          preliminaryValidation.reasons.join(
-            " "
-          );
-
-        droppedQuestions.push({
-          ...preliminaryValidation.question,
-
-          reason,
-
-          dropReason:
-            reason,
-        });
-
-        continue;
-      }
-
-      let question = {
-        ...preliminaryValidation.question,
-      };
-
-      // =====================================
-      // FIND SOURCE PDF PAGE
-      // =====================================
-
-      const renderedPage =
-        pageMap.get(
-          Number(
-            question.sourcePage
-          )
-        );
-
-      if (!renderedPage) {
-        const reason =
-          "The source PDF page for this question could not be located.";
-
-        droppedQuestions.push({
-          ...question,
-
-          reason,
-
-          dropReason:
-            reason,
-        });
-
-        continue;
-      }
-
-      // =====================================
-      // COMPLETE QUESTION SCREENSHOT
-      // =====================================
-
-      const screenshot =
-        await processCompleteQuestionScreenshot({
-          question,
-
-          renderedPage,
-
-          sourceFileName:
-            file.originalname,
-        });
-
-      if (
-        !screenshot.questionImage ||
-        !Buffer.isBuffer(
-          screenshot.cropBuffer
-        ) ||
-        screenshot.cropBuffer.length === 0
-      ) {
-        const reason =
-          screenshot.screenshotWarning ||
-          "NAVTA could not preserve the complete original question screenshot.";
-
-        droppedQuestions.push({
-          ...question,
-
-          reason,
-
-          dropReason:
-            reason,
-        });
-
-        continue;
-      }
-
-      // =====================================
-      // SOLVE MISSING MCQ ANSWER
-      // =====================================
-
-      if (
-        question.questionType === "mcq" &&
-        (
-          !Number.isInteger(
-            question.correctAnswer
-          ) ||
-          question.correctAnswer < 0 ||
-          question.correctAnswer > 3
-        )
-      ) {
-        try {
-          question =
-            await solveMissingMcqAnswer({
-              question,
-
-              cropBuffer:
-                screenshot.cropBuffer,
-            });
-        } catch (error) {
-          console.error(
-            "NAVTA SCREENSHOT ANSWER SOLVER ERROR:",
-            error
-          );
-
-          question = {
-            ...question,
-
-            answerSolvedFromScreenshot:
-              false,
-
-            answerConfidence:
-              "low",
-
-            answerSolverWarning:
-              error?.message ||
-              "NAVTA answer solver failed.",
-          };
-        }
-      }
-
-      // =====================================
-      // FINAL VALIDATION
-      // =====================================
-
-      const finalValidation =
-        validateDetectedQuestion(
-          question,
-          {
-            requireCorrectAnswer:
-              true,
-          }
-        );
-
-      if (
-        !finalValidation.valid
-      ) {
-        const reason =
-          finalValidation.reasons.join(
-            " "
-          );
-
-        droppedQuestions.push({
-          ...finalValidation.question,
-
-          questionImage:
-            screenshot.questionImage,
-
-          questionImages: [
-            screenshot.questionImage,
-          ],
-
-          answerConfidence:
-            question.answerConfidence ||
-            "",
-
-          answerSolvedFromScreenshot:
-            Boolean(
-              question.answerSolvedFromScreenshot
-            ),
-
-          answerSolverWarning:
-            question.answerSolverWarning ||
-            "",
-
-          reason,
-
-          dropReason:
-            reason,
-        });
-
-        continue;
-      }
-
-      question = {
+    if (!finalValidation.valid) {
+      const reason = finalValidation.reasons.join(" ");
+      droppedQuestions.push({
         ...finalValidation.question,
-
-        answerConfidence:
-          question.answerConfidence ||
-          "",
-
-        answerSolvedFromScreenshot:
-          Boolean(
-            question.answerSolvedFromScreenshot
-          ),
-
-        answerSolverWarning:
-          question.answerSolverWarning ||
-          "",
-      };
-
-      // =====================================
-      // BUILD ADMIN REVIEW QUESTION
-      // =====================================
-
-      const importQuestion =
-        buildImportQuestion({
-          question,
-
-          questionImage:
-            screenshot.questionImage,
-
-          sourceFileName:
-            file.originalname,
-
-          fileType:
-            "pdf",
-        });
-
-      // =====================================
-      // PRESERVE SOLVER METADATA
-      // =====================================
-
-      if (
-        question.questionType === "mcq"
-      ) {
-        importQuestion.answerConfidence =
-          question.answerConfidence ||
-          "";
-
-        importQuestion.answerSolvedFromScreenshot =
-          Boolean(
-            question.answerSolvedFromScreenshot
-          );
-
-        if (
-          question.answerSolverWarning
-        ) {
-          importQuestion.answerSolverWarning =
-            question.answerSolverWarning;
-        }
-      }
-
-      // =====================================
-      // ACCEPT QUESTION
-      // =====================================
-
-      acceptedQuestions.push(
-        importQuestion
-      );
+        questionImage: screenshot.questionImage,
+        questionImages: [screenshot.questionImage],
+        reason,
+        dropReason: reason,
+      });
+      continue;
     }
 
-    // =========================================
-    // FINAL IMPORT LOG
-    // =========================================
-
-    console.log(
-      "====================================================="
-    );
-
-    console.log(
-      "NAVTA PDF IMPORT COMPLETED"
-    );
-
-    console.log(
-      `Rendered pages: ${rendered.pages.length}`
-    );
-
-    console.log(
-      `Detected questions: ${detectedQuestions.length}`
-    );
-
-    console.log(
-      `Accepted questions: ${acceptedQuestions.length}`
-    );
-
-    console.log(
-      `Dropped questions: ${droppedQuestions.length}`
-    );
-
-    console.log(
-      "====================================================="
-    );
-
-    // =========================================
-    // RETURN PDF RESULT
-    // =========================================
-
-    return {
-      acceptedQuestions,
-
-      droppedQuestions,
-
-      documentInfo: {
-        fileType:
-          "pdf",
-
-        fileName:
-          file.originalname,
-
-        totalPages:
-          rendered.totalPages,
-
-        renderedPages:
-          rendered.renderedPages,
-
-        truncated:
-          Boolean(
-            rendered.truncated
-          ),
-      },
+    question = {
+      ...finalValidation.question,
+      answerConfidence: question.answerConfidence || "",
+      answerSolvedFromScreenshot: Boolean(question.answerSolvedFromScreenshot),
+      answerSolverWarning: question.answerSolverWarning || "",
     };
+
+    const importQuestion = buildImportQuestion({
+      question,
+      questionImage: screenshot.questionImage,
+      sourceFileName: file.originalname,
+      fileType: "pdf",
+    });
+
+    importQuestion.answerConfidence = question.answerConfidence;
+    importQuestion.answerSolvedFromScreenshot =
+      question.answerSolvedFromScreenshot;
+
+    if (question.answerSolverWarning) {
+      importQuestion.answerSolverWarning = question.answerSolverWarning;
+    }
+
+    acceptedQuestions.push(importQuestion);
+  }
+
+  return {
+    acceptedQuestions,
+    droppedQuestions,
+    documentInfo: {
+      fileType: "pdf",
+      fileName: file.originalname,
+      totalPages: rendered.totalPages,
+      renderedPages: rendered.renderedPages,
+      truncated: Boolean(rendered.truncated),
+    },
+  };
+};
+
+const processTextImport = async ({ file, documentResult, hints, fileType }) => {
+  const detectedQuestions = await analyseTextQuestions({
+    text: documentResult?.text || "",
+    hints,
+  });
+
+  const acceptedQuestions = [];
+  const droppedQuestions = [];
+
+  for (const rawQuestion of detectedQuestions) {
+    const validation = validateDetectedQuestion(rawQuestion, {
+      requireCorrectAnswer: rawQuestion.questionType === "mcq",
+      requireScreenshot: false,
+    });
+
+    if (!validation.valid) {
+      const reason = validation.reasons.join(" ");
+      droppedQuestions.push({
+        ...validation.question,
+        reason,
+        dropReason: reason,
+      });
+      continue;
+    }
+
+    acceptedQuestions.push(
+      buildImportQuestion({
+        question: validation.question,
+        questionImage: null,
+        sourceFileName: file.originalname,
+        fileType,
+      })
+    );
+  }
+
+  return {
+    acceptedQuestions,
+    droppedQuestions,
+    documentInfo: {
+      fileType,
+      fileName: file.originalname,
+      totalPages: null,
+      renderedPages: 0,
+      truncated: false,
+    },
+  };
+};
+
+const analyseNavtaImport = async ({
+  file,
+  subject,
+  exam,
+  classLevel,
+}) => {
+  if (!file) {
+    throw new Error("Please upload a PDF, DOCX or TXT file.");
+  }
+
+  if (!Buffer.isBuffer(file.buffer) || file.buffer.length === 0) {
+    throw new Error("Uploaded file buffer is missing.");
+  }
+
+  const fileType = getFileType(file.originalname);
+
+  if (!["pdf", "docx", "txt"].includes(fileType)) {
+    throw new Error("Unsupported file type. Please upload PDF, DOCX or TXT.");
+  }
+
+  const documentResult = await processNavtaDocument(file);
+
+  const hints = {
+    subject: normalizeSubject(subject),
+    exam: normalizeExam(exam),
+    classLevel: normalizeClassLevel(classLevel),
   };
 
-// =====================================================
-// MAIN NAVTA AI IMPORT SERVICE
-// =====================================================
-
-const analyseNavtaImport =
-  async ({
-    file,
-    subject,
-    exam,
-    classLevel,
-  }) => {
-    // =========================================
-    // FILE CHECK
-    // =========================================
-
-    if (!file) {
-      throw new Error(
-        "Please upload a PDF, DOCX or TXT file."
-      );
-    }
-
-    // =========================================
-    // BUFFER CHECK
-    // =========================================
-
-    if (
-      !Buffer.isBuffer(
-        file.buffer
-      ) ||
-      file.buffer.length === 0
-    ) {
-      throw new Error(
-        "Uploaded file buffer is missing."
-      );
-    }
-
-    // =========================================
-    // FILE TYPE
-    // =========================================
-
-    const fileType =
-      getFileType(
-        file.originalname
-      );
-
-    if (
-      ![
-        "pdf",
-        "docx",
-        "txt",
-      ].includes(
-        fileType
-      )
-    ) {
-      throw new Error(
-        "Unsupported file type. Please upload a PDF, DOCX or TXT file."
-      );
-    }
-
-    // =========================================
-    // PROCESS ORIGINAL DOCUMENT
-    // =========================================
-    //
-    // IMPORTANT:
-    //
-    // Pass the Multer file DIRECTLY.
-    //
-    // Correct:
-    //
-    // processNavtaDocument(file)
-    //
-    // NOT:
-    //
-    // processNavtaDocument({ file })
-    //
-    // =========================================
-
-    const documentResult =
-      await processNavtaDocument(
-        file
-      );
-
-    // =========================================
-    // NORMALIZE ADMIN HINTS
-    // =========================================
-
-    const hints = {
-      subject:
-        normalizeSubject(
-          subject
-        ),
-
-      exam:
-        normalizeExam(
-          exam
-        ),
-
-      classLevel:
-        normalizeClassLevel(
-          classLevel
-        ),
-    };
-
-    // =========================================
-    // PDF IMPORT
-    // =========================================
-
-    if (
-      fileType === "pdf"
-    ) {
-      const result =
-        await processPdfImport({
+  const result =
+    fileType === "pdf"
+      ? await processPdfImport({ file, documentResult, hints })
+      : await processTextImport({
           file,
-
           documentResult,
-
           hints,
+          fileType,
         });
 
-      const acceptedCount =
-        result
-          .acceptedQuestions
-          .length;
-
-      const droppedCount =
-        result
-          .droppedQuestions
-          .length;
-
-      return {
-        ...result,
-
-        summary: {
-          detected:
-            acceptedCount +
-            droppedCount,
-
-          accepted:
-            acceptedCount,
-
-          dropped:
-            droppedCount,
-        },
-      };
-    }
-
-    // =========================================
-    // DOCX
-    // =========================================
-    //
-    // DOCX text/image extraction exists in the
-    // document service, but question-to-image
-    // association is not enabled yet.
-    //
-    // We intentionally stop here instead of
-    // importing diagrams incorrectly.
-    // =========================================
-
-    if (
-      fileType === "docx"
-    ) {
-      throw new Error(
-        "DOCX NAVTA AI import is being connected next. Please use PDF for the current visual-import test."
-      );
-    }
-
-    // =========================================
-    // TXT
-    // =========================================
-    //
-    // TXT has no embedded visual information.
-    // A dedicated text-only AI parser will be
-    // connected separately.
-    // =========================================
-
-    if (
-      fileType === "txt"
-    ) {
-      throw new Error(
-        "TXT NAVTA AI import is being connected next. Please use PDF for the current test."
-      );
-    }
-
-    throw new Error(
-      "Unsupported file type."
-    );
+  return {
+    ...result,
+    summary: {
+      detected:
+        result.acceptedQuestions.length + result.droppedQuestions.length,
+      accepted: result.acceptedQuestions.length,
+      dropped: result.droppedQuestions.length,
+    },
   };
-
-// =====================================================
-// EXPORT
-// =====================================================
-//
-// IMPORTANT:
-//
-// The existing NAVTA controller imports:
-//
-// analyseNavtaImport
-//
-// so this exact export must remain.
-//
-// =====================================================
+};
 
 module.exports = {
   analyseNavtaImport,
