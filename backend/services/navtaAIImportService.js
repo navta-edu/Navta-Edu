@@ -58,15 +58,6 @@ const VALID_QUESTION_TYPES = new Set([
 // =====================================================
 // SETTINGS
 // =====================================================
-//
-// Keep this small while using Gemini free tier.
-//
-// 5-page PDF
-// + NAVTA_AI_PAGES_PER_REQUEST=5
-//
-// should normally require about one Gemini detection call.
-//
-// =====================================================
 
 const MAX_PDF_PAGES_PER_IMPORT = Math.max(
   1,
@@ -74,10 +65,6 @@ const MAX_PDF_PAGES_PER_IMPORT = Math.max(
     process.env.NAVTA_AI_MAX_PDF_PAGES || 5
   ) || 5
 );
-
-// This controls local crop + Cloudinary work.
-//
-// It does NOT make extra Gemini calls.
 
 const QUESTION_PROCESS_CONCURRENCY = Math.max(
   1,
@@ -90,7 +77,7 @@ const QUESTION_PROCESS_CONCURRENCY = Math.max(
 );
 
 // =====================================================
-// BASIC HELPERS
+// HELPERS
 // =====================================================
 
 const cleanString = (
@@ -246,27 +233,26 @@ const normalizeClassLevel = (
 };
 
 // =====================================================
-// VALIDATE DETECTED QUESTION
+// VALIDATE QUESTION
 // =====================================================
 //
 // IMPORTANT:
 //
-// Missing MCQ correctAnswer does NOT drop the question.
+// Ordinary equations / matrices / determinants
+// DO NOT require a screenshot.
 //
-// Instead:
+// Images are optional and only used when:
 //
-// needsReview = true
+// hasVisual = true
 //
-// This avoids another Gemini request for every
-// unanswered MCQ.
+// AND:
+//
+// visualBoundingBox exists.
 //
 // =====================================================
 
 const validateDetectedQuestion = (
-  rawQuestion,
-  {
-    requireScreenshot = false,
-  } = {}
+  rawQuestion
 ) => {
   const question = {
     ...rawQuestion,
@@ -344,16 +330,38 @@ const validateDetectedQuestion = (
           Boolean
         ),
 
+    hasVisual:
+      Boolean(
+        rawQuestion?.hasVisual &&
+        rawQuestion?.visualBoundingBox
+      ),
+
+    visualType:
+      cleanString(
+        rawQuestion?.visualType ||
+        "none"
+      ),
+
+    visualDescription:
+      cleanString(
+        rawQuestion?.visualDescription
+      ),
+
+    visualBoundingBox:
+      rawQuestion?.visualBoundingBox ||
+      null,
+
     needsReview:
       Boolean(
         rawQuestion?.needsReview
       ),
   };
 
-  const reasons = [];
+  const reasons =
+    [];
 
   // =========================================
-  // AI DROP
+  // DROP
   // =========================================
 
   if (
@@ -368,7 +376,7 @@ const validateDetectedQuestion = (
   }
 
   // =========================================
-  // QUESTION TEXT
+  // QUESTION
   // =========================================
 
   if (
@@ -424,12 +432,6 @@ const validateDetectedQuestion = (
   // =========================================
   // CHAPTER
   // =========================================
-  //
-  // Do not throw away a good question merely
-  // because chapter detection is uncertain.
-  //
-  // Admin can review it later.
-  //
 
   if (
     !question.chapter
@@ -522,15 +524,6 @@ const validateDetectedQuestion = (
       question.correctAnswer =
         rawQuestion.correctAnswer;
     } else {
-      // =====================================
-      // VERY IMPORTANT
-      // =====================================
-      //
-      // Do not call Gemini again.
-      //
-      // Keep question for Admin review.
-      //
-
       question.correctAnswer =
         null;
 
@@ -543,21 +536,26 @@ const validateDetectedQuestion = (
   }
 
   // =========================================
-  // SCREENSHOT BOUNDARY
+  // NO VISUAL
   // =========================================
 
   if (
-    requireScreenshot &&
-    !question.questionBoundingBox
+    !question.hasVisual
   ) {
-    reasons.push(
-      "Complete question screenshot boundary is missing."
-    );
+    question.visualType =
+      "none";
+
+    question.visualDescription =
+      "";
+
+    question.visualBoundingBox =
+      null;
   }
 
   return {
     valid:
-      reasons.length === 0,
+      reasons.length ===
+      0,
 
     reasons,
 
@@ -566,206 +564,220 @@ const validateDetectedQuestion = (
 };
 
 // =====================================================
-// CREATE + UPLOAD COMPLETE QUESTION SCREENSHOT
+// PROCESS GENUINE VISUAL ONLY
+// =====================================================
+//
+// IMPORTANT CHANGE:
+//
+// OLD:
+//
+// questionBoundingBox
+// ↓
+// whole question screenshot
+//
+// NEW:
+//
+// hasVisual === true
+// +
+// visualBoundingBox
+// ↓
+// crop only real diagram / graph / figure
+//
 // =====================================================
 
-const processCompleteQuestionScreenshot = async ({
-  question,
-  renderedPage,
-  sourceFileName,
-}) => {
-  if (
-    !question?.questionBoundingBox
-  ) {
-    return {
-      questionImage:
-        null,
-
-      screenshotWarning:
-        "Complete question screenshot boundary is missing.",
-    };
-  }
-
-  if (
-    !renderedPage
-  ) {
-    return {
-      questionImage:
-        null,
-
-      screenshotWarning:
-        "Source PDF page could not be located.",
-    };
-  }
-
-  try {
-    // =========================================
-    // REUSE EXISTING CROP SERVICE
-    // =========================================
-    //
-    // navtaDiagramCropService works using
-    // visualBoundingBox.
-    //
-    // We temporarily map full question box to
-    // visualBoundingBox.
-    //
-
-    const cropQuestion = {
-      ...question,
-
-      hasVisual:
-        true,
-
-      visualBoundingBox:
-        question.questionBoundingBox,
-
-      visualDescription:
-        question.question ||
-        `Question ${
-          question.questionNumber ||
-          ""
-        }`.trim(),
-    };
-
-    const cropped =
-      await createQuestionDiagram({
-        question:
-          cropQuestion,
-
-        pageBuffer:
-          renderedPage.buffer,
-      });
-
+const processQuestionVisual =
+  async ({
+    question,
+    renderedPage,
+    sourceFileName,
+  }) => {
     if (
-      !cropped ||
-      !Buffer.isBuffer(
-        cropped.buffer
-      ) ||
-      cropped.buffer.length ===
-        0
+      !question?.hasVisual ||
+      !question?.visualBoundingBox
     ) {
       return {
         questionImage:
           null,
 
         screenshotWarning:
-          "Could not create the complete question screenshot.",
+          null,
       };
     }
 
-    // =========================================
-    // SAFE FILE NAME
-    // =========================================
-
-    const safeFileName =
-      cleanString(
-        sourceFileName
-      )
-        .replace(
-          /[^a-zA-Z0-9._-]/g,
-          "-"
-        )
-        .slice(
-          0,
-          80
-        ) ||
-      "navta-question";
-
-    const questionNumber =
-      cleanString(
-        question.questionNumber
-      )
-        .replace(
-          /[^a-zA-Z0-9_-]/g,
-          "-"
-        )
-        .slice(
-          0,
-          30
-        ) ||
-      "question";
-
-    // =========================================
-    // CLOUDINARY
-    // =========================================
-
-    const upload =
-      await uploadQuestionImage({
-        buffer:
-          cropped.buffer,
-
-        fileName:
-          `${safeFileName}-page-${question.sourcePage}-${questionNumber}`,
-
-        folder:
-          "navta/ai-imports/pending",
-      });
-
     if (
-      !upload?.url
+      !renderedPage
     ) {
       return {
         questionImage:
           null,
 
         screenshotWarning:
-          "Question screenshot was created but could not be uploaded.",
+          "Source PDF page could not be located for the detected visual.",
       };
     }
 
-    return {
-      questionImage: {
-        url:
-          upload.url,
+    try {
+      // =======================================
+      // CROP ONLY visualBoundingBox
+      // =======================================
 
-        publicId:
-          upload.publicId ||
-          "",
+      const cropped =
+        await createQuestionDiagram({
+          question: {
+            ...question,
 
-        altText:
-          question.question ||
-          `Question ${
-            question.questionNumber ||
-            ""
-          }`.trim() ||
-          "NAVTA question",
+            hasVisual:
+              true,
 
-        sourcePage:
-          question.sourcePage,
+            visualBoundingBox:
+              question
+                .visualBoundingBox,
+          },
 
-        width:
-          upload.width ||
-          cropped.width,
+          pageBuffer:
+            renderedPage.buffer,
+        });
 
-        height:
-          upload.height ||
-          cropped.height,
+      if (
+        !cropped ||
+        !Buffer.isBuffer(
+          cropped.buffer
+        ) ||
+        cropped.buffer.length ===
+          0
+      ) {
+        return {
+          questionImage:
+            null,
 
-        bbox:
-          question.questionBoundingBox,
-      },
-    };
-  } catch (
-    error
-  ) {
-    console.error(
-      "NAVTA QUESTION SCREENSHOT ERROR:",
+          screenshotWarning:
+            "NAVTA detected a visual but could not crop it.",
+        };
+      }
+
+      // =======================================
+      // SAFE NAME
+      // =======================================
+
+      const safeFileName =
+        cleanString(
+          sourceFileName
+        )
+          .replace(
+            /[^a-zA-Z0-9._-]/g,
+            "-"
+          )
+          .slice(
+            0,
+            80
+          ) ||
+        "navta-question";
+
+      const questionNumber =
+        cleanString(
+          question.questionNumber
+        )
+          .replace(
+            /[^a-zA-Z0-9_-]/g,
+            "-"
+          )
+          .slice(
+            0,
+            30
+          ) ||
+        "question";
+
+      // =======================================
+      // CLOUDINARY
+      // =======================================
+
+      const upload =
+        await uploadQuestionImage({
+          buffer:
+            cropped.buffer,
+
+          fileName:
+            `${safeFileName}-page-${question.sourcePage}-${questionNumber}-visual`,
+
+          folder:
+            "navta/ai-imports/pending",
+        });
+
+      if (
+        !upload?.url
+      ) {
+        return {
+          questionImage:
+            null,
+
+          screenshotWarning:
+            "NAVTA created the visual crop but could not upload it.",
+        };
+      }
+
+      // =======================================
+      // RETURN
+      // =======================================
+
+      return {
+        questionImage: {
+          url:
+            upload.url,
+
+          publicId:
+            upload.publicId ||
+            "",
+
+          altText:
+            question.visualDescription ||
+            `Visual for ${
+              question.question ||
+              "NAVTA question"
+            }`,
+
+          sourcePage:
+            question.sourcePage,
+
+          visualType:
+            question.visualType ||
+            "other",
+
+          width:
+            upload.width ||
+            cropped.width,
+
+          height:
+            upload.height ||
+            cropped.height,
+
+          bbox:
+            question.visualBoundingBox,
+        },
+
+        screenshotWarning:
+          null,
+      };
+    } catch (
       error
-    );
+    ) {
+      console.error(
+        "NAVTA QUESTION VISUAL ERROR:",
+        error
+      );
 
-    return {
-      questionImage:
-        null,
+      return {
+        questionImage:
+          null,
 
-      screenshotWarning:
-        error?.message ||
-        "NAVTA could not process the question screenshot.",
-    };
-  }
-};
+        screenshotWarning:
+          error?.message ||
+          "NAVTA could not process the detected visual.",
+      };
+    }
+  };
 
 // =====================================================
-// BUILD QUESTION FOR ADMIN REVIEW
+// BUILD ADMIN REVIEW QUESTION
 // =====================================================
 
 const buildImportQuestion = ({
@@ -773,6 +785,7 @@ const buildImportQuestion = ({
   questionImage = null,
   sourceFileName,
   fileType,
+  visualWarning = null,
 }) => {
   const result = {
     question:
@@ -799,6 +812,27 @@ const buildImportQuestion = ({
     explanation:
       question.explanation ||
       "",
+
+    hasVisual:
+      Boolean(
+        question.hasVisual
+      ),
+
+    visualType:
+      question.hasVisual
+        ? (
+            question.visualType ||
+            "other"
+          )
+        : "none",
+
+    visualDescription:
+      question.hasVisual
+        ? (
+            question.visualDescription ||
+            ""
+          )
+        : "",
 
     needsReview:
       Boolean(
@@ -852,7 +886,7 @@ const buildImportQuestion = ({
   }
 
   // =========================================
-  // SHORT / LONG
+  // WRITTEN
   // =========================================
 
   if (
@@ -888,7 +922,7 @@ const buildImportQuestion = ({
   }
 
   // =========================================
-  // QUESTION IMAGE
+  // REAL VISUAL ONLY
   // =========================================
 
   if (
@@ -902,24 +936,28 @@ const buildImportQuestion = ({
         questionImage,
       ];
   } else {
+    result.questionImage =
+      null;
+
     result.questionImages =
       [];
+  }
+
+  if (
+    visualWarning
+  ) {
+    result.visualWarning =
+      visualWarning;
+
+    result.needsReview =
+      true;
   }
 
   return result;
 };
 
 // =====================================================
-// LIMITED CONCURRENCY HELPER
-// =====================================================
-//
-// We do not want to upload 50 Cloudinary images
-// one-by-one.
-//
-// But we also should not upload all 50 simultaneously.
-//
-// Default = 4.
-//
+// LIMITED CONCURRENCY
 // =====================================================
 
 const mapWithConcurrency = async (
@@ -1000,529 +1038,501 @@ const mapWithConcurrency = async (
 };
 
 // =====================================================
-// PROCESS PDF IMPORT
+// PROCESS PDF
 // =====================================================
 
-const processPdfImport = async ({
-  file,
-  documentResult,
-  hints,
-}) => {
-  // =========================================
-  // RENDER PDF
-  // =========================================
+const processPdfImport =
+  async ({
+    file,
+    documentResult,
+    hints,
+  }) => {
+    // =========================================
+    // RENDER PDF
+    // =========================================
 
-  const rendered =
-    await renderPdfPages({
-      buffer:
-        file.buffer,
+    const rendered =
+      await renderPdfPages({
+        buffer:
+          file.buffer,
 
-      // Lower than old 1.8 to reduce:
-      //
-      // - memory
-      // - PNG size
-      // - Gemini request payload
-      // - Cloudinary upload time
-      //
-      // Still generally clear enough for
-      // printed exam papers.
+        scale:
+          1.6,
 
-      scale:
-        1.6,
-
-      maxPages:
-        MAX_PDF_PAGES_PER_IMPORT,
-    });
-
-  if (
-    !rendered?.pages?.length
-  ) {
-    throw new Error(
-      "NAVTA could not render any pages from this PDF."
-    );
-  }
-
-  console.log(
-    `NAVTA rendered ${rendered.pages.length} PDF page(s).`
-  );
-
-  // =========================================
-  // ONE / FEW GEMINI BATCH REQUESTS
-  // =========================================
-
-  const detectedQuestions =
-    await analyseRenderedPages({
-      pages:
-        rendered.pages,
-
-      text:
-        documentResult?.text ||
-        "",
-
-      hints,
-    });
-
-  console.log(
-    `NAVTA AI detected ${detectedQuestions.length} question(s) before validation.`
-  );
-
-  // =========================================
-  // PAGE LOOKUP
-  // =========================================
-
-  const pageMap =
-    new Map(
-      rendered.pages.map(
-        (page) => [
-          Number(
-            page.pageNumber
-          ),
-
-          page,
-        ]
-      )
-    );
-
-  const preliminaryAccepted =
-    [];
-
-  const droppedQuestions =
-    [];
-
-  // =========================================
-  // FIRST VALIDATION
-  // =========================================
-
-  for (
-    const rawQuestion of
-    detectedQuestions
-  ) {
-    const validation =
-      validateDetectedQuestion(
-        rawQuestion,
-        {
-          requireScreenshot:
-            true,
-        }
-      );
-
-    if (
-      !validation.valid
-    ) {
-      const reason =
-        validation.reasons.join(
-          " "
-        );
-
-      droppedQuestions.push({
-        ...validation.question,
-
-        reason,
-
-        dropReason:
-          reason,
+        maxPages:
+          MAX_PDF_PAGES_PER_IMPORT,
       });
 
-      continue;
+    if (
+      !rendered?.pages?.length
+    ) {
+      throw new Error(
+        "NAVTA could not render any pages from this PDF."
+      );
     }
 
-    preliminaryAccepted.push(
-      validation.question
+    console.log(
+      `NAVTA rendered ${rendered.pages.length} PDF page(s).`
     );
-  }
 
-  console.log(
-    `NAVTA preliminary accepted: ${preliminaryAccepted.length}`
-  );
+    // =========================================
+    // AI ANALYSIS
+    // =========================================
 
-  console.log(
-    `NAVTA preliminary dropped: ${droppedQuestions.length}`
-  );
+    const detectedQuestions =
+      await analyseRenderedPages({
+        pages:
+          rendered.pages,
 
-  // =========================================
-  // CROP + CLOUDINARY
-  // =========================================
-  //
-  // IMPORTANT:
-  //
-  // NO GEMINI CALLS HERE.
-  //
-  // This section only:
-  //
-  // 1. crops locally
-  // 2. uploads image to Cloudinary
-  //
-  // =========================================
+        text:
+          documentResult?.text ||
+          "",
 
-  const processed =
-    await mapWithConcurrency(
-      preliminaryAccepted,
+        hints,
+      });
 
-      QUESTION_PROCESS_CONCURRENCY,
+    console.log(
+      `NAVTA AI detected ${detectedQuestions.length} question(s) before validation.`
+    );
 
-      async (
-        question
-      ) => {
-        const renderedPage =
-          pageMap.get(
+    // =========================================
+    // PAGE MAP
+    // =========================================
+
+    const pageMap =
+      new Map(
+        rendered.pages.map(
+          (page) => [
             Number(
-              question.sourcePage
-            )
+              page.pageNumber
+            ),
+
+            page,
+          ]
+        )
+      );
+
+    const preliminaryAccepted =
+      [];
+
+    const droppedQuestions =
+      [];
+
+    // =========================================
+    // VALIDATION
+    // =========================================
+
+    for (
+      const rawQuestion of
+      detectedQuestions
+    ) {
+      const validation =
+        validateDetectedQuestion(
+          rawQuestion
+        );
+
+      if (
+        !validation.valid
+      ) {
+        const reason =
+          validation.reasons.join(
+            " "
           );
 
-        const screenshot =
-          await processCompleteQuestionScreenshot({
-            question,
+        droppedQuestions.push({
+          ...validation.question,
 
-            renderedPage,
-
-            sourceFileName:
-              file.originalname,
-          });
-
-        if (
-          !screenshot.questionImage
-        ) {
-          return {
-            accepted:
-              false,
-
-            question,
-
-            reason:
-              screenshot.screenshotWarning ||
-              "NAVTA could not preserve the complete question screenshot.",
-          };
-        }
-
-        const importQuestion =
-          buildImportQuestion({
-            question,
-
-            questionImage:
-              screenshot.questionImage,
-
-            sourceFileName:
-              file.originalname,
-
-            fileType:
-              "pdf",
-          });
-
-        return {
-          accepted:
-            true,
-
-          question:
-            importQuestion,
-        };
-      }
-    );
-
-  // =========================================
-  // FINAL LISTS
-  // =========================================
-
-  const acceptedQuestions =
-    [];
-
-  for (
-    const item of
-    processed
-  ) {
-    if (
-      !item
-    ) {
-      continue;
-    }
-
-    if (
-      item.accepted
-    ) {
-      acceptedQuestions.push(
-        item.question
-      );
-
-      continue;
-    }
-
-    droppedQuestions.push({
-      ...item.question,
-
-      reason:
-        item.reason,
-
-      dropReason:
-        item.reason,
-    });
-  }
-
-  // =========================================
-  // RESULT
-  // =========================================
-
-  return {
-    acceptedQuestions,
-
-    droppedQuestions,
-
-    documentInfo: {
-      fileType:
-        "pdf",
-
-      fileName:
-        file.originalname,
-
-      totalPages:
-        rendered.totalPages,
-
-      renderedPages:
-        rendered.renderedPages,
-
-      truncated:
-        Boolean(
-          rendered.truncated
-        ),
-    },
-  };
-};
-
-// =====================================================
-// PROCESS TXT / DOCX
-// =====================================================
-
-const processTextImport = async ({
-  file,
-  documentResult,
-  hints,
-  fileType,
-}) => {
-  const detectedQuestions =
-    await analyseTextQuestions({
-      text:
-        documentResult?.text ||
-        "",
-
-      hints,
-    });
-
-  const acceptedQuestions =
-    [];
-
-  const droppedQuestions =
-    [];
-
-  for (
-    const rawQuestion of
-    detectedQuestions
-  ) {
-    const validation =
-      validateDetectedQuestion(
-        rawQuestion,
-        {
-          requireScreenshot:
-            false,
-        }
-      );
-
-    if (
-      !validation.valid
-    ) {
-      const reason =
-        validation.reasons.join(
-          " "
-        );
-
-      droppedQuestions.push({
-        ...validation.question,
-
-        reason,
-
-        dropReason:
           reason,
-      });
 
-      continue;
-    }
-
-    acceptedQuestions.push(
-      buildImportQuestion({
-        question:
-          validation.question,
-
-        questionImage:
-          null,
-
-        sourceFileName:
-          file.originalname,
-
-        fileType,
-      })
-    );
-  }
-
-  return {
-    acceptedQuestions,
-
-    droppedQuestions,
-
-    documentInfo: {
-      fileType,
-
-      fileName:
-        file.originalname,
-
-      totalPages:
-        null,
-
-      renderedPages:
-        0,
-
-      truncated:
-        false,
-    },
-  };
-};
-
-// =====================================================
-// MAIN NAVTA IMPORT
-// =====================================================
-
-const analyseNavtaImport = async ({
-  file,
-  subject,
-  exam,
-  classLevel,
-}) => {
-  // =========================================
-  // FILE VALIDATION
-  // =========================================
-
-  if (
-    !file
-  ) {
-    throw new Error(
-      "Please upload a PDF, DOCX or TXT file."
-    );
-  }
-
-  if (
-    !Buffer.isBuffer(
-      file.buffer
-    ) ||
-    file.buffer.length ===
-      0
-  ) {
-    throw new Error(
-      "Uploaded file buffer is missing."
-    );
-  }
-
-  // =========================================
-  // FILE TYPE
-  // =========================================
-
-  const fileType =
-    getFileType(
-      file.originalname
-    );
-
-  if (
-    ![
-      "pdf",
-      "docx",
-      "txt",
-    ].includes(
-      fileType
-    )
-  ) {
-    throw new Error(
-      "Unsupported file type. Please upload PDF, DOCX or TXT."
-    );
-  }
-
-  // =========================================
-  // DOCUMENT EXTRACTION
-  // =========================================
-
-  const documentResult =
-    await processNavtaDocument(
-      file
-    );
-
-  // =========================================
-  // ADMIN HINTS
-  // =========================================
-
-  const hints = {
-    subject:
-      normalizeSubject(
-        subject
-      ),
-
-    exam:
-      normalizeExam(
-        exam
-      ),
-
-    classLevel:
-      normalizeClassLevel(
-        classLevel
-      ),
-  };
-
-  // =========================================
-  // PROCESS
-  // =========================================
-
-  const result =
-    fileType ===
-    "pdf"
-      ? await processPdfImport({
-          file,
-
-          documentResult,
-
-          hints,
-        })
-      : await processTextImport({
-          file,
-
-          documentResult,
-
-          hints,
-
-          fileType,
+          dropReason:
+            reason,
         });
 
-  // =========================================
-  // SUMMARY
-  // =========================================
+        continue;
+      }
 
-  const needsReview =
-    result.acceptedQuestions.filter(
-      (question) =>
-        question.needsReview
-    ).length;
+      preliminaryAccepted.push(
+        validation.question
+      );
+    }
 
-  return {
-    ...result,
+    console.log(
+      `NAVTA preliminary accepted: ${preliminaryAccepted.length}`
+    );
 
-    summary: {
-      detected:
-        result.acceptedQuestions.length +
-        result.droppedQuestions.length,
+    console.log(
+      `NAVTA preliminary dropped: ${droppedQuestions.length}`
+    );
 
-      accepted:
-        result.acceptedQuestions.length,
+    // =========================================
+    // PROCESS VISUALS
+    // =========================================
 
-      dropped:
-        result.droppedQuestions.length,
+    const processed =
+      await mapWithConcurrency(
+        preliminaryAccepted,
 
-      needsReview,
-    },
+        QUESTION_PROCESS_CONCURRENCY,
+
+        async (
+          question
+        ) => {
+          const renderedPage =
+            pageMap.get(
+              Number(
+                question.sourcePage
+              )
+            );
+
+          // =====================================
+          // NORMAL TEXT / MATH
+          // =====================================
+          //
+          // No screenshot.
+          // No Cloudinary upload.
+          //
+
+          if (
+            !question.hasVisual ||
+            !question.visualBoundingBox
+          ) {
+            return {
+              accepted:
+                true,
+
+              question:
+                buildImportQuestion({
+                  question,
+
+                  questionImage:
+                    null,
+
+                  sourceFileName:
+                    file.originalname,
+
+                  fileType:
+                    "pdf",
+                }),
+            };
+          }
+
+          // =====================================
+          // ACTUAL VISUAL
+          // =====================================
+
+          const visual =
+            await processQuestionVisual({
+              question,
+
+              renderedPage,
+
+              sourceFileName:
+                file.originalname,
+            });
+
+          return {
+            accepted:
+              true,
+
+            question:
+              buildImportQuestion({
+                question,
+
+                questionImage:
+                  visual.questionImage,
+
+                sourceFileName:
+                  file.originalname,
+
+                fileType:
+                  "pdf",
+
+                visualWarning:
+                  visual.screenshotWarning,
+              }),
+          };
+        }
+      );
+
+    // =========================================
+    // FINAL QUESTIONS
+    // =========================================
+
+    const acceptedQuestions =
+      processed
+        .filter(
+          (item) =>
+            item?.accepted
+        )
+        .map(
+          (item) =>
+            item.question
+        );
+
+    return {
+      acceptedQuestions,
+
+      droppedQuestions,
+
+      documentInfo: {
+        fileType:
+          "pdf",
+
+        fileName:
+          file.originalname,
+
+        totalPages:
+          rendered.totalPages,
+
+        renderedPages:
+          rendered.renderedPages,
+
+        truncated:
+          Boolean(
+            rendered.truncated
+          ),
+      },
+    };
   };
-};
+
+// =====================================================
+// TXT / DOCX
+// =====================================================
+
+const processTextImport =
+  async ({
+    file,
+    documentResult,
+    hints,
+    fileType,
+  }) => {
+    const detectedQuestions =
+      await analyseTextQuestions({
+        text:
+          documentResult?.text ||
+          "",
+
+        hints,
+      });
+
+    const acceptedQuestions =
+      [];
+
+    const droppedQuestions =
+      [];
+
+    for (
+      const rawQuestion of
+      detectedQuestions
+    ) {
+      const validation =
+        validateDetectedQuestion(
+          rawQuestion
+        );
+
+      if (
+        !validation.valid
+      ) {
+        const reason =
+          validation.reasons.join(
+            " "
+          );
+
+        droppedQuestions.push({
+          ...validation.question,
+
+          reason,
+
+          dropReason:
+            reason,
+        });
+
+        continue;
+      }
+
+      acceptedQuestions.push(
+        buildImportQuestion({
+          question:
+            validation.question,
+
+          questionImage:
+            null,
+
+          sourceFileName:
+            file.originalname,
+
+          fileType,
+        })
+      );
+    }
+
+    return {
+      acceptedQuestions,
+
+      droppedQuestions,
+
+      documentInfo: {
+        fileType,
+
+        fileName:
+          file.originalname,
+
+        totalPages:
+          null,
+
+        renderedPages:
+          0,
+
+        truncated:
+          false,
+      },
+    };
+  };
+
+// =====================================================
+// MAIN IMPORT
+// =====================================================
+
+const analyseNavtaImport =
+  async ({
+    file,
+    subject,
+    exam,
+    classLevel,
+  }) => {
+    // =========================================
+    // FILE CHECK
+    // =========================================
+
+    if (
+      !file
+    ) {
+      throw new Error(
+        "Please upload a PDF, DOCX or TXT file."
+      );
+    }
+
+    if (
+      !Buffer.isBuffer(
+        file.buffer
+      ) ||
+      file.buffer.length ===
+        0
+    ) {
+      throw new Error(
+        "Uploaded file buffer is missing."
+      );
+    }
+
+    // =========================================
+    // FILE TYPE
+    // =========================================
+
+    const fileType =
+      getFileType(
+        file.originalname
+      );
+
+    if (
+      ![
+        "pdf",
+        "docx",
+        "txt",
+      ].includes(
+        fileType
+      )
+    ) {
+      throw new Error(
+        "Unsupported file type. Please upload PDF, DOCX or TXT."
+      );
+    }
+
+    // =========================================
+    // EXTRACT DOCUMENT
+    // =========================================
+
+    const documentResult =
+      await processNavtaDocument(
+        file
+      );
+
+    // =========================================
+    // ADMIN HINTS
+    // =========================================
+
+    const hints = {
+      subject:
+        normalizeSubject(
+          subject
+        ),
+
+      exam:
+        normalizeExam(
+          exam
+        ),
+
+      classLevel:
+        normalizeClassLevel(
+          classLevel
+        ),
+    };
+
+    // =========================================
+    // PROCESS
+    // =========================================
+
+    const result =
+      fileType ===
+      "pdf"
+        ? await processPdfImport({
+            file,
+
+            documentResult,
+
+            hints,
+          })
+        : await processTextImport({
+            file,
+
+            documentResult,
+
+            hints,
+
+            fileType,
+          });
+
+    // =========================================
+    // NEEDS REVIEW
+    // =========================================
+
+    const needsReview =
+      result.acceptedQuestions.filter(
+        (question) =>
+          question.needsReview
+      ).length;
+
+    // =========================================
+    // RETURN
+    // =========================================
+
+    return {
+      ...result,
+
+      summary: {
+        detected:
+          result.acceptedQuestions.length +
+          result.droppedQuestions.length,
+
+        accepted:
+          result.acceptedQuestions.length,
+
+        dropped:
+          result.droppedQuestions.length,
+
+        needsReview,
+      },
+    };
+  };
 
 // =====================================================
 // EXPORT
@@ -1530,5 +1540,6 @@ const analyseNavtaImport = async ({
 
 module.exports = {
   analyseNavtaImport,
+
   validateDetectedQuestion,
 };
