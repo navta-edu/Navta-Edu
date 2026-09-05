@@ -1,117 +1,129 @@
-const cloudinary =
-  require("../config/cloudinary");
+const cloudinary = require("../config/cloudinary");
 
 // =====================================================
-// UPLOAD QUESTION DIAGRAM
+// HELPERS
+// =====================================================
+
+const cleanFileName = (value = "question-image") =>
+  String(value || "question-image")
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 100) || "question-image";
+
+const cleanFolder = (value = "navta/question-diagrams") =>
+  String(value || "navta/question-diagrams")
+    .trim()
+    .replace(/[^a-zA-Z0-9/_-]/g, "")
+    .replace(/\/+/g, "/")
+    .replace(/^\/|\/$/g, "") || "navta/question-diagrams";
+
+// =====================================================
+// UPLOAD QUESTION IMAGE
 // =====================================================
 
 const uploadQuestionImage = async ({
   buffer,
-  fileName = "question-diagram",
+  fileName = "question-image",
   folder = "navta/question-diagrams",
 }) => {
-  if (!Buffer.isBuffer(buffer)) {
-    throw new Error(
-      "A valid image buffer is required."
-    );
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+    throw new Error("A valid non-empty image buffer is required.");
   }
 
-  if (buffer.length === 0) {
-    throw new Error(
-      "The image buffer is empty."
-    );
+  if (!cloudinary?.uploader?.upload_stream) {
+    throw new Error("Cloudinary is not configured correctly.");
   }
 
-  return new Promise(
-    (resolve, reject) => {
-      const stream =
-        cloudinary.uploader.upload_stream(
-          {
-            folder,
+  const safeFileName = cleanFileName(fileName);
+  const safeFolder = cleanFolder(folder);
 
-            resource_type:
-              "image",
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: safeFolder,
+        resource_type: "image",
+        use_filename: true,
+        unique_filename: true,
+        overwrite: false,
+        filename_override: safeFileName,
+        context: {
+          originalFileName: safeFileName,
+        },
+      },
+      (error, result) => {
+        if (error) {
+          console.error("CLOUDINARY UPLOAD ERROR:", error);
 
-            use_filename:
-              true,
+          return reject(
+            new Error(
+              error?.message ||
+                "Cloudinary failed to upload the NAVTA question image."
+            )
+          );
+        }
 
-            unique_filename:
-              true,
+        if (!result?.secure_url) {
+          return reject(
+            new Error("Cloudinary upload completed without a secure image URL.")
+          );
+        }
 
-            overwrite:
-              false,
+        return resolve({
+          url: result.secure_url,
+          publicId: result.public_id || "",
+          width: Number(result.width) || null,
+          height: Number(result.height) || null,
+          format: result.format || "",
+          bytes: Number(result.bytes) || null,
+        });
+      }
+    );
 
-            context: {
-              originalFileName:
-                fileName,
-            },
-          },
+    stream.on("error", (error) => {
+      reject(
+        new Error(
+          error?.message || "Cloudinary upload stream failed."
+        )
+      );
+    });
 
-          (error, result) => {
-            if (error) {
-              console.error(
-                "CLOUDINARY UPLOAD ERROR:",
-                error
-              );
-
-              return reject(
-                error
-              );
-            }
-
-            return resolve({
-              url:
-                result.secure_url ||
-                "",
-
-              publicId:
-                result.public_id ||
-                "",
-
-              width:
-                result.width,
-
-              height:
-                result.height,
-            });
-          }
-        );
-
-      stream.end(buffer);
-    }
-  );
+    stream.end(buffer);
+  });
 };
 
 // =====================================================
-// DELETE QUESTION DIAGRAM
+// DELETE QUESTION IMAGE
 // =====================================================
 
-const deleteQuestionImage =
-  async (publicId) => {
-    if (!publicId) {
-      return null;
-    }
+const deleteQuestionImage = async (publicId) => {
+  const safePublicId = String(publicId || "").trim();
 
-    return cloudinary.uploader.destroy(
-      publicId,
-      {
-        resource_type:
-          "image",
-      }
-    );
-  };
+  if (!safePublicId) {
+    return null;
+  }
+
+  if (!cloudinary?.uploader?.destroy) {
+    throw new Error("Cloudinary is not configured correctly.");
+  }
+
+  return cloudinary.uploader.destroy(safePublicId, {
+    resource_type: "image",
+    invalidate: true,
+  });
+};
 
 // =====================================================
 // CHECK CLOUDINARY CONNECTION
 // =====================================================
 
-const verifyCloudinaryConnection =
-  async () => {
-    const result =
-      await cloudinary.api.ping();
+const verifyCloudinaryConnection = async () => {
+  if (!cloudinary?.api?.ping) {
+    throw new Error("Cloudinary is not configured correctly.");
+  }
 
-    return result;
-  };
+  return cloudinary.api.ping();
+};
 
 module.exports = {
   uploadQuestionImage,
