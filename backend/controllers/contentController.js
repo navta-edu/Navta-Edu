@@ -60,6 +60,75 @@ const normalizeSubjectName = (value = '') => {
 };
 
 
+const normalizeClassName = (
+  value = ''
+) => {
+  const raw =
+    cleanString(value);
+
+  if (!raw) {
+    return '';
+  }
+
+  const compact =
+    raw
+      .toLowerCase()
+      .replace(/\s+/g, '');
+
+  if (
+    compact === '11' ||
+    compact === 'class11' ||
+    compact === 'xi'
+  ) {
+    return 'Class 11';
+  }
+
+  if (
+    compact === '12' ||
+    compact === 'class12' ||
+    compact === 'xii'
+  ) {
+    return 'Class 12';
+  }
+
+  return raw;
+};
+
+
+const normalizePreparationName = (
+  value = ''
+) => {
+  const raw =
+    cleanString(value);
+
+  const lower =
+    raw.toLowerCase();
+
+  if (
+    lower === 'jee' ||
+    lower === 'jee main' ||
+    lower === 'jee mains' ||
+    lower === 'jee advanced'
+  ) {
+    return 'JEE';
+  }
+
+  if (lower === 'neet') {
+    return 'NEET';
+  }
+
+  if (
+    lower === 'boards' ||
+    lower === 'board' ||
+    lower === 'cbse'
+  ) {
+    return 'Boards';
+  }
+
+  return raw;
+};
+
+
 // =====================================================
 // GET ALL SUBJECTS
 // =====================================================
@@ -316,6 +385,48 @@ exports.getNotes = async (req, res) => {
         req.params.chapterId
       );
 
+    const requestedChapterName =
+      cleanString(
+        req.query.chapterName
+      );
+
+    const requestedSubjectName =
+      normalizeSubjectName(
+        req.query.subjectName
+      );
+
+    const requestedClassName =
+      normalizeClassName(
+        req.query.className ||
+        req.query.classLevel
+      );
+
+    const requestedPreparation =
+      normalizePreparationName(
+        req.query.exam ||
+        req.query.preparation
+      );
+
+    // -------------------------------------------------
+    // SAFETY:
+    // Study Notes must be separated by preparation.
+    // If the Note model has not been upgraded yet,
+    // do not silently return every PDF.
+    // -------------------------------------------------
+
+    if (
+      requestedPreparation &&
+      !Note.schema.path(
+        'exam'
+      )
+    ) {
+      return res.status(500).json({
+        success: false,
+        message:
+          'Note model is missing the exam field. Update Note.js so Study Notes can be separated into NEET, JEE and Boards.'
+      });
+    }
+
     let chapter = null;
 
     // -------------------------------------------------
@@ -330,89 +441,75 @@ exports.getNotes = async (req, res) => {
     }
 
     // -------------------------------------------------
-    // 2. Optional fallback by metadata
+    // 2. Fallback by NAVTA metadata
     // -------------------------------------------------
 
-    if (!chapter) {
-      const chapterName =
-        cleanString(
-          req.query.chapterName
-        );
-
-      const subjectName =
-        normalizeSubjectName(
-          req.query.subjectName
-        );
-
-      const className =
-        cleanString(
-          req.query.className ||
-          req.query.classLevel
-        );
-
-      if (
-        chapterName &&
-        subjectName
-      ) {
-        let subject =
-          await Subject.findOne({
-            name: new RegExp(
+    if (
+      !chapter &&
+      requestedChapterName &&
+      requestedSubjectName
+    ) {
+      let subject =
+        await Subject.findOne({
+          name:
+            new RegExp(
               `^${escapeRegex(
-                subjectName
+                requestedSubjectName
               )}$`,
               'i'
             )
+        });
+
+      if (
+        !subject &&
+        requestedSubjectName ===
+          'Maths'
+      ) {
+        subject =
+          await Subject.findOne({
+            name:
+              /^Mathematics$/i
           });
+      }
+
+      if (subject) {
+        const chapterQuery = {
+          subject:
+            subject._id,
+
+          title:
+            new RegExp(
+              `^${escapeRegex(
+                requestedChapterName
+              )}$`,
+              'i'
+            )
+        };
 
         if (
-          !subject &&
-          subjectName === 'Maths'
+          requestedClassName &&
+          Chapter.schema.path(
+            'className'
+          )
         ) {
-          subject =
-            await Subject.findOne({
-              name: /^Mathematics$/i
-            });
+          chapterQuery.className =
+            requestedClassName;
         }
 
-        if (subject) {
-          const chapterQuery = {
-            subject:
-              subject._id,
-
-            title:
-              new RegExp(
-                `^${escapeRegex(
-                  chapterName
-                )}$`,
-                'i'
-              )
-          };
-
-          if (
-            className &&
-            Chapter.schema.path(
-              'className'
-            )
-          ) {
-            chapterQuery.className =
-              className;
-          }
-
-          if (
-            className &&
-            Chapter.schema.path(
-              'classLevel'
-            )
-          ) {
-            chapterQuery.classLevel =
-              className;
-          }
-
-          chapter =
-            await Chapter.findOne(
-              chapterQuery
-            );
+        if (
+          requestedClassName &&
+          Chapter.schema.path(
+            'classLevel'
+          )
+        ) {
+          chapterQuery.classLevel =
+            requestedClassName;
         }
+
+        chapter =
+          await Chapter.findOne(
+            chapterQuery
+          );
       }
     }
 
@@ -429,14 +526,69 @@ exports.getNotes = async (req, res) => {
     }
 
     // -------------------------------------------------
-    // 4. Find notes
+    // 4. Build STRICT Study Note filter
+    // -------------------------------------------------
+
+    const noteQuery = {
+      chapter:
+        chapter._id
+    };
+
+    // This is the critical filter that keeps Boards,
+    // JEE and NEET PDFs in their own preparation section.
+    if (requestedPreparation) {
+      noteQuery.exam =
+        requestedPreparation;
+    }
+
+    if (
+      requestedClassName &&
+      Note.schema.path(
+        'className'
+      )
+    ) {
+      noteQuery.className =
+        requestedClassName;
+    }
+
+    if (
+      requestedSubjectName &&
+      Note.schema.path(
+        'subjectName'
+      )
+    ) {
+      noteQuery.subjectName =
+        new RegExp(
+          `^${escapeRegex(
+            requestedSubjectName
+          )}$`,
+          'i'
+        );
+    }
+
+    if (
+      requestedChapterName &&
+      Note.schema.path(
+        'chapterName'
+      )
+    ) {
+      noteQuery.chapterName =
+        new RegExp(
+          `^${escapeRegex(
+            requestedChapterName
+          )}$`,
+          'i'
+        );
+    }
+
+    // -------------------------------------------------
+    // 5. Find ONLY notes for this exact preparation
     // -------------------------------------------------
 
     const notes =
-      await Note.find({
-        chapter:
-          chapter._id
-      })
+      await Note.find(
+        noteQuery
+      )
         .populate(
           'uploadedBy',
           'name email'
@@ -461,6 +613,15 @@ exports.getNotes = async (req, res) => {
         chapter:
           chapter.title,
 
+        subject:
+          requestedSubjectName,
+
+        className:
+          requestedClassName,
+
+        preparation:
+          requestedPreparation,
+
         count:
           notes.length
       }
@@ -469,6 +630,8 @@ exports.getNotes = async (req, res) => {
     return res.status(200).json({
       success: true,
       count: notes.length,
+      preparation:
+        requestedPreparation,
       data: notes
     });
 
