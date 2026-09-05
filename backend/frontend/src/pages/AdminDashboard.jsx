@@ -311,6 +311,12 @@ export default function AdminDashboard() {
 
   const [noteUploading, setNoteUploading] = useState(false);
 
+  // Existing Study Notes for the selected Subject → Exam → Class → Chapter.
+  // Used by the admin to review and delete unwanted uploaded PDFs/notes.
+  const [managedNotes, setManagedNotes] = useState([]);
+  const [managedNotesLoading, setManagedNotesLoading] = useState(false);
+  const [deletingNoteId, setDeletingNoteId] = useState('');
+
 
   /*
   |--------------------------------------------------------------------------
@@ -835,6 +841,111 @@ const fetchData = async () => {
     SUBJECT_RULES[
       selectedSubjectObject?.name
     ] || [];
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Existing Study Notes / PDF Management
+  |--------------------------------------------------------------------------
+  */
+
+  const loadManagedNotes = async () => {
+
+    if (
+      !selectedSubject ||
+      !selectedExam ||
+      !selectedClass ||
+      !selectedChapter
+    ) {
+      setManagedNotes([]);
+      return;
+    }
+
+    const selectedChapterObject =
+      chapters.find(
+        (chapter) =>
+          String(
+            chapter._id ||
+            chapter.id
+          ) ===
+          String(selectedChapter)
+      );
+
+    try {
+
+      setManagedNotesLoading(true);
+
+      const response =
+        await contentAPI.getNotes(
+          selectedChapter,
+          {
+            chapterName:
+              selectedChapterObject?.title ||
+              selectedChapterObject?.name ||
+              '',
+
+            subjectName:
+              selectedSubjectObject?.name ||
+              '',
+
+            className:
+              selectedClass,
+
+            classLevel:
+              selectedClass,
+
+            exam:
+              selectedExam
+          }
+        );
+
+      const noteData =
+        Array.isArray(response)
+          ? response
+          : Array.isArray(response?.data)
+            ? response.data
+            : Array.isArray(response?.notes)
+              ? response.notes
+              : Array.isArray(response?.data?.notes)
+                ? response.data.notes
+                : [];
+
+      setManagedNotes(noteData);
+
+    } catch (error) {
+
+      console.error(
+        'Failed to load admin Study Notes:',
+        error
+      );
+
+      setManagedNotes([]);
+
+    } finally {
+
+      setManagedNotesLoading(false);
+
+    }
+
+  };
+
+
+  useEffect(() => {
+
+    if (activeSection !== 'note') {
+      return;
+    }
+
+    loadManagedNotes();
+
+  }, [
+    activeSection,
+    selectedSubject,
+    selectedExam,
+    selectedClass,
+    selectedChapter,
+    chapters
+  ]);
 
 
   /*
@@ -1533,6 +1644,10 @@ const fetchData = async () => {
         'Study note uploaded successfully!'
       );
 
+      // Refresh the admin list immediately so the newly uploaded
+      // note/PDF appears under "Manage Uploaded Study Notes".
+      await loadManagedNotes();
+
 
       setNoteTitle('');
       setNoteContent('');
@@ -1567,6 +1682,92 @@ const fetchData = async () => {
     } finally {
 
       setNoteUploading(false);
+
+    }
+
+  };
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Delete Existing Study Note / PDF Entry
+  |--------------------------------------------------------------------------
+  */
+
+  const handleDeleteNote = async (note) => {
+
+    const noteId =
+      note?._id ||
+      note?.id;
+
+    if (!noteId) {
+
+      alert(
+        'This note does not have a valid ID and cannot be deleted.'
+      );
+
+      return;
+    }
+
+    const noteName =
+      note?.title ||
+      'this study note';
+
+    const confirmed =
+      window.confirm(
+        `Delete "${noteName}"?\n\nThis will remove the note and its PDF from the NAVTA Study Notes library. This action cannot be undone.`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+
+      setDeletingNoteId(
+        String(noteId)
+      );
+
+      await adminAPI.deleteNote(
+        noteId
+      );
+
+      // Remove immediately from the admin list for a fast UI response.
+      setManagedNotes(
+        (currentNotes) =>
+          currentNotes.filter(
+            (item) =>
+              String(
+                item?._id ||
+                item?.id
+              ) !==
+              String(noteId)
+          )
+      );
+
+      alert(
+        'Study note deleted successfully.'
+      );
+
+    } catch (error) {
+
+      console.error(
+        'Failed to delete Study Note:',
+        error
+      );
+
+      alert(
+        error?.response?.data?.message ||
+        error?.message ||
+        'Failed to delete the study note.'
+      );
+
+      // Re-sync the list in case the server state changed.
+      await loadManagedNotes();
+
+    } finally {
+
+      setDeletingNoteId('');
 
     }
 
@@ -2813,6 +3014,8 @@ const fetchData = async () => {
 
       {activeSection === 'note' && (
 
+        <div className="space-y-6">
+
         <Card
           title="Upload Study Note"
           subtitle="Upload a PDF and attach it to Subject → Exam → Class → Chapter"
@@ -3176,6 +3379,259 @@ F = ma
           </form>
 
         </Card>
+
+
+        <Card
+          title="Manage Uploaded Study Notes"
+          subtitle="Review and delete unwanted PDFs for the selected Subject → Exam → Class → Chapter"
+        >
+
+          <div className="mt-4 space-y-4">
+
+            {/* Selected hierarchy summary */}
+
+            <div className="rounded-2xl border border-primary-500/20 bg-primary-500/5 p-4">
+
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+
+                <BookOpen className="h-4 w-4 text-primary-500" />
+
+                <span className="font-bold text-primary-500">
+                  {selectedSubjectObject?.name || 'Subject'}
+                </span>
+
+                <span className="text-slate-400">
+                  →
+                </span>
+
+                <span className="font-semibold text-slate-600 dark:text-slate-300">
+                  {selectedExam || 'Exam'}
+                </span>
+
+                <span className="text-slate-400">
+                  →
+                </span>
+
+                <span className="font-semibold text-slate-600 dark:text-slate-300">
+                  {selectedClass || 'Class'}
+                </span>
+
+                <span className="text-slate-400">
+                  →
+                </span>
+
+                <span className="font-semibold text-slate-600 dark:text-slate-300">
+                  {
+                    chapters.find(
+                      (chapter) =>
+                        String(
+                          chapter._id ||
+                          chapter.id
+                        ) ===
+                        String(selectedChapter)
+                    )?.title ||
+                    chapters.find(
+                      (chapter) =>
+                        String(
+                          chapter._id ||
+                          chapter.id
+                        ) ===
+                        String(selectedChapter)
+                    )?.name ||
+                    'Chapter'
+                  }
+                </span>
+
+              </div>
+
+            </div>
+
+
+            {!selectedChapter ? (
+
+              <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 px-5 py-10 text-center">
+
+                <FileText className="mx-auto mb-3 h-9 w-9 text-slate-300 dark:text-slate-600" />
+
+                <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
+                  Select a chapter first
+                </p>
+
+                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                  Choose Subject → Examination → Class → Chapter above to see its uploaded notes.
+                </p>
+
+              </div>
+
+            ) : managedNotesLoading ? (
+
+              <div className="flex min-h-[180px] flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-800">
+
+                <div className="h-7 w-7 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+
+                <p className="mt-3 text-xs font-semibold text-slate-500">
+                  Loading uploaded notes...
+                </p>
+
+              </div>
+
+            ) : managedNotes.length === 0 ? (
+
+              <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 px-5 py-10 text-center">
+
+                <FileText className="mx-auto mb-3 h-9 w-9 text-slate-300 dark:text-slate-600" />
+
+                <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
+                  No uploaded notes found
+                </p>
+
+                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                  Upload a Study Note above and it will appear here.
+                </p>
+
+              </div>
+
+            ) : (
+
+              <div className="space-y-3">
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    {managedNotes.length} uploaded {managedNotes.length === 1 ? 'note' : 'notes'}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={loadManagedNotes}
+                    disabled={managedNotesLoading}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Refresh
+                  </button>
+
+                </div>
+
+
+                {managedNotes.map((note) => {
+
+                  const noteId =
+                    note?._id ||
+                    note?.id;
+
+                  const deleting =
+                    String(deletingNoteId) ===
+                    String(noteId);
+
+                  return (
+
+                    <div
+                      key={noteId}
+                      className="rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-slate-800 dark:bg-slate-900/40"
+                    >
+
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
+                        <div className="min-w-0">
+
+                          <div className="flex items-start gap-3">
+
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-500/10">
+
+                              <FileText className="h-5 w-5 text-primary-500" />
+
+                            </div>
+
+                            <div className="min-w-0">
+
+                              <p className="break-words text-sm font-extrabold text-slate-900 dark:text-white">
+                                {note?.title || 'Untitled Study Note'}
+                              </p>
+
+                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                {note?.createdAt
+                                  ? `Uploaded ${new Date(note.createdAt).toLocaleString()}`
+                                  : 'Uploaded Study Note'}
+                              </p>
+
+                              {note?.uploadedBy?.name && (
+
+                                <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                                  Uploaded by {note.uploadedBy.name}
+                                </p>
+
+                              )}
+
+                            </div>
+
+                          </div>
+
+                        </div>
+
+
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+
+                          {note?.pdfUrl && (
+
+                            <a
+                              href={note.pdfUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >
+                              <FileText className="h-4 w-4" />
+                              View PDF
+                            </a>
+
+                          )}
+
+
+                          <button
+                            type="button"
+                            disabled={deleting}
+                            onClick={() =>
+                              handleDeleteNote(note)
+                            }
+                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-extrabold text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+                          >
+
+                            {deleting ? (
+
+                              <>
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-red-500 border-t-transparent" />
+                                Deleting...
+                              </>
+
+                            ) : (
+
+                              <>
+                                <Trash2 className="h-4 w-4" />
+                                Delete PDF
+                              </>
+
+                            )}
+
+                          </button>
+
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                  );
+
+                })}
+
+              </div>
+
+            )}
+
+          </div>
+
+        </Card>
+
+        </div>
 
       )}
 
