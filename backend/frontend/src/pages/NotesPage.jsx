@@ -3,13 +3,6 @@ import { contentAPI } from "../utils/api";
 import { Link, useLocation } from "react-router-dom";
 import Card from "../components/Card";
 import Button from "../components/Button";
-import { Document, Page, pdfjs } from "react-pdf";
-
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url
-).toString();
-
 import {
   BookOpen,
   Download,
@@ -374,55 +367,38 @@ const findClassForChapter = (
 |--------------------------------------------------------------------------
 | PDF FIRST PAGE PREVIEW
 |--------------------------------------------------------------------------
+| Uses the browser's built-in PDF renderer instead of react-pdf.
+| This avoids PDF.js worker/CORS loading issues for normal public PDF URLs.
+| The frame is non-interactive and cropped to a single A4-style page preview.
 */
 
 function PdfFirstPagePreview({ pdfUrl }) {
-  const previewRef = useRef(null);
-  const [previewWidth, setPreviewWidth] = useState(700);
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewError, setPreviewError] = useState(false);
 
   useEffect(() => {
     setPreviewLoading(true);
     setPreviewError(false);
-  }, [pdfUrl]);
 
-  useEffect(() => {
-    const element = previewRef.current;
-
-    if (!element) {
+    if (!pdfUrl) {
+      setPreviewLoading(false);
       return undefined;
     }
 
-    const updateWidth = () => {
-      const width = element.getBoundingClientRect().width;
+    const timer = window.setTimeout(() => {
+      setPreviewLoading(false);
+    }, 8000);
 
-      if (width > 0) {
-        setPreviewWidth(Math.max(240, Math.min(width - 24, 760)));
-      }
-    };
-
-    updateWidth();
-
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", updateWidth);
-
-      return () => {
-        window.removeEventListener("resize", updateWidth);
-      };
-    }
-
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
+    return () => window.clearTimeout(timer);
+  }, [pdfUrl]);
 
   if (!pdfUrl) {
     return null;
   }
+
+  const separator = String(pdfUrl).includes("#") ? "&" : "#";
+  const previewUrl =
+    `${pdfUrl}${separator}page=1&view=FitH&toolbar=0&navpanes=0&scrollbar=0`;
 
   return (
     <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800/40">
@@ -431,6 +407,7 @@ function PdfFirstPagePreview({ pdfUrl }) {
           <p className="text-sm font-bold text-slate-900 dark:text-white">
             PDF Preview
           </p>
+
           <p className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">
             Previewing page 1 only
           </p>
@@ -441,14 +418,12 @@ function PdfFirstPagePreview({ pdfUrl }) {
         </span>
       </div>
 
-      <div
-        ref={previewRef}
-        className="relative flex min-h-[220px] w-full min-w-0 justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100/70 p-3 dark:border-slate-700 dark:bg-slate-950/40 sm:p-4"
-      >
+      <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
         {previewLoading && !previewError && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-[1px] dark:bg-slate-950/80">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/95 dark:bg-slate-950/95">
             <div className="flex flex-col items-center gap-3">
               <div className="h-7 w-7 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                 Loading PDF preview...
               </p>
@@ -457,42 +432,51 @@ function PdfFirstPagePreview({ pdfUrl }) {
         )}
 
         {previewError ? (
-          <div className="flex min-h-[220px] w-full flex-col items-center justify-center px-4 text-center">
-            <FileText className="mb-3 h-9 w-9 text-slate-300 dark:text-slate-600" />
+          <div className="flex min-h-[260px] w-full flex-col items-center justify-center px-4 py-10 text-center sm:min-h-[420px]">
+            <FileText className="mb-3 h-10 w-10 text-slate-300 dark:text-slate-600" />
+
             <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
               Preview unavailable
             </p>
+
             <p className="mt-1 max-w-md text-xs leading-relaxed text-slate-400 dark:text-slate-500">
-              The PDF could not be rendered here. You can still use the Download PDF button above.
+              This PDF host does not allow an embedded preview. You can still
+              open the full PDF with the Download PDF button above.
             </p>
           </div>
         ) : (
-          <Document
-            file={pdfUrl}
-            loading={null}
-            error={null}
-            onLoadSuccess={() => {
-              setPreviewLoading(false);
-              setPreviewError(false);
-            }}
-            onLoadError={(error) => {
-              console.error("Failed to load PDF preview:", error);
-              setPreviewLoading(false);
-              setPreviewError(true);
+          <div
+            className="relative mx-auto w-full bg-white"
+            style={{
+              aspectRatio: "1 / 1.4142",
+              maxHeight: "900px",
             }}
           >
-            <Page
-              pageNumber={1}
-              width={previewWidth}
-              renderTextLayer={false}
-              renderAnnotationLayer={false}
-              loading={null}
-              onRenderSuccess={() => setPreviewLoading(false)}
-              className="overflow-hidden rounded-xl bg-white shadow-sm"
+            <iframe
+              key={previewUrl}
+              src={previewUrl}
+              title="PDF page 1 preview"
+              onLoad={() => {
+                setPreviewLoading(false);
+                setPreviewError(false);
+              }}
+              onError={() => {
+                setPreviewLoading(false);
+                setPreviewError(true);
+              }}
+              scrolling="no"
+              className="absolute inset-0 h-full w-full border-0 bg-white"
+              style={{
+                pointerEvents: "none",
+              }}
             />
-          </Document>
+          </div>
         )}
       </div>
+
+      <p className="mt-2 text-[10px] leading-relaxed text-slate-400 dark:text-slate-500">
+        Preview only. Use Download PDF to open the complete document.
+      </p>
     </div>
   );
 }
