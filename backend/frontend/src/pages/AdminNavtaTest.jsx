@@ -257,6 +257,34 @@ function normaliseNavtaLatex(input = "") {
     .replace(/```/g, "")
     .replace(/\u00a0/g, " ")
     .replace(/\r\n?/g, "\n")
+
+    // ==========================================
+    // FIX GEMINI DOUBLE-ESCAPED LATEX COMMANDS
+    // ==========================================
+    //
+    // Examples:
+    //
+    // \\sum   -> \sum
+    // \\cdot  -> \cdot
+    // \\theta -> \theta
+    //
+    // Matrix row separators \\ are preserved
+    // because they are not directly followed by
+    // one of the supported command names below.
+    //
+    .replace(
+      /\\\\(?=(?:begin|end|sum|prod|int|iint|iiint|lim|frac|dfrac|tfrac|sqrt|binom|cdot|times|div|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|sin|cos|tan|cot|sec|csc|log|ln|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|neq|ne|leq|geq|approx|equiv|pm|mp|infty|vec|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|leftrightarrow|Rightarrow|therefore|because|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel)\b)/g,
+      "\\"
+    )
+
+    // Remove accidental spaces after a LaTeX slash.
+    // Example:
+    // \ sum -> \sum
+    .replace(
+      /\\\s+(?=[A-Za-z])/g,
+      "\\"
+    )
+
     .trim();
 }
 
