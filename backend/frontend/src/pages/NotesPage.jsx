@@ -29,9 +29,19 @@ BookMarked,
 
 /*
 
-SUBJECT CONFIGURATION
+NAVTA TEST SUBJECT / PREPARATION CONFIGURATION
 
 --------------------------------------------------------------------------
+
+Study Notes intentionally does NOT keep its own chapter database anymore.
+
+Subjects and chapters are loaded from the same NAVTA master APIs used by
+NAVTA Test:
+
+- contentAPI.getNavtaSubjects()
+- contentAPI.getNavtaChapters(subject, classLevel)
+
+This prevents Study Notes and NAVTA Test from drifting apart.
 
 */
 
@@ -39,32 +49,38 @@ const SUBJECT_CONFIG = {
 Physics: {
 icon: Atom,
 color: "blue",
-exams: ["JEE Mains", "NEET", "Boards"],
+preparations: ["NEET", "JEE", "Boards"],
 },
 
 Chemistry: {
 icon: FlaskConical,
 color: "purple",
-exams: ["JEE Mains", "NEET", "Boards"],
+preparations: ["NEET", "JEE", "Boards"],
+},
+
+Maths: {
+icon: Calculator,
+color: "green",
+preparations: ["JEE", "Boards"],
 },
 
 Mathematics: {
 icon: Calculator,
 color: "green",
-exams: ["JEE Mains", "Boards"],
+preparations: ["JEE", "Boards"],
 },
 
 Biology: {
 icon: Dna,
 color: "pink",
-exams: ["NEET", "Boards"],
+preparations: ["NEET", "Boards"],
 },
 };
 
 const CLASSES = ["Class 11", "Class 12"];
 
-// Backend may return "Maths", "Math", or "Mathematics".
-// Study Notes uses "Mathematics" as the canonical local key.
+// NAVTA Test uses "Maths". Older Study Notes data may still say
+// "Math" or "Mathematics", so keep all three names compatible.
 const getSubjectConfigKey = (subjectName = "") => {
 const value = String(subjectName || "").trim().toLowerCase();
 
@@ -73,7 +89,7 @@ value === "maths" ||
 value === "math" ||
 value === "mathematics"
 ) {
-return "Mathematics";
+return "Maths";
 }
 
 const matchingKey = Object.keys(SUBJECT_CONFIG).find(
@@ -81,173 +97,6 @@ const matchingKey = Object.keys(SUBJECT_CONFIG).find(
 );
 
 return matchingKey || String(subjectName || "").trim();
-};
-
-/*
-
-CHAPTER DATABASE
-
---------------------------------------------------------------------------
-
-*/
-
-const STUDY_CHAPTERS = {
-Physics: {
-"Class 11": [
-"Physical World",
-"Units and Measurements",
-"Motion in a Straight Line",
-"Motion in a Plane",
-"Laws of Motion",
-"Work, Energy and Power",
-"System of Particles and Rotational Motion",
-"Gravitation",
-"Mechanical Properties of Solids",
-"Mechanical Properties of Fluids",
-"Thermal Properties of Matter",
-"Thermodynamics",
-"Kinetic Theory",
-"Oscillations",
-"Waves",
-],
-
-"Class 12": [
-  "Electric Charges and Fields",
-  "Electrostatic Potential and Capacitance",
-  "Current Electricity",
-  "Moving Charges and Magnetism",
-  "Magnetism and Matter",
-  "Electromagnetic Induction",
-  "Alternating Current",
-  "Electromagnetic Waves",
-  "Ray Optics and Optical Instruments",
-  "Wave Optics",
-  "Dual Nature of Radiation and Matter",
-  "Atoms",
-  "Nuclei",
-  "Semiconductor Electronics: Materials, Devices and Simple Circuits",
-],
-
-},
-
-Chemistry: {
-"Class 11": [
-"Some Basic Concepts of Chemistry",
-"Structure of Atom",
-"States of Matter",
-"Thermodynamics",
-"Equilibrium",
-"Redox Reactions",
-"Classification of Elements and Periodicity in Properties",
-"Chemical Bonding and Molecular Structure",
-"Hydrogen",
-"The s-Block Elements",
-"Organic Chemistry – Some Basic Principles and Techniques",
-"Hydrocarbons",
-"Environmental Chemistry",
-],
-
-"Class 12": [
-  "Solid State",
-  "Solutions",
-  "Electrochemistry",
-  "Chemical Kinetics",
-  "Surface Chemistry",
-  "General Principles and Processes of Isolation of Elements",
-  "p-Block Elements",
-  "d- and f-Block Elements",
-  "Coordination Compounds",
-  "Haloalkanes and Haloarenes",
-  "Alcohols, Phenols and Ethers",
-  "Aldehydes, Ketones and Carboxylic Acids",
-  "Amines",
-  "Biomolecules",
-  "Polymers",
-  "Chemistry in Everyday Life",
-],
-
-},
-
-Mathematics: {
-"Class 11": [
-"Sets",
-"Relations and Functions",
-"Trigonometric Functions",
-"Principle of Mathematical Induction",
-"Complex Numbers and Quadratic Equations",
-"Linear Inequalities",
-"Permutations and Combinations",
-"Binomial Theorem",
-"Sequences and Series",
-"Straight Lines",
-"Conic Sections",
-"Introduction to Three Dimensional Geometry",
-"Limits and Derivatives",
-"Mathematical Reasoning",
-"Statistics",
-"Probability",
-],
-
-"Class 12": [
-  "Relations and Functions",
-  "Inverse Trigonometric Functions",
-  "Matrices",
-  "Determinants",
-  "Continuity and Differentiability",
-  "Applications of Derivatives",
-  "Integrals",
-  "Applications of Integrals",
-  "Differential Equations",
-  "Vector Algebra",
-  "Three Dimensional Geometry",
-  "Linear Programming",
-  "Probability",
-],
-
-},
-
-Biology: {
-"Class 11": [
-"The Living World",
-"Biological Classification",
-"Plant Kingdom",
-"Animal Kingdom",
-"Morphology of Flowering Plants",
-"Anatomy of Flowering Plants",
-"Structural Organisation in Animals",
-"Cell: The Unit of Life",
-"Biomolecules",
-"Cell Cycle and Cell Division",
-"Photosynthesis in Higher Plants",
-"Respiration in Plants",
-"Plant Growth and Development",
-"Breathing and Exchange of Gases",
-"Body Fluids and Circulation",
-"Excretory Products and their Elimination",
-"Locomotion and Movement",
-"Neural Control and Coordination",
-"Chemical Coordination and Integration",
-],
-
-"Class 12": [
-  "Sexual Reproduction in Flowering Plants",
-  "Human Reproduction",
-  "Reproductive Health",
-  "Principles of Inheritance and Variation",
-  "Molecular Basis of Inheritance",
-  "Evolution",
-  "Human Health and Disease",
-  "Strategies for Enhancement in Food Production",
-  "Microbes in Human Welfare",
-  "Biotechnology: Principles and Processes",
-  "Biotechnology and its Applications",
-  "Organisms and Populations",
-  "Ecosystem",
-  "Biodiversity and Conservation",
-  "Environmental Issues",
-],
-
-},
 };
 
 /*
@@ -270,8 +119,25 @@ return name
 const normalizeExamName = (exam = "") => {
 const value = String(exam || "").trim();
 
-if (value === "JEE") {
-return "JEE Mains";
+if (
+value.toLowerCase() === "jee mains" ||
+value.toLowerCase() === "jee main" ||
+value.toLowerCase() === "jee advanced" ||
+value.toLowerCase() === "jee"
+) {
+return "JEE";
+}
+
+if (value.toLowerCase() === "neet") {
+return "NEET";
+}
+
+if (
+value.toLowerCase() === "boards" ||
+value.toLowerCase() === "board" ||
+value.toLowerCase() === "cbse"
+) {
+return "Boards";
 }
 
 return value;
@@ -347,37 +213,6 @@ const overlap = smaller.filter(
 ).length;
 
 return overlap / smaller.length >= 0.6;
-};
-
-const findClassForChapter = (
-subjectName,
-chapterName
-) => {
-const subjectData =
-STUDY_CHAPTERS[getSubjectConfigKey(subjectName)];
-
-if (!subjectData) {
-return "";
-}
-
-for (const className of CLASSES) {
-const list =
-subjectData[className] || [];
-
-if (
-  list.some((chapter) =>
-    chapterNamesMatch(
-      chapter,
-      chapterName
-    )
-  )
-) {
-  return className;
-}
-
-}
-
-return "";
 };
 
 /*
@@ -580,14 +415,32 @@ FETCH SUBJECTS
 useEffect(() => {
 const fetchSubjects = async () => {
 try {
-const res = await contentAPI.getSubjects();
+const res =
+  typeof contentAPI.getNavtaSubjects === "function"
+    ? await contentAPI.getNavtaSubjects()
+    : await contentAPI.getSubjects();
 
-    setSubjects(res.data || []);
-  } catch (err) {
-    console.error("Failed to load subjects:", err);
-  } finally {
-    setLoading(false);
-  }
+const subjectData =
+  Array.isArray(res)
+    ? res
+    : Array.isArray(res?.data)
+      ? res.data
+      : Array.isArray(res?.subjects)
+        ? res.subjects
+        : Array.isArray(res?.data?.subjects)
+          ? res.data.subjects
+          : [];
+
+setSubjects(subjectData);
+} catch (err) {
+console.error(
+  "Failed to load NAVTA Test subjects for Study Notes:",
+  err
+);
+setSubjects([]);
+} finally {
+setLoading(false);
+}
 };
 
 fetchSubjects();
@@ -611,6 +464,9 @@ subjects.length === 0
 return;
 }
 
+let cancelled = false;
+
+const openPanicTarget = async () => {
 const matchingSubject =
   subjects.find((subject) => {
     const backendName =
@@ -650,29 +506,85 @@ if (!matchingSubject) {
 const subjectName =
   matchingSubject.name;
 
-const inferredClass =
-  panicClassLevel ||
-  findClassForChapter(
-    subjectName,
-    panicChapter
-  );
-
 const config =
   SUBJECT_CONFIG[
     getSubjectConfigKey(subjectName)
   ];
 
-let examForNotes =
-  panicExam;
+let preparationForNotes =
+  normalizeExamName(
+    panicExam
+  );
 
 if (
-  !examForNotes ||
-  !config?.exams?.includes(
-    examForNotes
+  !preparationForNotes ||
+  !config?.preparations?.includes(
+    preparationForNotes
   )
 ) {
-  examForNotes =
-    config?.exams?.[0] || "";
+  preparationForNotes =
+    config?.preparations?.[0] || "";
+}
+
+let inferredClass =
+  panicClassLevel;
+
+if (
+  !inferredClass &&
+  panicChapter
+) {
+  for (const className of CLASSES) {
+    try {
+      const classResponse =
+        typeof contentAPI.getNavtaChapters === "function"
+          ? await contentAPI.getNavtaChapters(
+              subjectName,
+              className
+            )
+          : await contentAPI.getChapters(
+              subjectName,
+              className
+            );
+
+      const classChapters =
+        Array.isArray(classResponse)
+          ? classResponse
+          : Array.isArray(classResponse?.data)
+            ? classResponse.data
+            : Array.isArray(classResponse?.chapters)
+              ? classResponse.chapters
+              : Array.isArray(classResponse?.data?.chapters)
+                ? classResponse.data.chapters
+                : [];
+
+      const hasTarget =
+        classChapters.some(
+          (chapter) =>
+            chapterNamesMatch(
+              chapter?.title ||
+                chapter?.name ||
+                chapter?.chapter ||
+                "",
+              panicChapter
+            )
+        );
+
+      if (hasTarget) {
+        inferredClass =
+          className;
+        break;
+      }
+    } catch (error) {
+      console.warn(
+        `Could not inspect ${className} NAVTA chapters for Panic Mode:`,
+        error
+      );
+    }
+  }
+}
+
+if (cancelled) {
+  return;
 }
 
 setSelectedSubject(
@@ -680,7 +592,7 @@ setSelectedSubject(
 );
 
 setSelectedExam(
-  examForNotes
+  preparationForNotes
 );
 
 if (inferredClass) {
@@ -691,6 +603,13 @@ if (inferredClass) {
 
 panicAutoOpenAttempted.current =
   true;
+};
+
+openPanicTarget();
+
+return () => {
+cancelled = true;
+};
 
 }, [
 subjects,
@@ -703,7 +622,7 @@ panicExam,
 
 /*
 
-LOAD CHAPTERS
+LOAD NAVTA TEST CHAPTERS
 
 --------------------------------------------------------------------------
 
@@ -718,108 +637,164 @@ setSelectedNote(null);
 return;
 }
 
+let cancelled = false;
+
 const loadChapters = async () => {
-  setChaptersLoading(true);
+setChaptersLoading(true);
 
-  try {
-    const subjectName = selectedSubject.name;
+try {
+  const subjectName =
+    selectedSubject.name ||
+    selectedSubject.displayName ||
+    "";
 
-    const localChapterNames =
-      STUDY_CHAPTERS[getSubjectConfigKey(subjectName)]?.[selectedClass] || [];
-
-    let backendChapters = [];
-
-    try {
-      const res = await contentAPI.getChapters(selectedSubject._id);
-
-      backendChapters = res.data || [];
-    } catch (backendError) {
-      console.warn(
-        "Backend chapters could not be loaded. Using local chapter list.",
-        backendError
-      );
-    }
-
-    const finalChapters = localChapterNames.map(
-      (chapterName, index) => {
-        const matchingBackendChapter = backendChapters.find(
-          (chapter) => {
-            const backendTitle =
-              chapter.title || chapter.name || "";
-
-            const backendClass =
-              chapter.className ||
-              chapter.class ||
-              chapter.classLevel;
-
-            const titleMatches =
-              normalizeName(backendTitle) ===
-              normalizeName(chapterName);
-
-            const classMatches =
-              !backendClass ||
-              backendClass === selectedClass ||
-              backendClass ===
-                selectedClass.replace("Class ", "");
-
-            return titleMatches && classMatches;
-          }
+  const res =
+    typeof contentAPI.getNavtaChapters === "function"
+      ? await contentAPI.getNavtaChapters(
+          subjectName,
+          selectedClass
+        )
+      : await contentAPI.getChapters(
+          subjectName,
+          selectedClass
         );
 
-        return {
-          _id:
-            matchingBackendChapter?._id ||
-            `local-${subjectName}-${selectedClass}-${index + 1}`,
+  const rawChapters =
+    Array.isArray(res)
+      ? res
+      : Array.isArray(res?.data)
+        ? res.data
+        : Array.isArray(res?.chapters)
+          ? res.chapters
+          : Array.isArray(res?.data?.chapters)
+            ? res.data.chapters
+            : [];
 
-          chapterNumber: index + 1,
+  const finalChapters =
+    rawChapters
+      .map(
+        (chapter, index) => {
+          const title =
+            String(
+              chapter?.title ||
+              chapter?.name ||
+              chapter?.chapter ||
+              ""
+            ).trim();
 
-          title: chapterName,
+          const chapterId =
+            chapter?._id ||
+            chapter?.id ||
+            `navta-${subjectName}-${selectedClass}-${index + 1}`;
 
-          subject: subjectName,
+          return {
+            ...chapter,
 
-          exam: selectedExam,
+            _id:
+              String(
+                chapterId
+              ),
 
-          className: selectedClass,
+            id:
+              String(
+                chapterId
+              ),
 
-          isLocalChapter: !matchingBackendChapter,
-        };
-      }
-    );
+            chapterNumber:
+              Number(
+                chapter?.chapterNumber
+              ) ||
+              index + 1,
 
-    setChapters(finalChapters);
+            title,
 
-    if (finalChapters.length > 0) {
-      const panicTarget =
-        panicState
-          ? finalChapters.find(
-              (chapter) =>
-                chapterNamesMatch(
-                  chapter.title,
-                  panicChapter
-                )
-            )
-          : null;
+            name:
+              title,
 
-      setSelectedChapter(
-        panicTarget?._id ||
-          finalChapters[0]._id
+            subject:
+              chapter?.subject ||
+              subjectName,
+
+            exam:
+              selectedExam,
+
+            className:
+              chapter?.className ||
+              chapter?.classLevel ||
+              selectedClass,
+
+            classLevel:
+              chapter?.classLevel ||
+              chapter?.className ||
+              selectedClass,
+
+            source:
+              chapter?.source ||
+              "navta-test",
+          };
+        }
+      )
+      .filter(
+        (chapter) =>
+          Boolean(
+            chapter.title
+          )
       );
-    } else {
-      setSelectedChapter("");
-      setNotes([]);
-      setSelectedNote(null);
-    }
-  } catch (err) {
-    console.error("Failed to prepare chapters:", err);
 
+  if (cancelled) {
+    return;
+  }
+
+  setChapters(
+    finalChapters
+  );
+
+  if (finalChapters.length > 0) {
+    const panicTarget =
+      panicState &&
+      panicChapter
+        ? finalChapters.find(
+            (chapter) =>
+              chapterNamesMatch(
+                chapter.title,
+                panicChapter
+              )
+          )
+        : null;
+
+    setSelectedChapter(
+      panicTarget?._id ||
+      finalChapters[0]._id
+    );
+  } else {
+    setSelectedChapter("");
+    setNotes([]);
+    setSelectedNote(null);
+  }
+} catch (err) {
+  console.error(
+    "Failed to load NAVTA Test chapters for Study Notes:",
+    err
+  );
+
+  if (!cancelled) {
     setChapters([]);
     setSelectedChapter("");
-  } finally {
+    setNotes([]);
+    setSelectedNote(null);
+  }
+} finally {
+  if (!cancelled) {
     setChaptersLoading(false);
   }
+}
 };
 
 loadChapters();
+
+return () => {
+cancelled = true;
+};
 
 }, [
 selectedSubject,
@@ -1220,7 +1195,7 @@ return (
         </h1>
 
         <p className="mt-1 text-xs sm:text-sm text-slate-400 dark:text-slate-500 leading-relaxed">
-          Select subject, examination, class and chapter to access your
+          Select subject, preparation, class and chapter to access your
           study notes.
         </p>
 
@@ -1389,7 +1364,7 @@ return (
   )}
 
   {/* ================================================================
-      STEP 2 — EXAM
+      STEP 2 — PREPARATION
   ================================================================= */}
 
   {selectedSubject && !selectedExam && (
@@ -1409,21 +1384,21 @@ return (
         </p>
 
         <h2 className="mt-1 text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-          Select Examination
+          Select Preparation
         </h2>
 
         <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-          Choose the examination for {selectedSubject.name}.
+          Choose your preparation method for {selectedSubject.name}.
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 sm:gap-4">
 
-        {(SUBJECT_CONFIG[getSubjectConfigKey(selectedSubject.name)]?.exams || []).map(
-          (exam) => (
+        {(SUBJECT_CONFIG[getSubjectConfigKey(selectedSubject.name)]?.preparations || []).map(
+          (preparation) => (
             <button
-              key={exam}
-              onClick={() => handleExamSelect(exam)}
+              key={preparation}
+              onClick={() => handleExamSelect(preparation)}
               className="group w-full min-w-0 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/40 p-5 sm:p-6 text-left transition-all hover:border-primary-500 hover:bg-primary-500/5"
             >
 
@@ -1438,7 +1413,7 @@ return (
               </div>
 
               <h3 className="mt-4 text-base font-bold text-slate-900 dark:text-white break-words">
-                {exam}
+                {preparation}
               </h3>
 
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -1468,7 +1443,7 @@ return (
           className="flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-primary-500"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Examinations
+          Back to Preparations
         </button>
 
         <div>
@@ -1794,18 +1769,18 @@ return (
                 <BookMarked className="mb-3 h-9 w-9 text-slate-300 dark:text-slate-600 sm:h-10 sm:w-10" />
 
                 <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                  {selectedChapter?.startsWith("local-")
+                  {selectedChapter
                     ? "No Notes Uploaded Yet"
                     : "Select a Chapter"}
                 </p>
 
                 <p className="mt-1 max-w-md text-xs leading-relaxed text-slate-400 dark:text-slate-500">
-                  {selectedChapter?.startsWith("local-")
-                    ? "This chapter is available in the Study Notes library, but notes have not been uploaded for it yet."
+                  {selectedChapter
+                    ? "This NAVTA Test chapter is available, but no Study Notes have been uploaded for this preparation yet."
                     : "Select a chapter from the left to view available study notes."}
                 </p>
 
-                {selectedChapter?.startsWith("local-") && (
+                {selectedChapter && (
                   <div className="mt-4 flex max-w-md items-start gap-2 text-left text-xs text-slate-400">
 
                     <Info className="mt-0.5 h-4 w-4 shrink-0" />
