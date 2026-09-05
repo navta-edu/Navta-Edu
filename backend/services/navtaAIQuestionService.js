@@ -3,16 +3,12 @@
 // Gemini quota-optimized question separator
 // =====================================================
 
-// =====================================================
-// ENVIRONMENT
-// =====================================================
-
 const GEMINI_API_KEY = String(
   process.env.GEMINI_API_KEY || ""
 ).trim();
 
 const GEMINI_MODEL = String(
-  process.env.GEMINI_MODEL || "gemini-2.0-flash"
+  process.env.GEMINI_MODEL || "gemini-3.5-flash-lite"
 ).trim();
 
 const GEMINI_API_BASE = String(
@@ -29,24 +25,6 @@ const NAVTA_AI_TIMEOUT_MS = Math.max(
   ) || 90000
 );
 
-// IMPORTANT:
-//
-// Instead of:
-//
-// Page 1 -> Gemini request
-// Page 2 -> Gemini request
-// Page 3 -> Gemini request
-// Page 4 -> Gemini request
-// Page 5 -> Gemini request
-//
-// NAVTA can now send multiple pages in ONE request.
-//
-// For your current 5-page PDFs:
-//
-// NAVTA_AI_PAGES_PER_REQUEST=5
-//
-// means approximately one Gemini detection request.
-
 const NAVTA_AI_PAGES_PER_REQUEST = Math.max(
   1,
   Math.min(
@@ -58,7 +36,7 @@ const NAVTA_AI_PAGES_PER_REQUEST = Math.max(
 );
 
 // =====================================================
-// BASIC HELPERS
+// HELPERS
 // =====================================================
 
 const cleanString = (value = "") => {
@@ -219,16 +197,7 @@ const normalizeClassLevel = (
 };
 
 // =====================================================
-// NORMALIZE CORRECT ANSWER
-// =====================================================
-//
-// NAVTA stores MCQ answer as:
-//
-// A = 0
-// B = 1
-// C = 2
-// D = 3
-//
+// CORRECT ANSWER
 // =====================================================
 
 const normalizeCorrectAnswer = (
@@ -271,18 +240,41 @@ const normalizeCorrectAnswer = (
 };
 
 // =====================================================
-// NORMALIZE BOUNDING BOX
+// VISUAL TYPE
 // =====================================================
-//
-// Expected:
-//
-// {
-//   x: 0.10,
-//   y: 0.20,
-//   width: 0.80,
-//   height: 0.25
-// }
-//
+
+const normalizeVisualType = (
+  value
+) => {
+  const text = cleanString(
+    value
+  ).toLowerCase();
+
+  const allowed = new Set([
+    "none",
+    "diagram",
+    "graph",
+    "figure",
+    "circuit",
+    "geometry",
+    "table",
+    "chemical-structure",
+    "biology",
+    "image",
+    "other",
+  ]);
+
+  if (
+    allowed.has(text)
+  ) {
+    return text;
+  }
+
+  return "none";
+};
+
+// =====================================================
+// NORMALIZE BOUNDING BOX
 // =====================================================
 
 const normalizeBoundingBox = (
@@ -320,14 +312,7 @@ const normalizeBoundingBox = (
     return null;
   }
 
-  // Sometimes AI may return percentages
-  // instead of normalized 0-1 values.
-  //
-  // Example:
-  // x = 10
-  // y = 20
-  // width = 80
-  // height = 25
+  // Convert percentages if AI returns 0-100.
 
   if (
     x > 1 ||
@@ -407,7 +392,7 @@ const normalizeBoundingBox = (
 };
 
 // =====================================================
-// IMAGE -> BASE64
+// IMAGE TO BASE64
 // =====================================================
 
 const imageBufferToBase64 = (
@@ -511,7 +496,7 @@ const parseJsonObject = (
     return JSON.parse(
       text
     );
-  } catch (firstError) {
+  } catch {
     const start =
       text.indexOf("{");
 
@@ -538,7 +523,7 @@ const parseJsonObject = (
           sliced
         );
       } catch {
-        // Continue to final error.
+        // Continue below.
       }
     }
 
@@ -549,7 +534,7 @@ const parseJsonObject = (
 };
 
 // =====================================================
-// EXTRACT GEMINI TEXT
+// GEMINI TEXT
 // =====================================================
 
 const extractGeminiText = (
@@ -583,7 +568,9 @@ const extractGeminiText = (
         .join("\n")
         .trim();
 
-    if (text) {
+    if (
+      text
+    ) {
       return text;
     }
   }
@@ -592,7 +579,7 @@ const extractGeminiText = (
 };
 
 // =====================================================
-// RATE-LIMIT HELPER
+// RATE LIMIT
 // =====================================================
 
 const extractRetryAfterSeconds = (
@@ -601,9 +588,11 @@ const extractRetryAfterSeconds = (
 ) => {
   const headerValue =
     Number(
-      response?.headers?.get?.(
-        "retry-after"
-      )
+      response
+        ?.headers
+        ?.get?.(
+          "retry-after"
+        )
     );
 
   if (
@@ -617,10 +606,6 @@ const extractRetryAfterSeconds = (
     );
   }
 
-  // Gemini often returns:
-  //
-  // Please retry in 53.513s.
-
   const match =
     String(
       message
@@ -628,11 +613,14 @@ const extractRetryAfterSeconds = (
       /retry\s+in\s+([\d.]+)s/i
     );
 
-  if (match) {
+  if (
+    match
+  ) {
     return Math.ceil(
       Number(
         match[1]
-      ) || 60
+      ) ||
+      60
     );
   }
 
@@ -736,10 +724,6 @@ const callGemini = async ({
       );
     }
 
-    // =========================================
-    // PROVIDER ERROR
-    // =========================================
-
     if (
       !response.ok
     ) {
@@ -749,12 +733,9 @@ const callGemini = async ({
         ) ||
         `Gemini returned HTTP ${response.status}.`;
 
-      // =======================================
-      // QUOTA / RATE LIMIT
-      // =======================================
-
       if (
-        response.status === 429
+        response.status ===
+        429
       ) {
         const retryAfter =
           extractRetryAfterSeconds(
@@ -764,8 +745,7 @@ const callGemini = async ({
 
         const error =
           new Error(
-            `Gemini quota/rate limit reached. ` +
-              `Please wait about ${retryAfter} seconds and try again.`
+            `Gemini quota/rate limit reached. Please wait about ${retryAfter} seconds and try again.`
           );
 
         error.statusCode =
@@ -782,10 +762,6 @@ const callGemini = async ({
       );
     }
 
-    // =========================================
-    // SUCCESS RESPONSE
-    // =========================================
-
     const modelText =
       extractGeminiText(
         data
@@ -800,7 +776,9 @@ const callGemini = async ({
     }
 
     return modelText;
-  } catch (error) {
+  } catch (
+    error
+  ) {
     if (
       error?.name ===
       "AbortError"
@@ -825,27 +803,7 @@ const callGemini = async ({
 };
 
 // =====================================================
-// PDF BATCH PROMPT
-// =====================================================
-//
-// IMPORTANT:
-//
-// Multiple PDF pages are sent in ONE Gemini request.
-//
-// Gemini must:
-//
-// 1. detect questions
-// 2. detect page number
-// 3. detect question boundary
-// 4. classify question
-// 5. try to determine answer
-//
-// all in the SAME request.
-//
-// This avoids the old:
-// detect -> crop -> solve -> second AI request
-// workflow.
-//
+// PDF PROMPT
 // =====================================================
 
 const PDF_BATCH_PROMPT = `
@@ -857,121 +815,174 @@ You will receive MULTIPLE ORIGINAL RENDERED PDF PAGE IMAGES in one request.
 
 SUPPORTED SUBJECTS:
 
-- Physics
-- Chemistry
-- Maths
-- Biology
+Physics
+Chemistry
+Maths
+Biology
 
 SUPPORTED EXAMS:
 
-- NEET
-- JEE
-- Boards
+NEET
+JEE
+Boards
 
 SUPPORTED CLASSES:
 
-- Class 11
-- Class 12
+Class 11
+Class 12
 
 SUPPORTED DIFFICULTIES:
 
-- Easy
-- Medium
-- Hard
+Easy
+Medium
+Hard
 
 SUPPORTED QUESTION TYPES:
 
-- mcq
-- short
-- long
+mcq
+short
+long
 
-YOUR TASK:
+TASK:
 
-Inspect every supplied PDF page image carefully.
-
-Detect every COMPLETE and READABLE academic question.
+Detect every COMPLETE and READABLE academic question on every supplied page.
 
 IMPORTANT RULES:
 
-1. The original rendered page image is authoritative.
+1. The original rendered page is authoritative.
 
-2. Every detected question MUST contain the correct sourcePage.
+2. Every question MUST contain the correct sourcePage.
 
-3. Every detected question MUST contain questionBoundingBox.
+3. questionBoundingBox should identify the complete question on its source page.
 
-4. Bounding boxes use normalized values from 0 to 1.
+questionBoundingBox is INTERNAL NAVTA METADATA.
 
-Example:
+It is NOT automatically displayed to students.
 
-{
-  "x": 0.10,
-  "y": 0.20,
-  "width": 0.80,
-  "height": 0.25
-}
+4. Bounding boxes use normalized values from 0 to 1:
 
-5. questionBoundingBox must contain the ENTIRE question.
+x
+y
+width
+height
 
-This includes:
+5. questionBoundingBox should contain the complete single question:
 
 - question number
 - question statement
-- mathematical expressions
-- chemical equations
-- diagrams
-- graphs
-- tables
+- equations
 - all MCQ options
+- any required figure
 
-6. Do NOT include the previous question.
+6. Do not include the previous or next question in questionBoundingBox.
 
-7. Do NOT include the next question.
+7. For MCQs return exactly four options when four options are visible.
 
-8. For MCQs, return exactly four options when four options are visible.
-
-9. correctAnswer is ZERO-BASED:
+8. correctAnswer is ZERO-BASED:
 
 A = 0
 B = 1
 C = 2
 D = 3
 
-10. Try to solve each MCQ DURING THIS SAME AI REQUEST.
+9. Try to solve the MCQ during THIS SAME request.
 
-11. If you are not confident about the answer:
+10. If the answer is uncertain:
 
 correctAnswer = null
 
-12. Do NOT drop an otherwise readable question only because correctAnswer is null.
+11. Do not drop a readable question only because correctAnswer is null.
 
-13. If chapter is uncertain:
+12. If chapter is uncertain:
 
 chapter = ""
 
-14. If difficulty is uncertain:
+13. If difficulty is uncertain:
 
 difficulty = "Medium"
 
-15. Set drop=true only when:
+14. Set drop=true only if the actual question is unreadable, incomplete,
+or cannot be separated safely.
 
-- the question is unreadable
-- the question is incomplete
-- the question continues outside the supplied page and cannot be safely reconstructed
-- the question boundary cannot be identified safely
+15. VISUAL RULE — VERY IMPORTANT:
 
-16. If the question contains a diagram:
+hasVisual=true ONLY when the original question contains a genuine visual
+that should be preserved as an image.
 
-hasVisual = true
+Examples:
 
-17. visualBoundingBox should contain only the visual/diagram where possible.
+- graph
+- coordinate graph
+- geometry figure
+- circuit
+- ray diagram
+- apparatus
+- biological diagram
+- map
+- image-based table
+- figure referred to by the question
+- chemical structural drawing that cannot be represented reliably as text
 
-18. Return JSON ONLY.
+16. THESE ARE NOT VISUAL DIAGRAMS:
 
-DO NOT return Markdown.
+- normal equations
+- fractions
+- square roots
+- matrices
+- determinants
+- vectors written symbolically
+- integrals
+- summations
+- trigonometric expressions
+- Greek symbols
+- algebraic expressions
+- normal chemical equations written as text
 
-DO NOT return explanations outside JSON.
+For these:
 
-RETURN THIS STRUCTURE:
+hasVisual = false
+visualType = "none"
+visualBoundingBox = null
+visualDescription = ""
+
+17. If hasVisual=true:
+
+visualType must describe the visual.
+
+visualBoundingBox MUST contain ONLY the actual diagram / graph / figure.
+
+visualBoundingBox MUST NOT be the whole question box unless the entire
+question itself is genuinely an image.
+
+Allowed visualType values:
+
+none
+diagram
+graph
+figure
+circuit
+geometry
+table
+chemical-structure
+biology
+image
+other
+
+18. If hasVisual=false:
+
+visualType = "none"
+visualBoundingBox = null
+visualDescription = ""
+
+19. Keep mathematical content in LaTeX where appropriate.
+
+20. Return JSON ONLY.
+
+Do not return Markdown.
+
+Do not return explanations outside JSON.
+
+RETURN:
 
 {
   "questions": [
@@ -992,6 +1003,7 @@ RETURN THIS STRUCTURE:
       "explanation": "",
       "questionBoundingBox": null,
       "hasVisual": false,
+      "visualType": "none",
       "visualDescription": "",
       "visualBoundingBox": null,
       "sourcePage": null,
@@ -1039,10 +1051,45 @@ const normalizeDetectedQuestion = ({
       item.questionBoundingBox
     );
 
-  const visualBoundingBox =
+  let visualBoundingBox =
     normalizeBoundingBox(
       item.visualBoundingBox
     );
+
+  let visualType =
+    normalizeVisualType(
+      item.visualType
+    );
+
+  let hasVisual =
+    Boolean(
+      item.hasVisual
+    );
+
+  // A real visual MUST have its own
+  // separate visual bounding box.
+
+  if (
+    !hasVisual ||
+    !visualBoundingBox
+  ) {
+    hasVisual =
+      false;
+
+    visualType =
+      "none";
+
+    visualBoundingBox =
+      null;
+  }
+
+  if (
+    hasVisual &&
+    visualType === "none"
+  ) {
+    visualType =
+      "other";
+  }
 
   let sourcePage =
     Number(
@@ -1061,7 +1108,8 @@ const normalizeDetectedQuestion = ({
       )
     )
   ) {
-    sourcePage = null;
+    sourcePage =
+      null;
   }
 
   let drop =
@@ -1082,7 +1130,8 @@ const normalizeDetectedQuestion = ({
   if (
     !question
   ) {
-    drop = true;
+    drop =
+      true;
 
     dropReason =
       dropReason ||
@@ -1093,22 +1142,12 @@ const normalizeDetectedQuestion = ({
     requirePage &&
     !sourcePage
   ) {
-    drop = true;
+    drop =
+      true;
 
     dropReason =
       dropReason ||
       "Source page could not be identified.";
-  }
-
-  if (
-    requirePage &&
-    !questionBoundingBox
-  ) {
-    drop = true;
-
-    dropReason =
-      dropReason ||
-      "The complete one-question screenshot boundary could not be identified.";
   }
 
   return {
@@ -1195,15 +1234,16 @@ const normalizeDetectedQuestion = ({
 
     questionBoundingBox,
 
-    hasVisual:
-      Boolean(
-        item.hasVisual
-      ),
+    hasVisual,
+
+    visualType,
 
     visualDescription:
-      cleanString(
-        item.visualDescription
-      ),
+      hasVisual
+        ? cleanString(
+            item.visualDescription
+          )
+        : "",
 
     visualBoundingBox,
 
@@ -1216,7 +1256,7 @@ const normalizeDetectedQuestion = ({
 };
 
 // =====================================================
-// ANALYSE A BATCH OF PDF PAGES
+// ANALYSE PAGE BATCH
 // =====================================================
 
 const analyseRenderedPageBatch =
@@ -1265,21 +1305,19 @@ ${cleanString(hints.exam) || "Auto detect"}
 Class:
 ${cleanString(hints.classLevel) || "Auto detect"}
 
-PAGES INCLUDED IN THIS REQUEST:
+PAGES INCLUDED:
 
 ${allowedPageNumbers.join(", ")}
 
-IMPORTANT:
-
-Every detected question MUST use sourcePage from this exact list:
+Every question MUST use sourcePage from:
 
 ${allowedPageNumbers.join(", ")}
 
-SUPPORTING EXTRACTED DOCUMENT TEXT:
+SUPPORTING EXTRACTED TEXT:
 
 ${cleanString(text).slice(0, 3500)}
 
-Each image below is preceded by its exact PDF page number marker.
+Each image below is preceded by its exact PDF page number.
 `;
 
     const parts = [
@@ -1289,10 +1327,6 @@ Each image below is preceded by its exact PDF page number marker.
       },
     ];
 
-    // =========================================
-    // ADD MULTIPLE PAGE IMAGES
-    // =========================================
-
     for (
       const page of
       validPages
@@ -1300,8 +1334,7 @@ Each image below is preceded by its exact PDF page number marker.
       parts.push({
         text:
           `ORIGINAL PDF PAGE ${page.pageNumber}. ` +
-          `Every question detected from the next image ` +
-          `must use sourcePage=${page.pageNumber}.`,
+          `Questions from the next image must use sourcePage=${page.pageNumber}.`,
       });
 
       parts.push({
@@ -1316,10 +1349,6 @@ Each image below is preceded by its exact PDF page number marker.
         },
       });
     }
-
-    // =========================================
-    // ONE GEMINI REQUEST FOR THE BATCH
-    // =========================================
 
     const raw =
       await callGemini({
@@ -1352,13 +1381,7 @@ Each image below is preceded by its exact PDF page number marker.
   };
 
 // =====================================================
-// ANALYSE ONE PAGE
-// =====================================================
-//
-// Kept for compatibility with any old NAVTA code.
-//
-// New importer should normally use analyseRenderedPages.
-//
+// ONE PAGE COMPATIBILITY
 // =====================================================
 
 const analyseNavtaPage =
@@ -1379,7 +1402,7 @@ const analyseNavtaPage =
   };
 
 // =====================================================
-// REMOVE EXACT DUPLICATES
+// REMOVE DUPLICATES
 // =====================================================
 
 const removeExactDuplicates = (
@@ -1388,7 +1411,8 @@ const removeExactDuplicates = (
   const seen =
     new Set();
 
-  const result = [];
+  const result =
+    [];
 
   for (
     const question of
@@ -1436,24 +1460,7 @@ const removeExactDuplicates = (
 };
 
 // =====================================================
-// ANALYSE ALL RENDERED PDF PAGES
-// =====================================================
-//
-// THIS IS THE IMPORTANT QUOTA OPTIMIZATION.
-//
-// Old:
-//
-// 5 pages
-// = 5 Gemini requests
-//
-// New with NAVTA_AI_PAGES_PER_REQUEST=5:
-//
-// 5 pages
-// = approximately 1 Gemini request
-//
-// 10 pages
-// = approximately 2 Gemini requests
-//
+// ANALYSE ALL PDF PAGES
 // =====================================================
 
 const analyseRenderedPages =
@@ -1466,7 +1473,8 @@ const analyseRenderedPages =
       !Array.isArray(
         pages
       ) ||
-      pages.length === 0
+      pages.length ===
+        0
     ) {
       return [];
     }
@@ -1513,10 +1521,6 @@ const analyseRenderedPages =
     const allQuestions =
       [];
 
-    // =========================================
-    // PROCESS IN PAGE BATCHES
-    // =========================================
-
     for (
       let start = 0;
       start <
@@ -1562,15 +1566,11 @@ const analyseRenderedPages =
       );
     }
 
-    // =========================================
-    // REMOVE DUPLICATES
-    // =========================================
-
     return removeExactDuplicates(
       allQuestions
     ).sort(
       (a, b) => {
-        const pageDiff =
+        const pageDifference =
           (
             a.sourcePage ||
             0
@@ -1581,32 +1581,33 @@ const analyseRenderedPages =
           );
 
         if (
-          pageDiff !== 0
+          pageDifference !==
+          0
         ) {
-          return pageDiff;
+          return pageDifference;
         }
 
-        const aNum =
+        const aNumber =
           Number.parseFloat(
             a.questionNumber
           );
 
-        const bNum =
+        const bNumber =
           Number.parseFloat(
             b.questionNumber
           );
 
         if (
           Number.isFinite(
-            aNum
+            aNumber
           ) &&
           Number.isFinite(
-            bNum
+            bNumber
           )
         ) {
           return (
-            aNum -
-            bNum
+            aNumber -
+            bNumber
           );
         }
 
@@ -1617,24 +1618,6 @@ const analyseRenderedPages =
 
 // =====================================================
 // OLD SOLVER COMPATIBILITY
-// =====================================================
-//
-// IMPORTANT:
-//
-// We intentionally DO NOT make another Gemini request
-// here.
-//
-// The main PDF batch analysis already tries to solve
-// the MCQ.
-//
-// If Gemini cannot confidently solve it,
-// correctAnswer stays null and the Admin can review it.
-//
-// This prevents:
-//
-// 49 questions
-// + 49 extra Gemini requests.
-//
 // =====================================================
 
 const solveQuestionFromImage =
@@ -1655,13 +1638,7 @@ const solveQuestionFromImage =
   };
 
 // =====================================================
-// TEXT QUESTION ANALYSIS
-// =====================================================
-//
-// Used for TXT / DOCX.
-//
-// No PDF image is needed here.
-//
+// TXT / DOCX
 // =====================================================
 
 const analyseTextQuestions =
@@ -1685,59 +1662,43 @@ const analyseTextQuestions =
     const prompt = `
 You are NAVTA AI.
 
-You are an academic question separator.
+Separate every COMPLETE and READABLE academic question.
 
 SUPPORTED SUBJECTS:
 
-- Physics
-- Chemistry
-- Maths
-- Biology
+Physics
+Chemistry
+Maths
+Biology
 
 SUPPORTED EXAMS:
 
-- NEET
-- JEE
-- Boards
+NEET
+JEE
+Boards
 
 SUPPORTED CLASSES:
 
-- Class 11
-- Class 12
+Class 11
+Class 12
 
-SUPPORTED DIFFICULTIES:
+QUESTION TYPES:
 
-- Easy
-- Medium
-- Hard
-
-SUPPORTED QUESTION TYPES:
-
-- mcq
-- short
-- long
-
-Separate every COMPLETE and READABLE question.
+mcq
+short
+long
 
 For MCQs:
 
-- return exactly four options when four are present
-- determine correctAnswer during this same request when possible
+- return exactly four options when present
+- try to determine correctAnswer in this same request
+- A=0
+- B=1
+- C=2
+- D=3
+- if uncertain use null
 
-Correct answer format:
-
-A = 0
-B = 1
-C = 2
-D = 3
-
-If uncertain:
-
-correctAnswer = null
-
-Do not drop a valid question only because the answer is uncertain.
-
-Return JSON ONLY.
+Return JSON only.
 
 ADMIN HINTS:
 
@@ -1803,7 +1764,21 @@ ${sourceText.slice(0, 50000)}
     ).map(
       (item) =>
         normalizeDetectedQuestion({
-          item,
+          item: {
+            ...item,
+
+            hasVisual:
+              false,
+
+            visualType:
+              "none",
+
+            visualBoundingBox:
+              null,
+
+            visualDescription:
+              "",
+          },
 
           allowedPageNumbers:
             [],
@@ -1817,7 +1792,7 @@ ${sourceText.slice(0, 50000)}
   };
 
 // =====================================================
-// GEMINI CONNECTION CHECK
+// CONNECTION CHECK
 // =====================================================
 
 const checkGeminiConnection =
@@ -1918,7 +1893,9 @@ const checkGeminiConnection =
           timeout
         );
       }
-    } catch (error) {
+    } catch (
+      error
+    ) {
       return {
         ok:
           false,
@@ -1955,9 +1932,6 @@ module.exports = {
   solveQuestionFromImage,
 
   checkGeminiConnection,
-
-  // Compatibility names in case older NAVTA code
-  // still imports one of these.
 
   checkNavtaAIGatewayConnection:
     checkGeminiConnection,
