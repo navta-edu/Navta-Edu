@@ -492,45 +492,85 @@ const parseJsonObject = (
       raw
     );
 
+  if (!text) {
+    throw new Error(
+      "NAVTA AI returned an empty JSON response."
+    );
+  }
+
+  // ============================================
+  // FIRST: NORMAL JSON
+  // ============================================
+
   try {
     return JSON.parse(
       text
     );
   } catch {
-    const start =
-      text.indexOf("{");
-
-    const end =
-      text.lastIndexOf("}");
-
-    if (
-      start !== -1 &&
-      end > start
-    ) {
-      const sliced =
-        text
-          .slice(
-            start,
-            end + 1
-          )
-          .replace(
-            /,\s*([}\]])/g,
-            "$1"
-          );
-
-      try {
-        return JSON.parse(
-          sliced
-        );
-      } catch {
-        // Continue below.
-      }
-    }
-
-    throw new Error(
-      "NAVTA AI returned invalid JSON."
-    );
+    // Continue.
   }
+
+  // ============================================
+  // SECOND: EXTRACT JSON OBJECT
+  // ============================================
+
+  const start =
+    text.indexOf("{");
+
+  const end =
+    text.lastIndexOf("}");
+
+  if (
+    start !== -1 &&
+    end > start
+  ) {
+    let sliced =
+      text.slice(
+        start,
+        end + 1
+      );
+
+    // Remove accidental trailing commas.
+    sliced =
+      sliced.replace(
+        /,\s*([}\]])/g,
+        "$1"
+      );
+
+    try {
+      return JSON.parse(
+        sliced
+      );
+    } catch {
+      // Continue.
+    }
+  }
+
+  // ============================================
+  // LOG SMALL DEBUG SAMPLE
+  // ============================================
+
+  console.error(
+    "NAVTA AI INVALID JSON"
+  );
+
+  console.error(
+    `Response length: ${text.length}`
+  );
+
+  console.error(
+    "Response ending:"
+  );
+
+  console.error(
+    text.slice(
+      -1200
+    )
+  );
+
+  throw new Error(
+    "NAVTA AI response was incomplete. Please retry the import."
+  );
 };
 
 // =====================================================
@@ -1355,7 +1395,7 @@ Each image below is preceded by its exact PDF page number.
         parts,
 
         maxOutputTokens:
-          16384,
+          32768,
       });
 
     const parsed =
