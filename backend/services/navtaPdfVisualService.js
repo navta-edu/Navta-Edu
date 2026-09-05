@@ -1,362 +1,245 @@
-const { createCanvas } =
-  require("@napi-rs/canvas");
+const { createCanvas } = require("@napi-rs/canvas");
 
 // =====================================================
 // LOAD PDF.JS
 // =====================================================
-//
-// pdfjs-dist v4 is ESM.
-// We use dynamic import so it works inside your
-// CommonJS backend.
-// =====================================================
 
+let pdfJsPromise = null;
 
 const loadPdfJs = async () => {
-  const pdfjsLib =
-    await import(
-      "pdfjs-dist/legacy/build/pdf.mjs"
-    );
+  if (!pdfJsPromise) {
+    pdfJsPromise = import("pdfjs-dist/legacy/build/pdf.mjs");
+  }
 
-  return pdfjsLib;
+  return pdfJsPromise;
+};
+
+// =====================================================
+// HELPERS
+// =====================================================
+
+const validatePdfBuffer = (buffer) => {
+  if (!Buffer.isBuffer(buffer)) {
+    throw new Error("A valid PDF buffer is required.");
+  }
+
+  if (buffer.length === 0) {
+    throw new Error("The PDF buffer is empty.");
+  }
+};
+
+const normalizeScale = (scale) => {
+  const value = Number(scale);
+  if (!Number.isFinite(value)) return 1.8;
+  return Math.min(3, Math.max(0.8, value));
+};
+
+const normalizeMaxPages = (maxPages) => {
+  const value = Number(maxPages);
+
+  if (!Number.isFinite(value) || value <= 0) {
+    return 100;
+  }
+
+  return Math.floor(value);
 };
 
 // =====================================================
 // RENDER ONE PDF PAGE TO PNG
 // =====================================================
 
-const renderPdfPageToPng =
-  async ({
-    page,
-    scale = 1.8,
-  }) => {
-    const viewport =
-      page.getViewport({
-        scale,
-      });
+const renderPdfPageToPng = async ({ page, scale = 1.8 }) => {
+  if (!page || typeof page.getViewport !== "function") {
+    throw new Error("A valid PDF page is required.");
+  }
 
-    const width =
-      Math.ceil(
-        viewport.width
-      );
+  const safeScale = normalizeScale(scale);
+  const viewport = page.getViewport({ scale: safeScale });
 
-    const height =
-      Math.ceil(
-        viewport.height
-      );
+  const width = Math.max(1, Math.ceil(viewport.width));
+  const height = Math.max(1, Math.ceil(viewport.height));
 
-    const canvas =
-      createCanvas(
-        width,
-        height
-      );
+  const canvas = createCanvas(width, height);
+  const context = canvas.getContext("2d");
 
-    const context =
-      canvas.getContext(
-        "2d"
-      );
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
 
-    context.fillStyle =
-      "#ffffff";
+  const renderTask = page.render({
+    canvasContext: context,
+    viewport,
+  });
 
-    context.fillRect(
-      0,
-      0,
-      width,
-      height
-    );
+  await renderTask.promise;
 
-    await page.render({
-      canvasContext:
-        context,
+  const buffer = await canvas.encode("png");
 
-      viewport,
-    }).promise;
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+    throw new Error("Rendered PDF page produced an empty PNG.");
+  }
 
-    const buffer =
-      await canvas.encode(
-        "png"
-      );
-
-    return {
-      buffer,
-
-      mimeType:
-        "image/png",
-
-      width,
-
-      height,
-
-      scale,
-    };
-  };
-
-// =====================================================
-// RENDER PDF BUFFER TO PAGE IMAGES
-// =====================================================
-
-const renderPdfPages =
-  async ({
+  return {
     buffer,
-    scale = 1.8,
-    maxPages = 100,
-  }) => {
-    if (
-      !Buffer.isBuffer(
-        buffer
-      )
-    ) {
-      throw new Error(
-        "A valid PDF buffer is required."
-      );
+    mimeType: "image/png",
+    width,
+    height,
+    scale: safeScale,
+  };
+};
+
+// =====================================================
+// INTERNAL PDF OPEN/CLOSE
+// =====================================================
+
+const openPdf = async (buffer) => {
+  validatePdfBuffer(buffer);
+
+  const pdfjsLib = await loadPdfJs();
+
+  const loadingTask = pdfjsLib.getDocument({
+    data: new Uint8Array(buffer),
+    useSystemFonts: true,
+    disableFontFace: false,
+    isEvalSupported: false,
+  });
+
+  return loadingTask.promise;
+};
+
+const closePdf = async (pdf) => {
+  if (!pdf) return;
+
+  try {
+    if (typeof pdf.cleanup === "function") {
+      pdf.cleanup();
     }
+  } catch {}
 
-    if (
-      buffer.length ===
-      0
-    ) {
-      throw new Error(
-        "The PDF buffer is empty."
-      );
+  try {
+    if (typeof pdf.destroy === "function") {
+      await pdf.destroy();
     }
+  } catch {}
+};
 
-    const pdfjsLib =
-      await loadPdfJs();
+// =====================================================
+// RENDER COMPLETE / LIMITED PDF
+// =====================================================
 
-    const loadingTask =
-      pdfjsLib.getDocument({
-        data:
-          new Uint8Array(
-            buffer
-          ),
+const renderPdfPages = async ({
+  buffer,
+  scale = 1.8,
+  maxPages = 100,
+}) => {
+  validatePdfBuffer(buffer);
 
-        useSystemFonts:
-          true,
+  const pdf = await openPdf(buffer);
+  const pages = [];
 
-        disableFontFace:
-          false,
+  try {
+    const totalPages = Number(pdf.numPages) || 0;
+    const safeMaxPages = normalizeMaxPages(maxPages);
+    const pagesToRender = Math.min(totalPages, safeMaxPages);
 
-        isEvalSupported:
-          false,
-      });
+    for (let pageNumber = 1; pageNumber <= pagesToRender; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
 
-    const pdf =
-      await loadingTask.promise;
-
-    const totalPages =
-      pdf.numPages;
-
-    const pagesToRender =
-      Math.min(
-        totalPages,
-        maxPages
-      );
-
-    const pages = [];
-
-    for (
-      let pageNumber = 1;
-      pageNumber <=
-      pagesToRender;
-      pageNumber += 1
-    ) {
-      const page =
-        await pdf.getPage(
-          pageNumber
-        );
-
-      const rendered =
-        await renderPdfPageToPng({
+      try {
+        const rendered = await renderPdfPageToPng({
           page,
           scale,
         });
 
-      pages.push({
-        pageNumber,
-
-        ...rendered,
-      });
-
-      if (
-        typeof page.cleanup ===
-        "function"
-      ) {
-        page.cleanup();
+        pages.push({
+          pageNumber,
+          ...rendered,
+        });
+      } finally {
+        try {
+          if (typeof page.cleanup === "function") {
+            page.cleanup();
+          }
+        } catch {}
       }
-    }
-
-    if (
-      typeof pdf.cleanup ===
-      "function"
-    ) {
-      pdf.cleanup();
-    }
-
-    if (
-      typeof pdf.destroy ===
-      "function"
-    ) {
-      await pdf.destroy();
     }
 
     return {
       totalPages,
-
-      renderedPages:
-        pages.length,
-
+      renderedPages: pages.length,
       pages,
-
-      truncated:
-        totalPages >
-        pagesToRender,
+      truncated: totalPages > pagesToRender,
     };
-  };
+  } finally {
+    await closePdf(pdf);
+  }
+};
 
 // =====================================================
-// RENDER SELECTED PDF PAGES
-// =====================================================
-//
-// Useful later when NAVTA AI says:
-// "Question 15 is on page 8"
-//
-// Then we do not need to re-process the entire PDF.
+// RENDER SELECTED PAGES
 // =====================================================
 
-const renderSelectedPdfPages =
-  async ({
-    buffer,
-    pageNumbers = [],
-    scale = 1.8,
-  }) => {
-    if (
-      !Buffer.isBuffer(
-        buffer
-      )
-    ) {
-      throw new Error(
-        "A valid PDF buffer is required."
-      );
-    }
+const renderSelectedPdfPages = async ({
+  buffer,
+  pageNumbers = [],
+  scale = 1.8,
+}) => {
+  validatePdfBuffer(buffer);
 
-    const uniquePages =
-      [
-        ...new Set(
-          pageNumbers
-            .map(Number)
-            .filter(
-              (page) =>
-                Number.isInteger(
-                  page
-                ) &&
-                page > 0
-            )
-        ),
-      ].sort(
-        (a, b) =>
-          a - b
-      );
+  const uniquePages = [
+    ...new Set(
+      (Array.isArray(pageNumbers) ? pageNumbers : [])
+        .map(Number)
+        .filter((pageNumber) => Number.isInteger(pageNumber) && pageNumber > 0)
+    ),
+  ].sort((a, b) => a - b);
 
-    if (
-      uniquePages.length ===
-      0
-    ) {
-      return {
-        totalPages: 0,
-        renderedPages: 0,
-        pages: [],
-      };
-    }
+  if (uniquePages.length === 0) {
+    return {
+      totalPages: 0,
+      renderedPages: 0,
+      pages: [],
+    };
+  }
 
-    const pdfjsLib =
-      await loadPdfJs();
+  const pdf = await openPdf(buffer);
+  const pages = [];
 
-    const loadingTask =
-      pdfjsLib.getDocument({
-        data:
-          new Uint8Array(
-            buffer
-          ),
+  try {
+    const totalPages = Number(pdf.numPages) || 0;
 
-        useSystemFonts:
-          true,
+    for (const pageNumber of uniquePages) {
+      if (pageNumber > totalPages) continue;
 
-        disableFontFace:
-          false,
+      const page = await pdf.getPage(pageNumber);
 
-        isEvalSupported:
-          false,
-      });
-
-    const pdf =
-      await loadingTask.promise;
-
-    const pages = [];
-
-    for (
-      const pageNumber of
-      uniquePages
-    ) {
-      if (
-        pageNumber >
-        pdf.numPages
-      ) {
-        continue;
-      }
-
-      const page =
-        await pdf.getPage(
-          pageNumber
-        );
-
-      const rendered =
-        await renderPdfPageToPng({
+      try {
+        const rendered = await renderPdfPageToPng({
           page,
           scale,
         });
 
-      pages.push({
-        pageNumber,
-
-        ...rendered,
-      });
-
-      if (
-        typeof page.cleanup ===
-        "function"
-      ) {
-        page.cleanup();
+        pages.push({
+          pageNumber,
+          ...rendered,
+        });
+      } finally {
+        try {
+          if (typeof page.cleanup === "function") {
+            page.cleanup();
+          }
+        } catch {}
       }
     }
 
-    if (
-      typeof pdf.cleanup ===
-      "function"
-    ) {
-      pdf.cleanup();
-    }
-
-    if (
-      typeof pdf.destroy ===
-      "function"
-    ) {
-      await pdf.destroy();
-    }
-
     return {
-      totalPages:
-        pdf.numPages,
-
-      renderedPages:
-        pages.length,
-
+      totalPages,
+      renderedPages: pages.length,
       pages,
     };
-  };
-
-// =====================================================
-// EXPORT
-// =====================================================
+  } finally {
+    await closePdf(pdf);
+  }
+};
 
 module.exports = {
   renderPdfPageToPng,
