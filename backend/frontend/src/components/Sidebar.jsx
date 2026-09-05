@@ -20,7 +20,8 @@ import {
   Settings,
   Users,
   Award,
-  FilePlus2
+  FilePlus2,
+  Target
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -171,24 +172,51 @@ export default function Sidebar() {
       label: 'Platform Stats',
       icon: LayoutDashboard
     },
+
     {
       to: '/admin',
       label: 'User Audits',
       icon: Users,
       hash: '#users'
     },
+
     {
       to: '/admin',
       label: 'Study Material',
       icon: BookOpen,
       hash: '#studyMaterial'
     },
+
+    // ===================================================
+    // NEW: STUDY NOTES
+    // Opens AdminDashboard directly on the Study Notes tab
+    // ===================================================
+
+    {
+      to: '/admin',
+      label: 'Study Notes',
+      icon: BookOpen,
+      hash: '#note'
+    },
+
+    // ===================================================
+    // NEW: NAVTA TEST
+    // Opens dedicated admin Navta TEST page
+    // ===================================================
+
+    {
+      to: '/admin/navta-test',
+      label: 'Navta TEST',
+      icon: Target
+    },
+
     {
       to: '/admin',
       label: 'Reward Store',
       icon: Award,
       hash: '#reward'
     },
+
     {
       to: '/settings',
       label: 'Settings',
@@ -297,13 +325,23 @@ export default function Sidebar() {
             let isActive =
               false;
 
+            // =================================================
+            // HASH BASED ADMIN LINKS
+            // =================================================
+
             if (link.hash) {
               isActive =
                 location.pathname ===
                   link.to &&
                 location.hash ===
                   link.hash;
-            } else if (
+            }
+
+            // =================================================
+            // ROOT DASHBOARD LINKS
+            // =================================================
+
+            else if (
               link.to ===
                 '/admin' ||
               link.to ===
@@ -317,10 +355,18 @@ export default function Sidebar() {
                 location.pathname ===
                   link.to &&
                 !location.hash;
-            } else {
+            }
+
+            // =================================================
+            // NORMAL ROUTES
+            // =================================================
+
+            else {
               isActive =
+                location.pathname ===
+                  link.to ||
                 location.pathname.startsWith(
-                  link.to
+                  `${link.to}/`
                 );
             }
 
