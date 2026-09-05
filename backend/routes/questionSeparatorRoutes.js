@@ -1,75 +1,161 @@
 const express = require("express");
-const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
 
 const router = express.Router();
 
-const uploadFolder = path.join(__dirname, "../uploads/pdfs");
+const uploadNavtaAIFile = require("../middleware/navtaaiupload");
 
-if (!fs.existsSync(uploadFolder)) {
-  fs.mkdirSync(uploadFolder, { recursive: true });
-}
+const {
+  analyseNavtaImport,
+} = require("../services/navtaAIImportService");
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadFolder);
-  },
+// =====================================================
+// NAVTA AI QUESTION SEPARATOR
+// POST /api/question-separator/upload
+// =====================================================
 
-  filename: function (req, file, cb) {
-    const uniqueName =
-      Date.now() +
-      "-" +
-      Math.round(Math.random() * 1e9) +
-      path.extname(file.originalname);
+router.post(
+  "/upload",
 
-    cb(null, uniqueName);
-  },
-});
+  uploadNavtaAIFile.single("file"),
 
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype === "application/pdf") {
-    cb(null, true);
-  } else {
-    cb(new Error("Only PDF files are allowed"));
-  }
-};
+  async (req, res) => {
+    try {
+      // ============================================
+      // FILE CHECK
+      // ============================================
 
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: {
-    fileSize: 30 * 1024 * 1024,
-  },
-});
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please upload a PDF, DOCX or TXT file.",
+        });
+      }
 
-router.post("/upload", upload.single("pdf"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({
+      // ============================================
+      // OPTIONAL ADMIN HINTS
+      // ============================================
+
+      const subject =
+        String(
+          req.body?.subject || ""
+        ).trim();
+
+      const exam =
+        String(
+          req.body?.exam || ""
+        ).trim();
+
+      const classLevel =
+        String(
+          req.body?.classLevel || ""
+        ).trim();
+
+      // ============================================
+      // NAVTA AI IMPORT
+      // ============================================
+
+      console.log(
+        "============================================"
+      );
+
+      console.log(
+        "NAVTA AI QUESTION IMPORT"
+      );
+
+      console.log(
+        `File: ${req.file.originalname}`
+      );
+
+      console.log(
+        `Size: ${req.file.size} bytes`
+      );
+
+      console.log(
+        `Type: ${req.file.mimetype}`
+      );
+
+      console.log(
+        "============================================"
+      );
+
+      const result =
+        await analyseNavtaImport({
+          file:
+            req.file,
+
+          subject,
+
+          exam,
+
+          classLevel,
+        });
+
+      // ============================================
+      // SUCCESS RESPONSE
+      // ============================================
+
+      return res.status(200).json({
+        success: true,
+
+        message:
+          "NAVTA AI finished separating the questions.",
+
+        summary:
+          result.summary,
+
+        documentInfo:
+          result.documentInfo,
+
+        acceptedQuestions:
+          result.acceptedQuestions,
+
+        droppedQuestions:
+          result.droppedQuestions,
+      });
+    } catch (error) {
+      console.error(
+        "NAVTA AI QUESTION SEPARATOR ERROR:",
+        error
+      );
+
+      // ============================================
+      // FRIENDLIER ERROR RESPONSE
+      // ============================================
+
+      const message =
+        error?.message ||
+        "NAVTA AI could not process this file.";
+
+      return res.status(500).json({
         success: false,
-        message: "No PDF uploaded",
+        message,
       });
     }
+  }
+);
 
+// =====================================================
+// HEALTH CHECK
+// GET /api/question-separator/health
+// =====================================================
+
+router.get(
+  "/health",
+  (req, res) => {
     return res.status(200).json({
       success: true,
-      message: "PDF uploaded successfully",
-      file: {
-        originalName: req.file.originalname,
-        fileName: req.file.filename,
-        path: req.file.path,
-        size: req.file.size,
-      },
-    });
-  } catch (error) {
-    console.error("PDF upload error:", error);
+      service:
+        "NAVTA AI Question Separator",
 
-    return res.status(500).json({
-      success: false,
-      message: "PDF upload failed",
+      status:
+        "running",
     });
   }
-});
+);
+
+// =====================================================
+// EXPORT
+// =====================================================
 
 module.exports = router;
