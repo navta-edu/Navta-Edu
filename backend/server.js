@@ -1,410 +1,529 @@
+require("dotenv").config();
+
 const express = require("express");
-const multer = require("multer");
+const cors = require("cors");
+const morgan = require("morgan");
 const path = require("path");
 
-const router = express.Router();
+const connectDB = require("./config/db");
 
-const {
-  analyseNavtaImport,
-} = require("../services/navtaAIImportService");
+// ============================================
+// ROUTES
+// ============================================
 
-// =====================================================
-// NAVTA AI UPLOAD
-// =====================================================
+const authRoutes = require("./routes/authRoutes");
+const contentRoutes = require("./routes/contentRoutes");
+const studentRoutes = require("./routes/studentRoutes");
+const teacherRoutes = require("./routes/teacherRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+const navtaTestRoutes = require("./routes/navtaTestRoutes");
+const aiRoutes = require("./routes/aiRoutes");
 
-const storage = multer.memoryStorage();
-
-const allowedExtensions = new Set([
-  ".pdf",
-  ".docx",
-  ".txt",
-]);
-
-const allowedMimeTypes = new Set([
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "text/plain",
-]);
-
-const fileFilter = (
-  req,
-  file,
-  callback
-) => {
-  const extension = path
-    .extname(
-      file.originalname || ""
-    )
-    .toLowerCase();
-
-  if (
-    !allowedExtensions.has(
-      extension
-    )
-  ) {
-    return callback(
-      new Error(
-        "Only PDF, DOCX and TXT files are allowed."
-      )
-    );
-  }
-
-  // Some browsers/providers may send
-  // application/octet-stream.
-  if (
-    file.mimetype &&
-    file.mimetype !==
-      "application/octet-stream" &&
-    !allowedMimeTypes.has(
-      file.mimetype
-    )
-  ) {
-    return callback(
-      new Error(
-        "Invalid uploaded file type."
-      )
-    );
-  }
-
-  return callback(
-    null,
-    true
-  );
-};
-
-const upload =
-  multer({
-    storage,
-
-    limits: {
-      fileSize:
-        30 *
-        1024 *
-        1024,
-
-      files: 1,
-    },
-
-    fileFilter,
-  });
-
-// =====================================================
-// HEALTH CHECK
-// =====================================================
-//
-// GET /api/question-separator/health
-//
-
-router.get(
-  "/health",
-  (req, res) => {
-    return res
-      .status(200)
-      .json({
-        success: true,
-
-        service:
-          "NAVTA AI Question Separator",
-
-        status:
-          "running",
-      });
-  }
+const mistakeNotebookRoutes = require(
+  "./routes/mistakeNotebookRoutes"
 );
 
-// =====================================================
-// QUESTION SEPARATOR
-// =====================================================
-//
-// POST /api/question-separator/upload
-//
-// FormData field name MUST be:
-// file
-//
+const panicModeRoutes = require(
+  "./routes/panicModeRoutes"
+);
 
-router.post(
-  "/upload",
+const questionSeparatorRoutes = require(
+  "./routes/questionSeparatorRoutes"
+);
 
-  upload.single(
-    "file"
-  ),
+// ============================================
+// CONNECT DATABASE
+// ============================================
 
-  async (
-    req,
-    res
-  ) => {
-    try {
-      // ==========================================
-      // FILE CHECK
-      // ==========================================
+connectDB();
 
-      if (
-        !req.file
-      ) {
-        return res
-          .status(400)
-          .json({
-            success:
-              false,
+// ============================================
+// EXPRESS APP
+// ============================================
 
-            message:
-              "Please upload a PDF, DOCX or TXT file.",
-          });
+const app = express();
+
+// ============================================
+// CORS
+// ============================================
+
+const allowedOrigins = [
+  // Production
+  "https://navta.in",
+  "https://www.navta.in",
+  "https://skyblue-dunlin-922022.hostingersite.com",
+
+  // Local development
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+
+  "http://localhost:5174",
+  "http://127.0.0.1:5174",
+
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin
+      // e.g. curl, Postman, server-to-server
+      if (!origin) {
+        return callback(null, true);
       }
 
-      // ==========================================
-      // ADMIN HINTS
-      // ==========================================
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
 
-      const subject =
-        String(
-          req.body
-            ?.subject ||
-            ""
-        ).trim();
-
-      const exam =
-        String(
-          req.body
-            ?.exam ||
-            ""
-        ).trim();
-
-      const classLevel =
-        String(
-          req.body
-            ?.classLevel ||
-            ""
-        ).trim();
-
-      // ==========================================
-      // LOG
-      // ==========================================
-
-      console.log("");
-      console.log(
-        "========================================"
+      return callback(
+        new Error(
+          `CORS blocked request from: ${origin}`
+        )
       );
+    },
 
-      console.log(
-        "NAVTA AI QUESTION SEPARATOR"
-      );
+    credentials: true,
 
-      console.log(
-        "========================================"
-      );
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+    ],
 
-      console.log(
-        `File: ${req.file.originalname}`
-      );
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+    ],
+  })
+);
 
-      console.log(
-        `Size: ${req.file.size}`
-      );
+// ============================================
+// GOOGLE OAUTH POPUP SUPPORT
+// ============================================
 
-      console.log(
-        `Mime: ${req.file.mimetype}`
-      );
+app.use((req, res, next) => {
+  res.setHeader(
+    "Cross-Origin-Opener-Policy",
+    "same-origin-allow-popups"
+  );
 
-      console.log(
-        `Subject: ${
-          subject ||
-          "Auto"
-        }`
-      );
+  next();
+});
 
-      console.log(
-        `Exam: ${
-          exam ||
-          "Auto"
-        }`
-      );
+// ============================================
+// BODY PARSERS
+// ============================================
 
-      console.log(
-        `Class: ${
-          classLevel ||
-          "Auto"
-        }`
-      );
+app.use(
+  express.json({
+    limit: "10mb",
+  })
+);
 
-      console.log(
-        "========================================"
-      );
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "10mb",
+  })
+);
 
-      // ==========================================
-      // PROCESS WITH NAVTA AI
-      // ==========================================
+// ============================================
+// DEVELOPMENT LOGGING
+// ============================================
 
-      const result =
-        await analyseNavtaImport({
-          file:
-            req.file,
+if (
+  process.env.NODE_ENV === "development" ||
+  !process.env.NODE_ENV
+) {
+  app.use(morgan("dev"));
+}
 
-          subject,
+// ============================================
+// BASIC API HEALTH CHECK
+// ============================================
 
-          exam,
-
-          classLevel,
-        });
-
-      // ==========================================
-      // RESPONSE
-      // ==========================================
-
-      return res
-        .status(200)
-        .json({
-          success:
-            true,
-
-          message:
-            "NAVTA AI finished separating the questions.",
-
-          summary:
-            result.summary ||
-            {
-              detected:
-                0,
-
-              accepted:
-                0,
-
-              dropped:
-                0,
-            },
-
-          documentInfo:
-            result.documentInfo ||
-            null,
-
-          acceptedQuestions:
-            Array.isArray(
-              result.acceptedQuestions
-            )
-              ? result.acceptedQuestions
-              : [],
-
-          droppedQuestions:
-            Array.isArray(
-              result.droppedQuestions
-            )
-              ? result.droppedQuestions
-              : [],
-        });
-    } catch (
-      error
-    ) {
-      console.error("");
-      console.error(
-        "========================================"
-      );
-
-      console.error(
-        "NAVTA AI QUESTION SEPARATOR ERROR"
-      );
-
-      console.error(
-        "========================================"
-      );
-
-      console.error(
-        error
-      );
-
-      console.error("");
-
-      return res
-        .status(500)
-        .json({
-          success:
-            false,
-
-          message:
-            error?.message ||
-            "NAVTA AI could not process the uploaded file.",
-        });
-    }
+app.get(
+  "/api/health",
+  (req, res) => {
+    return res.status(200).json({
+      success: true,
+      message: "NAVTA API is running",
+    });
   }
 );
 
-// =====================================================
-// MULTER / ROUTE ERROR HANDLER
-// =====================================================
+// ============================================
+// MAIN API ROUTES
+// ============================================
 
-router.use(
+app.use(
+  "/api/auth",
+  authRoutes
+);
+
+app.use(
+  "/api/content",
+  contentRoutes
+);
+
+app.use(
+  "/api/student",
+  studentRoutes
+);
+
+app.use(
+  "/api/teacher",
+  teacherRoutes
+);
+
+app.use(
+  "/api/admin",
+  adminRoutes
+);
+
+// ============================================
+// NAVTA TEST
+// ============================================
+
+app.use(
+  "/api/navta-test",
+  navtaTestRoutes
+);
+
+// ============================================
+// NAVTA AI QUESTION SEPARATOR
+// ============================================
+//
+// GET
+// /api/question-separator/health
+//
+// POST
+// /api/question-separator/upload
+//
+
+app.use(
+  "/api/question-separator",
+  questionSeparatorRoutes
+);
+
+// ============================================
+// MISTAKE NOTEBOOK
+// ============================================
+
+app.use(
+  "/api/mistake-notebook",
+  mistakeNotebookRoutes
+);
+
+// ============================================
+// PANIC MODE
+// ============================================
+
+app.use(
+  "/api/panic-mode",
+  panicModeRoutes
+);
+
+// ============================================
+// NAVTA AI TUTOR
+// ============================================
+//
+// This is separate from the question separator.
+//
+// POST
+// /api/ai/chat
+//
+
+app.use(
+  "/api/ai",
+  aiRoutes
+);
+
+// ============================================
+// API 404 HANDLER
+// ============================================
+//
+// IMPORTANT:
+// Keep this AFTER all API routes.
+//
+// This prevents unknown API requests
+// from returning the React frontend.
+//
+
+app.use(
+  "/api",
+  (req, res) => {
+    return res.status(404).json({
+      success: false,
+      message:
+        `API route not found: ${req.method} ${req.originalUrl}`,
+    });
+  }
+);
+
+// ============================================
+// SERVE REACT FRONTEND
+// ============================================
+//
+// Your current project previously used:
+//
+// backend/frontend/dist
+//
+// Keep this path only if your Hostinger project
+// really builds frontend inside backend/frontend/dist.
+//
+// If frontend/dist is outside backend,
+// we can change this later.
+//
+
+const frontendPath = path.join(
+  __dirname,
+  "frontend",
+  "dist"
+);
+
+app.use(
+  express.static(
+    frontendPath
+  )
+);
+
+// ============================================
+// REACT ROUTER FALLBACK
+// ============================================
+
+app.get(
+  /.*/,
+  (req, res) => {
+    return res.sendFile(
+      path.join(
+        frontendPath,
+        "index.html"
+      )
+    );
+  }
+);
+
+// ============================================
+// GLOBAL ERROR HANDLER
+// ============================================
+
+app.use(
   (
-    error,
+    err,
     req,
     res,
     next
   ) => {
+    console.error("");
+    console.error(
+      "================================"
+    );
+    console.error(
+      "NAVTA SERVER ERROR"
+    );
+    console.error(
+      "================================"
+    );
+    console.error(err);
+    console.error("");
+
+    // ========================================
+    // CORS ERROR
+    // ========================================
+
     if (
-      error instanceof
-      multer.MulterError
+      err &&
+      typeof err.message ===
+        "string" &&
+      err.message.startsWith(
+        "CORS blocked request from:"
+      )
     ) {
-      if (
-        error.code ===
-        "LIMIT_FILE_SIZE"
-      ) {
-        return res
-          .status(400)
-          .json({
-            success:
-              false,
-
-            message:
-              "File is too large. Maximum size is 30 MB.",
-          });
-      }
-
-      if (
-        error.code ===
-        "LIMIT_UNEXPECTED_FILE"
-      ) {
-        return res
-          .status(400)
-          .json({
-            success:
-              false,
-
-            message:
-              'Invalid upload field. The frontend must send the file using the field name "file".',
-          });
-      }
-
       return res
-        .status(400)
+        .status(403)
         .json({
-          success:
-            false,
-
-          message:
-            error.message,
+          success: false,
+          message: err.message,
         });
     }
 
+    // ========================================
+    // MULTER FILE TOO LARGE
+    // ========================================
+
     if (
-      error
+      err?.code ===
+      "LIMIT_FILE_SIZE"
     ) {
       return res
         .status(400)
         .json({
-          success:
-            false,
-
+          success: false,
           message:
-            error.message ||
-            "File upload failed.",
+            "Uploaded file is too large. Maximum size is 30 MB.",
         });
     }
 
-    return next();
+    // ========================================
+    // MULTER WRONG FIELD NAME
+    // ========================================
+
+    if (
+      err?.code ===
+      "LIMIT_UNEXPECTED_FILE"
+    ) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message:
+            'Invalid upload field. Use the field name "file".',
+        });
+    }
+
+    // ========================================
+    // DEFAULT ERROR
+    // ========================================
+
+    return res
+      .status(
+        err?.statusCode ||
+        err?.status ||
+        500
+      )
+      .json({
+        success: false,
+
+        message:
+          err?.message ||
+          "Internal Server Error",
+      });
   }
 );
 
-// =====================================================
-// EXPORT
-// =====================================================
+// ============================================
+// START SERVER
+// ============================================
 
-module.exports =
-  router;
+const PORT =
+  process.env.PORT ||
+  5000;
+
+const server =
+  app.listen(
+    PORT,
+    () => {
+      console.log("");
+      console.log(
+        "================================"
+      );
+      console.log(
+        "🚀 NAVTA Backend Started"
+      );
+      console.log(
+        "================================"
+      );
+
+      console.log(
+        `Environment: ${
+          process.env.NODE_ENV ||
+          "development"
+        }`
+      );
+
+      console.log(
+        `Port: ${PORT}`
+      );
+
+      console.log(
+        `API: http://localhost:${PORT}/api`
+      );
+
+      console.log(
+        `Health: http://localhost:${PORT}/api/health`
+      );
+
+      console.log(
+        `Navta TEST API: http://localhost:${PORT}/api/navta-test`
+      );
+
+      console.log(
+        `Question Separator Health: http://localhost:${PORT}/api/question-separator/health`
+      );
+
+      console.log(
+        `Question Separator Upload: http://localhost:${PORT}/api/question-separator/upload`
+      );
+
+      console.log(
+        `Mistake Notebook API: http://localhost:${PORT}/api/mistake-notebook`
+      );
+
+      console.log(
+        `Panic Mode API: http://localhost:${PORT}/api/panic-mode`
+      );
+
+      console.log(
+        `NAVTA AI Tutor API: http://localhost:${PORT}/api/ai`
+      );
+
+      console.log(
+        "================================"
+      );
+      console.log("");
+    }
+  );
+
+// ============================================
+// SERVER ERROR
+// ============================================
+
+server.on(
+  "error",
+  (err) => {
+    console.error("");
+    console.error(
+      "NAVTA server failed to start:"
+    );
+    console.error(err);
+    console.error("");
+  }
+);
+
+// ============================================
+// UNHANDLED PROMISE REJECTIONS
+// ============================================
+
+process.on(
+  "unhandledRejection",
+  (err) => {
+    console.error("");
+    console.error(
+      "Unhandled Promise Rejection:"
+    );
+    console.error(err);
+    console.error("");
+  }
+);
+
+// ============================================
+// UNCAUGHT EXCEPTIONS
+// ============================================
+
+process.on(
+  "uncaughtException",
+  (err) => {
+    console.error("");
+    console.error(
+      "Uncaught Exception:"
+    );
+    console.error(err);
+    console.error("");
+  }
+);
