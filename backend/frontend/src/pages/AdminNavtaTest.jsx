@@ -296,19 +296,53 @@ function normaliseNavtaLatex(input = "") {
     .replace(/\\operatorname\s*\{tan\}/gi, "\\tan")
     .replace(/\\operatorname\s*\{cot\}/gi, "\\cot");
 
-  // Convert common combinations:
-  // nC_r -> \binom{n}{r}
-  // n C_r -> \binom{n}{r}
-  // {}^nC_r -> \binom{n}{r}
-  value = value.replace(
-    /\{\}\^\{?([A-Za-z0-9+\-]+)\}?\s*C_\{?([A-Za-z0-9+\-]+)\}?/g,
-    "\\binom{$1}{$2}"
-  );
+  // =====================================================
+  // REPAIR COMBINATION / NCR NOTATION
+  // =====================================================
+  //
+  // Gemini/OCR may produce any of:
+  //
+  // ^nC_r
+  // ^nC_{r+1}
+  // {}^nC_r
+  // nC_r
+  // n C_r
+  //
+  // The leading ^ in ^nC_r is NOT an exponent by
+  // itself; it is old-style nCr notation. Remove it
+  // completely and convert to valid KaTeX:
+  //
+  // \binom{n}{r}
+  //
+  // This fixes the "^binomnr" corruption that appeared
+  // inside determinants and summations.
+  // =====================================================
 
-  value = value.replace(
-    /\b([A-Za-z0-9]+)\s*C_\{?([A-Za-z0-9+\-]+)\}?/g,
-    "\\binom{$1}{$2}"
-  );
+  value = value
+    .replace(
+      /\{\}\^\{?([A-Za-z0-9+\-]+)\}?\s*C_\{([^{}]+)\}/g,
+      "\\binom{$1}{$2}"
+    )
+    .replace(
+      /\{\}\^\{?([A-Za-z0-9+\-]+)\}?\s*C_([A-Za-z0-9+\-]+)/g,
+      "\\binom{$1}{$2}"
+    )
+    .replace(
+      /\^\{?([A-Za-z0-9+\-]+)\}?\s*C_\{([^{}]+)\}/g,
+      "\\binom{$1}{$2}"
+    )
+    .replace(
+      /\^\{?([A-Za-z0-9+\-]+)\}?\s*C_([A-Za-z0-9+\-]+)/g,
+      "\\binom{$1}{$2}"
+    )
+    .replace(
+      /\b([A-Za-z0-9]+)\s*C_\{([^{}]+)\}/g,
+      "\\binom{$1}{$2}"
+    )
+    .replace(
+      /\b([A-Za-z0-9]+)\s*C_([A-Za-z0-9+\-]+)/g,
+      "\\binom{$1}{$2}"
+    );
 
   // Make unbraced powers/subscripts safer when Gemini
   // emits simple command or alphanumeric operands.
@@ -406,6 +440,18 @@ function humaniseNavtaLatex(input = "") {
   }
 
   value = value
+    .replace(
+      /\\sum_\{([^{}]+)\}\^\{([^{}]+)\}/g,
+      "Σ[$1→$2]"
+    )
+    .replace(
+      /\\prod_\{([^{}]+)\}\^\{([^{}]+)\}/g,
+      "Π[$1→$2]"
+    )
+    .replace(
+      /\\int_\{([^{}]+)\}\^\{([^{}]+)\}/g,
+      "∫[$1→$2]"
+    )
     .replace(
       /\\binom\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g,
       "C($1,$2)"
@@ -678,7 +724,7 @@ function renderNavtaContent(
       // Plain prose should remain untouched. If raw LaTeX
       // commands leak into prose, show a readable fallback.
       if (
-        /\\(?:sum|prod|int|frac|sqrt|binom|sin|cos|tan|cot|alpha|beta|gamma|theta|lambda|mu|sigma|phi|omega|cdot|times|vec|ce|pu)\b/.test(
+        /\\(?:begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|sin|cos|tan|cot|sec|csc|alpha|beta|gamma|delta|theta|lambda|mu|nu|rho|sigma|tau|phi|psi|omega|cdot|times|div|vec|hat|bar|dot|partial|nabla|ce|pu)\b/.test(
           part
         )
       ) {
