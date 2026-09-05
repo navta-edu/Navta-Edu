@@ -317,6 +317,217 @@ function shuffleArray(items) {
 }
 
 // ============================================
+// QUESTION DUPLICATE PROTECTION
+// ============================================
+//
+// Three layers protect NAVTA from duplicate AI questions:
+// 1. AI service dedupe during extraction.
+// 2. Import-service dedupe before review.
+// 3. This controller checks both the incoming approval list
+//    and the existing MongoDB question bank before saving.
+//
+// No schema change is required.
+// ============================================
+
+function normalizeQuestionFingerprintText(
+  value = ""
+) {
+  return String(
+    value ?? ""
+  )
+    .trim()
+    .toLowerCase()
+    .replace(
+      /^\s*(?:q(?:uestion)?\.?\s*)?\d+[a-z]?\s*[\).:\-]\s*/i,
+      ""
+    )
+    .replace(
+      /\$\$?/g,
+      " "
+    )
+    .replace(
+      /\\(?:left|right|mathrm|mathbf|mathit|text)\b/g,
+      ""
+    )
+    .replace(
+      /\\begin\{[^}]+\}|\\end\{[^}]+\}/g,
+      " "
+    )
+    .replace(
+      /[^a-z0-9]+/g,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+}
+
+function buildQuestionFingerprint(
+  question = {}
+) {
+  const stem =
+    normalizeQuestionFingerprintText(
+      question?.question
+    );
+
+  const options =
+    Array.isArray(
+      question?.options
+    )
+      ? question.options
+          .map(
+            normalizeQuestionFingerprintText
+          )
+          .filter(Boolean)
+          .join("|")
+      : "";
+
+  if (
+    !stem
+  ) {
+    return "";
+  }
+
+  return `${stem}||${options}`;
+}
+
+function getQuestionTokenSet(
+  value = ""
+) {
+  return new Set(
+    normalizeQuestionFingerprintText(
+      value
+    )
+      .split(" ")
+      .filter(
+        (token) =>
+          token.length > 1
+      )
+  );
+}
+
+function questionTextSimilarity(
+  a = "",
+  b = ""
+) {
+  const left =
+    getQuestionTokenSet(
+      a
+    );
+
+  const right =
+    getQuestionTokenSet(
+      b
+    );
+
+  if (
+    left.size === 0 ||
+    right.size === 0
+  ) {
+    return 0;
+  }
+
+  let intersection =
+    0;
+
+  for (
+    const token of left
+  ) {
+    if (
+      right.has(token)
+    ) {
+      intersection +=
+        1;
+    }
+  }
+
+  const union =
+    left.size +
+    right.size -
+    intersection;
+
+  return union > 0
+    ? intersection / union
+    : 0;
+}
+
+function sameNormalizedOptions(
+  a = {},
+  b = {}
+) {
+  const left =
+    Array.isArray(
+      a?.options
+    )
+      ? a.options.map(
+          normalizeQuestionFingerprintText
+        )
+      : [];
+
+  const right =
+    Array.isArray(
+      b?.options
+    )
+      ? b.options.map(
+          normalizeQuestionFingerprintText
+        )
+      : [];
+
+  if (
+    left.length !==
+      right.length
+  ) {
+    return false;
+  }
+
+  return left.every(
+    (value, index) =>
+      value ===
+      right[index]
+  );
+}
+
+function areLikelySameQuestion(
+  a = {},
+  b = {}
+) {
+  const exactA =
+    buildQuestionFingerprint(
+      a
+    );
+
+  const exactB =
+    buildQuestionFingerprint(
+      b
+    );
+
+  if (
+    exactA &&
+    exactA ===
+      exactB
+  ) {
+    return true;
+  }
+
+  const similarity =
+    questionTextSimilarity(
+      a?.question,
+      b?.question
+    );
+
+  return (
+    similarity >=
+      0.96 &&
+    sameNormalizedOptions(
+      a,
+      b
+    )
+  );
+}
+
+// ============================================
 // CREATE QUESTION
 // ============================================
 
@@ -818,6 +1029,32 @@ exports.importQuestionsWithAI = async (req, res) => {
       });
     }
 
+    if (
+      Number(
+        error?.statusCode
+      ) === 429
+    ) {
+      return res.status(429).json({
+        success: false,
+        message,
+        retryAfter:
+          Number(
+            error?.retryAfter
+          ) || null,
+      });
+    }
+
+    if (
+      Number(
+        error?.statusCode
+      ) === 504
+    ) {
+      return res.status(504).json({
+        success: false,
+        message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message,
@@ -920,6 +1157,30 @@ exports.confirmAIImport = async (req, res) => {
     const questionsToSave = [];
 
     const rejectedQuestions = [];
+
+    const duplicateQuestions = [];
+
+    // Load only the fields needed for duplicate detection.
+    // This protects against re-uploading the same PDF later.
+    const existingQuestionDocs =
+      await NavtaQuestion.find(
+        {},
+        {
+          question: 1,
+          options: 1,
+          subject: 1,
+          exam: 1,
+          classLevel: 1,
+        }
+      )
+        .lean();
+
+    const existingQuestions =
+      Array.isArray(
+        existingQuestionDocs
+      )
+        ? existingQuestionDocs
+        : [];
 
     // ========================================
     // VALIDATE EVERY APPROVED QUESTION
@@ -1560,6 +1821,53 @@ exports.confirmAIImport = async (req, res) => {
       }
 
       // ======================================
+      // DUPLICATE CHECK
+      // ======================================
+
+      const duplicateInThisImport =
+        questionsToSave.find(
+          (existing) =>
+            areLikelySameQuestion(
+              existing,
+              payload
+            )
+        );
+
+      const duplicateAlreadySaved =
+        existingQuestions.find(
+          (existing) =>
+            areLikelySameQuestion(
+              existing,
+              payload
+            )
+        );
+
+      if (
+        duplicateInThisImport ||
+        duplicateAlreadySaved
+      ) {
+        duplicateQuestions.push({
+          index,
+
+          questionNumber:
+            questionNumber ||
+            String(
+              index + 1
+            ),
+
+          question:
+            questionText,
+
+          reason:
+            duplicateAlreadySaved
+              ? "Duplicate already exists in NAVTA TEST question bank."
+              : "Duplicate appears more than once in this import.",
+        });
+
+        continue;
+      }
+
+      // ======================================
       // READY FOR MONGODB
       // ======================================
 
@@ -1575,20 +1883,40 @@ exports.confirmAIImport = async (req, res) => {
     if (
       questionsToSave.length === 0
     ) {
-      return res.status(400).json({
-        success: false,
+      const onlyDuplicates =
+        duplicateQuestions.length >
+          0 &&
+        rejectedQuestions.length ===
+          0;
 
-        message:
-          "None of the approved questions passed the final database validation.",
+      return res
+        .status(
+          onlyDuplicates
+            ? 200
+            : 400
+        )
+        .json({
+          success:
+            onlyDuplicates,
 
-        imported:
-          0,
+          message:
+            onlyDuplicates
+              ? "No new questions were saved because all approved questions already exist."
+              : "None of the approved questions passed the final database validation.",
 
-        rejected:
-          rejectedQuestions.length,
+          imported:
+            0,
 
-        rejectedQuestions,
-      });
+          duplicates:
+            duplicateQuestions.length,
+
+          rejected:
+            rejectedQuestions.length,
+
+          duplicateQuestions,
+
+          rejectedQuestions,
+        });
     }
 
     // ========================================
@@ -1625,6 +1953,10 @@ exports.confirmAIImport = async (req, res) => {
     );
 
     console.log(
+      `Duplicates skipped: ${duplicateQuestions.length}`
+    );
+
+    console.log(
       `Rejected: ${rejectedQuestions.length}`
     );
 
@@ -1636,10 +1968,13 @@ exports.confirmAIImport = async (req, res) => {
       success: true,
 
       message:
-        `${savedQuestions.length} approved question(s) imported successfully.`,
+        `${savedQuestions.length} new question(s) imported successfully. ${duplicateQuestions.length} duplicate(s) skipped.`,
 
       imported:
         savedQuestions.length,
+
+      duplicates:
+        duplicateQuestions.length,
 
       rejected:
         rejectedQuestions.length,
@@ -1649,6 +1984,8 @@ exports.confirmAIImport = async (req, res) => {
 
       questions:
         savedQuestions,
+
+      duplicateQuestions,
 
       rejectedQuestions,
     });
