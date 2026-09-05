@@ -298,20 +298,16 @@ function formatSolveTime(totalSeconds) {
 // NAVTA UNIVERSAL MATH + SCIENCE RENDERER
 // =====================================================
 //
-// This renderer is intentionally shared by Admin and
-// Student views so both display the same question.
+// Admin and Student use the same renderer.
 //
-// It supports:
+// Handles:
 // - normal prose
 // - $...$ and $$...$$
 // - \( ... \) and \[ ... \]
 // - fractions / roots / symbols
 // - matrices and determinants
 //
-// Matrices are rendered with a small HTML grid instead
-// of relying entirely on KaTeX matrix environments.
-// This makes Gemini-imported determinants much more
-// reliable and readable on every device.
+// Matrix environments are parsed into a reliable grid.
 // =====================================================
 
 function normaliseNavtaLatex(input = "") {
@@ -320,9 +316,6 @@ function normaliseNavtaLatex(input = "") {
     .replace(/```/g, "")
     .replace(/\u00a0/g, " ")
     .replace(/\r\n?/g, "\n")
-    // Gemini/JSON can leave two backslashes before a
-    // command. Reduce command escapes only; keep matrix
-    // row separators (\\) intact.
     .replace(
       /\\\\(?=(?:begin|end|frac|dfrac|tfrac|sqrt|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|psi|omega|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|times|cdot|div|neq|ne|leq|geq|approx|equiv|pm|mp|sum|prod|int|lim|infty|sin|cos|tan|log|ln|vec|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|Rightarrow|therefore|because)\b)/g,
       "\\"
@@ -437,7 +430,9 @@ function NavtaMatrix({
   ) {
     left = "[";
     right = "]";
-  } else if (environment === "pmatrix") {
+  } else if (
+    environment === "pmatrix"
+  ) {
     left = "(";
     right = ")";
   }
@@ -459,10 +454,6 @@ function NavtaMatrix({
             fontFamily: "serif",
             fontSize: "2.35em",
             lineHeight: 0.8,
-            fontWeight:
-              environment === "Vmatrix"
-                ? 700
-                : 400,
           }}
         >
           {left}
@@ -516,10 +507,6 @@ function NavtaMatrix({
             fontFamily: "serif",
             fontSize: "2.35em",
             lineHeight: 0.8,
-            fontWeight:
-              environment === "Vmatrix"
-                ? 700
-                : 400,
           }}
         >
           {right}
@@ -752,9 +739,6 @@ function renderNavtaContent(input = "") {
   );
 }
 
-// =====================================================
-// QUESTION IMAGE HELPER
-// =====================================================
 
 function getNavtaQuestionImage(question) {
   const primaryUrl = String(
