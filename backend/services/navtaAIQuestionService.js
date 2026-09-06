@@ -67,6 +67,117 @@ const safeArray = (value) => {
     : [];
 };
 
+
+// =====================================================
+// NAVTA SIMPLE SUBSCRIPT / SUPERSCRIPT NORMALIZER
+// =====================================================
+// Converts simple OCR/Gemini notation such as:
+// SiCl_4 -> SiCl₄
+// NH_4^+ -> NH₄⁺
+// SO_4^{2-} -> SO₄²⁻
+// x^2 -> x²
+//
+// Complex LaTeX such as \frac, matrices, integrals, etc.
+// is left untouched for the existing KaTeX renderer.
+// =====================================================
+
+const NAVTA_SUBSCRIPT_MAP = {
+  "0": "₀",
+  "1": "₁",
+  "2": "₂",
+  "3": "₃",
+  "4": "₄",
+  "5": "₅",
+  "6": "₆",
+  "7": "₇",
+  "8": "₈",
+  "9": "₉",
+  "+": "₊",
+  "-": "₋",
+  "=": "₌",
+  "(": "₍",
+  ")": "₎",
+};
+
+const NAVTA_SUPERSCRIPT_MAP = {
+  "0": "⁰",
+  "1": "¹",
+  "2": "²",
+  "3": "³",
+  "4": "⁴",
+  "5": "⁵",
+  "6": "⁶",
+  "7": "⁷",
+  "8": "⁸",
+  "9": "⁹",
+  "+": "⁺",
+  "-": "⁻",
+  "=": "⁼",
+  "(": "⁽",
+  ")": "⁾",
+};
+
+const convertNavtaScriptCharacters = (
+  value,
+  map
+) =>
+  String(value ?? "")
+    .split("")
+    .map(
+      (character) =>
+        map[character] || character
+    )
+    .join("");
+
+const formatNavtaSimpleScripts = (
+  input = ""
+) => {
+  let value =
+    String(input ?? "");
+
+  if (!value) {
+    return "";
+  }
+
+  value = value.replace(
+    /_\{([0-9+\-=()]+)\}/g,
+    (_, content) =>
+      convertNavtaScriptCharacters(
+        content,
+        NAVTA_SUBSCRIPT_MAP
+      )
+  );
+
+  value = value.replace(
+    /_([0-9+\-=()]+)/g,
+    (_, content) =>
+      convertNavtaScriptCharacters(
+        content,
+        NAVTA_SUBSCRIPT_MAP
+      )
+  );
+
+  value = value.replace(
+    /\^\{([0-9+\-=()]+)\}/g,
+    (_, content) =>
+      convertNavtaScriptCharacters(
+        content,
+        NAVTA_SUPERSCRIPT_MAP
+      )
+  );
+
+  value = value.replace(
+    /\^([0-9+\-=()]+)/g,
+    (_, content) =>
+      convertNavtaScriptCharacters(
+        content,
+        NAVTA_SUPERSCRIPT_MAP
+      )
+  );
+
+  return value;
+};
+
 const normalizeConfidence = (value) => {
   const numeric = Number(value);
 
@@ -1196,7 +1307,21 @@ visualDescription = ""
 
 19. Keep mathematical content in LaTeX where appropriate.
 
-20. Return JSON ONLY.
+20. SIMPLE SUBSCRIPT / SUPERSCRIPT FORMATTING:
+
+- For simple chemical formula subscripts, ionic charges and simple numeric powers,
+  prefer Unicode subscript/superscript characters in plain text.
+- Examples:
+  SiCl_4 -> SiCl₄
+  NH_4^+ -> NH₄⁺
+  SO_4^{2-} -> SO₄²⁻
+  PO_4^{3-} -> PO₄³⁻
+  x^2 -> x²
+- Do NOT rewrite complex mathematics into Unicode.
+- Keep fractions, roots, matrices, determinants, integrals, summations and other
+  complex mathematics in proper LaTeX for NAVTA's KaTeX renderer.
+
+21. Return JSON ONLY.
 
 Do not return Markdown.
 
@@ -1255,8 +1380,10 @@ const normalizeDetectedQuestion = ({
     )
       .map(
         (option) =>
-          cleanString(
-            option
+          formatNavtaSimpleScripts(
+            cleanString(
+              option
+            )
           )
       )
       .filter(Boolean);
@@ -1348,8 +1475,10 @@ const normalizeDetectedQuestion = ({
     );
 
   const question =
-    cleanString(
-      item.question
+    formatNavtaSimpleScripts(
+      cleanString(
+        item.question
+      )
     );
 
   if (
@@ -1521,8 +1650,10 @@ const normalizeDetectedQuestion = ({
       ),
 
     modelAnswer:
-      cleanString(
-        item.modelAnswer
+      formatNavtaSimpleScripts(
+        cleanString(
+          item.modelAnswer
+        )
       ),
 
     keyPoints:
@@ -1546,8 +1677,10 @@ const normalizeDetectedQuestion = ({
           ),
 
     explanation:
-      cleanString(
-        item.explanation
+      formatNavtaSimpleScripts(
+        cleanString(
+          item.explanation
+        )
       ),
 
     questionBoundingBox,
@@ -2772,6 +2905,12 @@ For MCQs:
 - C=2
 - D=3
 - if uncertain use null
+
+FORMATTING RULES:
+- For simple chemical subscripts, ionic charges and numeric powers, prefer Unicode:
+  SiCl₄, NH₄⁺, SO₄²⁻, PO₄³⁻, x².
+- Do not output visible underscore/caret notation for those simple cases when avoidable.
+- Keep complex mathematics in LaTeX.
 
 Return JSON only.
 
