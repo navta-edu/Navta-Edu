@@ -56,6 +56,156 @@ const VALID_QUESTION_TYPES = new Set([
 ]);
 
 // =====================================================
+// NAVTA CHAPTER WHITELIST
+// =====================================================
+
+const ALLOWED_CHAPTERS = {
+  Physics: {
+    "Class 11": [
+      "Units and Measurements",
+      "Motion in a Straight Line",
+      "Motion in a Plane",
+      "Laws of Motion",
+      "Work, Energy and Power",
+      "System of Particles and Rotational Motion",
+      "Gravitation",
+      "Mechanical Properties of Solids",
+      "Mechanical Properties of Fluids",
+      "Thermal Properties of Matter",
+      "Thermodynamics",
+      "Kinetic Theory",
+      "Oscillations",
+      "Waves",
+    ],
+    "Class 12": [
+      "Electric Charges and Fields",
+      "Electrostatic Potential and Capacitance",
+      "Current Electricity",
+      "Moving Charges and Magnetism",
+      "Magnetism and Matter",
+      "Electromagnetic Induction",
+      "Alternating Current",
+      "Electromagnetic Waves",
+      "Ray Optics and Optical Instruments",
+      "Wave Optics",
+      "Dual Nature of Radiation and Matter",
+      "Atoms",
+      "Nuclei",
+      "Semiconductor Electronics",
+    ],
+  },
+
+  Chemistry: {
+    "Class 11": [
+      "Some Basic Concepts of Chemistry",
+      "Structure of Atom",
+      "Classification of Elements and Periodicity in Properties",
+      "Chemical Bonding and Molecular Structure",
+      "Thermodynamics",
+      "Equilibrium",
+      "Redox Reactions",
+      "Organic Chemistry: Some Basic Principles and Techniques",
+      "Hydrocarbons",
+    ],
+    "Class 12": [
+      "Solutions",
+      "Electrochemistry",
+      "Chemical Kinetics",
+      "The d- and f-Block Elements",
+      "Coordination Compounds",
+      "Haloalkanes and Haloarenes",
+      "Alcohols, Phenols and Ethers",
+      "Aldehydes, Ketones and Carboxylic Acids",
+      "Amines",
+      "Biomolecules",
+    ],
+  },
+
+  Maths: {
+    "Class 11": [
+      "Sets",
+      "Relations and Functions",
+      "Trigonometric Functions",
+      "Complex Numbers and Quadratic Equations",
+      "Linear Inequalities",
+      "Permutations and Combinations",
+      "Binomial Theorem",
+      "Sequences and Series",
+      "Straight Lines",
+      "Conic Sections",
+      "Introduction to Three Dimensional Geometry",
+      "Limits and Derivatives",
+      "Statistics",
+      "Probability",
+    ],
+    "Class 12": [
+      "Relations and Functions",
+      "Inverse Trigonometric Functions",
+      "Matrices",
+      "Determinants",
+      "Continuity and Differentiability",
+      "Applications of Derivatives",
+      "Integrals",
+      "Applications of Integrals",
+      "Differential Equations",
+      "Vector Algebra",
+      "Three Dimensional Geometry",
+      "Linear Programming",
+      "Probability",
+    ],
+  },
+
+  Biology: {
+    "Class 11": [
+      "The Living World",
+      "Biological Classification",
+      "Plant Kingdom",
+      "Animal Kingdom",
+      "Morphology of Flowering Plants",
+      "Anatomy of Flowering Plants",
+      "Structural Organisation in Animals",
+      "Cell: The Unit of Life",
+      "Biomolecules",
+      "Cell Cycle and Cell Division",
+      "Photosynthesis in Higher Plants",
+      "Respiration in Plants",
+      "Plant Growth and Development",
+      "Breathing and Exchange of Gases",
+      "Body Fluids and Circulation",
+      "Excretory Products and their Elimination",
+      "Locomotion and Movement",
+      "Neural Control and Coordination",
+      "Chemical Coordination and Integration",
+    ],
+    "Class 12": [
+      "Sexual Reproduction in Flowering Plants",
+      "Human Reproduction",
+      "Reproductive Health",
+      "Principles of Inheritance and Variation",
+      "Molecular Basis of Inheritance",
+      "Evolution",
+      "Human Health and Disease",
+      "Microbes in Human Welfare",
+      "Biotechnology: Principles and Processes",
+      "Biotechnology and its Applications",
+      "Organisms and Populations",
+      "Ecosystem",
+      "Biodiversity and Conservation",
+    ],
+  },
+};
+
+const getAllowedChapters = (
+  subject,
+  classLevel
+) => {
+  return (
+    ALLOWED_CHAPTERS?.[subject]?.[classLevel] ||
+    []
+  );
+};
+
+// =====================================================
 // SETTINGS
 // =====================================================
 
@@ -99,6 +249,37 @@ const safeArray = (
   )
     ? value
     : [];
+};
+
+const normalizeConfidence = (
+  value
+) => {
+  const numeric =
+    Number(value);
+
+  if (
+    !Number.isFinite(
+      numeric
+    )
+  ) {
+    return null;
+  }
+
+  if (
+    numeric >= 0 &&
+    numeric <= 1
+  ) {
+    return numeric;
+  }
+
+  if (
+    numeric > 1 &&
+    numeric <= 100
+  ) {
+    return numeric / 100;
+  }
+
+  return null;
 };
 
 const getFileType = (
@@ -255,8 +436,34 @@ const normalizeClassLevel = (
 // =====================================================
 
 const validateDetectedQuestion = (
-  rawQuestion
+  rawQuestion,
+  hints = {}
 ) => {
+  const hintedSubject =
+    normalizeSubject(
+      hints?.subject
+    );
+
+  const hintedExam =
+    normalizeExam(
+      hints?.exam
+    );
+
+  const hintedClassLevel =
+    normalizeClassLevel(
+      hints?.classLevel
+    );
+
+  const hintedChapter =
+    cleanString(
+      hints?.chapter
+    );
+
+  const aiChapter =
+    cleanString(
+      rawQuestion?.chapter
+    );
+
   const question = {
     ...rawQuestion,
 
@@ -266,24 +473,29 @@ const validateDetectedQuestion = (
       ),
 
     subject:
+      hintedSubject ||
       normalizeSubject(
         rawQuestion?.subject
       ),
 
     exam:
+      hintedExam ||
       normalizeExam(
         rawQuestion?.exam
       ),
 
     classLevel:
+      hintedClassLevel ||
       normalizeClassLevel(
         rawQuestion?.classLevel
       ),
 
     chapter:
-      cleanString(
-        rawQuestion?.chapter
-      ),
+      hintedChapter ||
+      aiChapter,
+
+    detectedChapter:
+      aiChapter,
 
     difficulty:
       cleanString(
@@ -353,6 +565,26 @@ const validateDetectedQuestion = (
     visualBoundingBox:
       rawQuestion?.visualBoundingBox ||
       null,
+
+    chapterConfidence:
+      normalizeConfidence(
+        rawQuestion?.chapterConfidence
+      ),
+
+    answerConfidence:
+      normalizeConfidence(
+        rawQuestion?.answerConfidence
+      ),
+
+    classificationConfidence:
+      normalizeConfidence(
+        rawQuestion?.classificationConfidence
+      ),
+
+    difficultyConfidence:
+      normalizeConfidence(
+        rawQuestion?.difficultyConfidence
+      ),
 
     needsReview:
       Boolean(
@@ -439,8 +671,35 @@ const validateDetectedQuestion = (
   if (
     !question.chapter
   ) {
-    question.chapter =
-      "Needs Review";
+    reasons.push(
+      "Chapter could not be identified."
+    );
+  } else {
+    const validChapters =
+      getAllowedChapters(
+        question.subject,
+        question.classLevel
+      );
+
+    if (
+      validChapters.length > 0 &&
+      !validChapters.includes(
+        question.chapter
+      )
+    ) {
+      reasons.push(
+        `Invalid chapter "${question.chapter}" for ${question.subject} ${question.classLevel}.`
+      );
+    }
+  }
+
+  if (
+    hintedChapter &&
+    aiChapter &&
+    aiChapter !== hintedChapter
+  ) {
+    question.chapterMismatch =
+      true;
 
     question.needsReview =
       true;
@@ -536,6 +795,50 @@ const validateDetectedQuestion = (
       question.answerReviewReason =
         "NAVTA AI could not determine the MCQ answer confidently during the PDF analysis.";
     }
+  }
+
+  // =========================================
+  // CONFIDENCE REVIEW RULES
+  // =========================================
+
+  if (
+    question.chapterConfidence !==
+      null &&
+    question.chapterConfidence <
+      0.9
+  ) {
+    question.needsReview =
+      true;
+  }
+
+  if (
+    question.answerConfidence !==
+      null &&
+    question.answerConfidence <
+      0.85
+  ) {
+    question.needsReview =
+      true;
+  }
+
+  if (
+    question.classificationConfidence !==
+      null &&
+    question.classificationConfidence <
+      0.9
+  ) {
+    question.needsReview =
+      true;
+  }
+
+  if (
+    question.difficultyConfidence !==
+      null &&
+    question.difficultyConfidence <
+      0.8
+  ) {
+    question.needsReview =
+      true;
   }
 
   // =========================================
@@ -845,6 +1148,27 @@ const buildImportQuestion = ({
     needsReview:
       Boolean(
         question.needsReview
+      ),
+
+    chapterConfidence:
+      question.chapterConfidence,
+
+    answerConfidence:
+      question.answerConfidence,
+
+    classificationConfidence:
+      question.classificationConfidence,
+
+    difficultyConfidence:
+      question.difficultyConfidence,
+
+    detectedChapter:
+      question.detectedChapter ||
+      "",
+
+    chapterMismatch:
+      Boolean(
+        question.chapterMismatch
       ),
 
     questionBoundingBox:
@@ -1273,7 +1597,8 @@ const processPdfImport =
     ) {
       const validation =
         validateDetectedQuestion(
-          rawQuestion
+          rawQuestion,
+          hints
         );
 
       if (
@@ -1472,7 +1797,8 @@ const processTextImport =
     ) {
       const validation =
         validateDetectedQuestion(
-          rawQuestion
+          rawQuestion,
+          hints
         );
 
       if (
@@ -1544,6 +1870,7 @@ const analyseNavtaImport =
     subject,
     exam,
     classLevel,
+    chapter,
   }) => {
     // =========================================
     // FILE CHECK
@@ -1620,7 +1947,30 @@ const analyseNavtaImport =
         normalizeClassLevel(
           classLevel
         ),
+
+      chapter:
+        cleanString(
+          chapter
+        ),
     };
+
+    hints.allowedChapters =
+      getAllowedChapters(
+        hints.subject,
+        hints.classLevel
+      );
+
+    if (
+      hints.chapter &&
+      hints.allowedChapters.length > 0 &&
+      !hints.allowedChapters.includes(
+        hints.chapter
+      )
+    ) {
+      throw new Error(
+        `Invalid chapter "${hints.chapter}" for ${hints.subject} ${hints.classLevel}.`
+      );
+    }
 
     // =========================================
     // PROCESS
