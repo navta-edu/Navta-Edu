@@ -235,6 +235,8 @@ export default function AdminDashboard() {
   const [uEmail, setUEmail] = useState('');
   const [uPassword, setUPassword] = useState('');
   const [uRole, setURole] = useState('student');
+  
+  const [userRoleFilter, setUserRoleFilter] = useState('admin');
 
 
   /*
@@ -1120,6 +1122,59 @@ const fetchData = async () => {
 
     }
   };
+
+  const normalizeUserRole = (role) => {
+  return String(role || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/-/g, '_');
+};
+
+const filteredUsers = users.filter(
+  (u) => normalizeUserRole(u.role) === userRoleFilter
+);
+
+const userRoleCounts = {
+  admin: users.filter(
+    (u) => normalizeUserRole(u.role) === 'admin'
+  ).length,
+
+  student: users.filter(
+    (u) => normalizeUserRole(u.role) === 'student'
+  ).length,
+
+  teacher: users.filter(
+    (u) => normalizeUserRole(u.role) === 'teacher'
+  ).length,
+
+  external_teacher: users.filter(
+    (u) => normalizeUserRole(u.role) === 'external_teacher'
+  ).length
+};
+
+const userRoleTabs = [
+  {
+    id: 'admin',
+    label: 'Admin',
+    icon: ShieldCheck
+  },
+  {
+    id: 'student',
+    label: 'Student',
+    icon: GraduationCap
+  },
+  {
+    id: 'teacher',
+    label: 'Teacher',
+    icon: Users
+  },
+  {
+    id: 'external_teacher',
+    label: 'External Teacher',
+    icon: BookOpen
+  }
+];
 
 
   const handleUpdateStudent = async (e) => {
@@ -2438,115 +2493,310 @@ const fetchData = async () => {
           </Card>
 
 
-          <Card
-            title="User Registry"
-            subtitle="Manage registered users"
-          >
+<Card
+  title="User Registry"
+  subtitle="Manage users separately by account type"
+>
+  {/* ============================================================
+      USER ROLE SECTIONS
+  ============================================================ */}
 
-            <div className="overflow-x-auto mt-4">
+  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5 mb-6">
 
-              <table className="w-full text-left text-sm">
+    {userRoleTabs.map((roleTab) => {
 
-                <thead>
+      const Icon = roleTab.icon;
+      const active = userRoleFilter === roleTab.id;
 
-                  <tr className="border-b border-slate-100 dark:border-slate-800 text-xs font-bold text-slate-400 uppercase">
+      return (
+        <button
+          key={roleTab.id}
+          type="button"
+          onClick={() => setUserRoleFilter(roleTab.id)}
+          className={`relative rounded-2xl border p-4 text-left transition-all duration-200 ${
+            active
+              ? 'border-primary-500 bg-primary-500/10 shadow-md shadow-primary-500/10'
+              : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 hover:border-primary-400 dark:hover:border-primary-600'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-3">
 
-                    <th className="pb-3">
-                      Name
-                    </th>
-
-                    <th className="pb-3">
-                      Email
-                    </th>
-
-                    <th className="pb-3">
-                      Role
-                    </th>
-
-                    <th className="pb-3">
-                      Verified
-                    </th>
-
-                    <th className="pb-3 text-right">
-                      Actions
-                    </th>
-
-                  </tr>
-
-                </thead>
-
-
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
-
-                  {users.map((u) => (
-
-                    <tr key={u._id || u.id}>
-
-                      <td className="py-3 font-semibold text-slate-900 dark:text-white">
-                        {u.name}
-                      </td>
-
-                      <td className="py-3">
-                        {u.email}
-                      </td>
-
-                      <td className="py-3 capitalize">
-                        {u.role?.replace('_', ' ')}
-                      </td>
-
-                      <td className="py-3">
-
-                        <button
-                          onClick={() =>
-                            handleToggleVerify(u)
-                          }
-                          className={
-                            u.isVerified
-                              ? 'text-emerald-500'
-                              : 'text-slate-400'
-                          }
-                        >
-
-                          {u.isVerified
-                            ? 'Verified'
-                            : 'Pending'}
-
-                        </button>
-
-                      </td>
-
-                      <td className="py-3 text-right">
-
-                        <button
-                          onClick={() =>
-                            handleDeleteUser(
-                              u._id || u.id
-                            )
-                          }
-                          className="p-1.5 text-red-500"
-                        >
-
-                          <Trash2 className="w-4 h-4" />
-
-                        </button>
-
-                      </td>
-
-                    </tr>
-
-                  ))}
-
-                </tbody>
-
-              </table>
-
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                active
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400'
+              }`}
+            >
+              <Icon className="w-5 h-5" />
             </div>
 
-          </Card>
+            <div
+              className={`min-w-[30px] h-[30px] px-2 rounded-full flex items-center justify-center text-xs font-black ${
+                active
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              {userRoleCounts[roleTab.id]}
+            </div>
 
-        </div>
+          </div>
 
-      )}
+          <div className="mt-3">
+
+            <p
+              className={`text-sm font-extrabold ${
+                active
+                  ? 'text-primary-600 dark:text-primary-400'
+                  : 'text-slate-900 dark:text-white'
+              }`}
+            >
+              {roleTab.label}
+            </p>
+
+            <p className="text-[11px] text-slate-400 mt-1">
+              {userRoleCounts[roleTab.id] === 1
+                ? '1 account'
+                : `${userRoleCounts[roleTab.id]} accounts`}
+            </p>
+
+          </div>
+
+        </button>
+      );
+
+    })}
+
+  </div>
+
+
+  {/* ============================================================
+      CURRENT SECTION HEADER
+  ============================================================ */}
+
+  <div className="flex items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+
+    <div>
+
+      <p className="text-sm font-extrabold text-slate-900 dark:text-white">
+
+        {
+          userRoleTabs.find(
+            (roleTab) => roleTab.id === userRoleFilter
+          )?.label
+        } Accounts
+
+      </p>
+
+      <p className="text-xs text-slate-400 mt-1">
+
+        {filteredUsers.length === 1
+          ? '1 registered account'
+          : `${filteredUsers.length} registered accounts`}
+
+      </p>
+
+    </div>
+
+    <div className="px-3 py-1.5 rounded-full bg-primary-500/10 text-primary-600 dark:text-primary-400 text-xs font-bold">
+
+      {filteredUsers.length} Users
+
+    </div>
+
+  </div>
+
+
+  {/* ============================================================
+      USER TABLE
+  ============================================================ */}
+
+  <div className="overflow-x-auto mt-4">
+
+    <table className="w-full text-left text-sm">
+
+      <thead>
+
+        <tr className="border-b border-slate-100 dark:border-slate-800 text-xs font-bold text-slate-400 uppercase">
+
+          <th className="pb-3 pr-4">
+            Name
+          </th>
+
+          <th className="pb-3 pr-4">
+            Email
+          </th>
+
+          <th className="pb-3 pr-4">
+            Role
+          </th>
+
+          <th className="pb-3 pr-4">
+            Verified
+          </th>
+
+          <th className="pb-3 text-right">
+            Actions
+          </th>
+
+        </tr>
+
+      </thead>
+
+
+      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
+
+        {filteredUsers.length > 0 ? (
+
+          filteredUsers.map((u) => (
+
+            <tr
+              key={u._id || u.id}
+              className="hover:bg-slate-50/70 dark:hover:bg-slate-900/40 transition-colors"
+            >
+
+              <td className="py-4 pr-4 font-semibold text-slate-900 dark:text-white">
+
+                <div className="flex items-center gap-3">
+
+                  <div className="w-9 h-9 shrink-0 rounded-xl bg-primary-500/10 text-primary-600 dark:text-primary-400 flex items-center justify-center font-black text-xs uppercase">
+
+                    {u.name
+                      ? u.name
+                          .split(' ')
+                          .map((part) => part[0])
+                          .join('')
+                          .slice(0, 2)
+                      : 'U'}
+
+                  </div>
+
+                  <span>
+                    {u.name || 'Unnamed User'}
+                  </span>
+
+                </div>
+
+              </td>
+
+
+              <td className="py-4 pr-4 text-slate-600 dark:text-slate-300">
+
+                {u.email}
+
+              </td>
+
+
+              <td className="py-4 pr-4">
+
+                <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 text-xs font-bold text-slate-600 dark:text-slate-300 capitalize">
+
+                  {normalizeUserRole(u.role).replace(/_/g, ' ')}
+
+                </span>
+
+              </td>
+
+
+              <td className="py-4 pr-4">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleToggleVerify(u)
+                  }
+                  className={`inline-flex items-center gap-1.5 text-xs font-bold ${
+                    u.isVerified
+                      ? 'text-emerald-500'
+                      : 'text-amber-500'
+                  }`}
+                >
+
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      u.isVerified
+                        ? 'bg-emerald-500'
+                        : 'bg-amber-500'
+                    }`}
+                  />
+
+                  {u.isVerified
+                    ? 'Verified'
+                    : 'Pending'}
+
+                </button>
+
+              </td>
+
+
+              <td className="py-4 text-right">
+
+                <button
+                  type="button"
+                  title="Delete user"
+                  onClick={() =>
+                    handleDeleteUser(
+                      u._id || u.id
+                    )
+                  }
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                >
+
+                  <Trash2 className="w-4 h-4" />
+
+                </button>
+
+              </td>
+
+            </tr>
+
+          ))
+
+        ) : (
+
+          <tr>
+
+            <td
+              colSpan="5"
+              className="py-12 text-center"
+            >
+
+              <div className="flex flex-col items-center justify-center">
+
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center mb-3">
+
+                  <Users className="w-5 h-5 text-slate-400" />
+
+                </div>
+
+                <p className="font-bold text-slate-700 dark:text-slate-300">
+
+                  No users in this section
+
+                </p>
+
+                <p className="text-xs text-slate-400 mt-1">
+
+                  Create a user with this role to see them here.
+
+                </p>
+
+              </div>
+
+            </td>
+
+          </tr>
+
+        )}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</Card>
 
 
       {/* ================================================================
