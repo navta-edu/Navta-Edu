@@ -1482,6 +1482,125 @@ export default function AdminNavtaTest() {
       : [];
 
   // ===================================================
+  // AI ACCURACY / REVIEW HELPERS
+  // ===================================================
+
+  const normaliseConfidence = (value) => {
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+      return null;
+    }
+
+    // Gemini/backends sometimes return 92 instead of 0.92.
+    if (number > 1 && number <= 100) {
+      return Math.max(0, Math.min(1, number / 100));
+    }
+
+    return Math.max(0, Math.min(1, number));
+  };
+
+  const getQuestionReviewState = (question = {}) => {
+    const chapterConfidence =
+      normaliseConfidence(question.chapterConfidence);
+
+    const answerConfidence =
+      normaliseConfidence(question.answerConfidence);
+
+    const classificationConfidence =
+      normaliseConfidence(
+        question.classificationConfidence ??
+          question.overallConfidence
+      );
+
+    const chapterNeedsReview =
+      chapterConfidence !== null &&
+      chapterConfidence < 0.9;
+
+    const answerNeedsReview =
+      answerConfidence !== null &&
+      answerConfidence < 0.85;
+
+    const classificationNeedsReview =
+      classificationConfidence !== null &&
+      classificationConfidence < 0.9;
+
+    return {
+      chapterConfidence,
+      answerConfidence,
+      classificationConfidence,
+      needsReview:
+        Boolean(question.needsReview) ||
+        Boolean(question.needsAnswerReview) ||
+        chapterNeedsReview ||
+        answerNeedsReview ||
+        classificationNeedsReview,
+    };
+  };
+
+  const normaliseAcceptedImportQuestion = (question = {}) => {
+    const subject =
+      importHints.subject ||
+      question.subject ||
+      "";
+
+    const exam =
+      importHints.exam ||
+      question.exam ||
+      "";
+
+    const classLevel =
+      importHints.classLevel ||
+      question.classLevel ||
+      "";
+
+    const allowedChapters =
+      subject && classLevel
+        ? CHAPTERS[subject]?.[classLevel] || []
+        : [];
+
+    const requestedChapter =
+      importHints.chapter ||
+      question.chapter ||
+      "";
+
+    // Never allow Gemini to silently invent a chapter name.
+    // A manually selected chapter is authoritative. Otherwise
+    // the AI chapter must exactly match the NAVTA whitelist.
+    const chapter = importHints.chapter
+      ? importHints.chapter
+      : allowedChapters.includes(requestedChapter)
+        ? requestedChapter
+        : "";
+
+    const reviewState =
+      getQuestionReviewState(question);
+
+    return {
+      ...question,
+      subject,
+      exam,
+      classLevel,
+      chapter,
+      needsReview:
+        reviewState.needsReview ||
+        Boolean(
+          subject &&
+            classLevel &&
+            requestedChapter &&
+            !chapter
+        ),
+      invalidChapter:
+        Boolean(
+          subject &&
+            classLevel &&
+            requestedChapter &&
+            !chapter
+        ),
+    };
+  };
+
+  // ===================================================
   // AI ANALYZE FILE
   // ===================================================
 
@@ -1607,31 +1726,11 @@ export default function AdminNavtaTest() {
             ? data.acceptedQuestions
             : [];
 
-        // If the admin selected import hints, treat them as
-        // authoritative. In particular, a selected chapter
-        // is copied to every accepted question so all approved
-        // questions are saved directly under that chapter.
+        // Apply NAVTA hard hints and chapter whitelist rules
+        // before the admin sees the review screen.
         const accepted =
           acceptedRaw.map(
-            (question) => ({
-              ...question,
-              subject:
-                importHints.subject ||
-                question.subject ||
-                "",
-              exam:
-                importHints.exam ||
-                question.exam ||
-                "",
-              classLevel:
-                importHints.classLevel ||
-                question.classLevel ||
-                "",
-              chapter:
-                importHints.chapter ||
-                question.chapter ||
-                "",
-            })
+            normaliseAcceptedImportQuestion
           );
 
         const dropped =
@@ -3700,36 +3799,92 @@ export default function AdminNavtaTest() {
                                   />
                                 </div>
 
-                                <div
-                                  style={{
-                                    marginTop:
-                                      "12px",
-                                    color:
-                                      "#64748b",
-                                    fontSize:
-                                      "12px",
-                                  }}
-                                >
-                                  Chapter confidence:{" "}
-                                  {question.chapterConfidence
-                                    ? `${Math.round(
-                                        Number(
-                                          question.chapterConfidence
-                                        ) *
-                                          100
-                                      )}%`
-                                    : "N/A"}
-                                  {" • "}
-                                  Difficulty confidence:{" "}
-                                  {question.difficultyConfidence
-                                    ? `${Math.round(
-                                        Number(
-                                          question.difficultyConfidence
-                                        ) *
-                                          100
-                                      )}%`
-                                    : "N/A"}
-                                </div>
+                                {(() => {
+                                  const reviewState =
+                                    getQuestionReviewState(
+                                      question
+                                    );
+
+                                  const formatConfidence =
+                                    (value) =>
+                                      value === null
+                                        ? "N/A"
+                                        : `${Math.round(
+                                            value * 100
+                                          )}%`;
+
+                                  const difficultyConfidence =
+                                    normaliseConfidence(
+                                      question.difficultyConfidence
+                                    );
+
+                                  return (
+                                    <div
+                                      style={{
+                                        marginTop: "14px",
+                                        padding: "12px 14px",
+                                        borderRadius: "10px",
+                                        border: reviewState.needsReview
+                                          ? "1px solid rgba(245, 158, 11, 0.35)"
+                                          : "1px solid #243047",
+                                        background: reviewState.needsReview
+                                          ? "rgba(245, 158, 11, 0.08)"
+                                          : "rgba(15, 23, 42, 0.6)",
+                                        color: "#94a3b8",
+                                        fontSize: "12px",
+                                        lineHeight: 1.7,
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          gap: "12px",
+                                          flexWrap: "wrap",
+                                          marginBottom: "6px",
+                                        }}
+                                      >
+                                        <strong
+                                          style={{
+                                            color: reviewState.needsReview
+                                              ? "#fbbf24"
+                                              : "#86efac",
+                                          }}
+                                        >
+                                          {reviewState.needsReview
+                                            ? "Manual review recommended"
+                                            : "AI confidence looks good"}
+                                        </strong>
+
+                                        {question.invalidChapter && (
+                                          <strong
+                                            style={{
+                                              color: "#fca5a5",
+                                            }}
+                                          >
+                                            Invalid AI chapter cleared
+                                          </strong>
+                                        )}
+                                      </div>
+
+                                      Chapter: {formatConfidence(
+                                        reviewState.chapterConfidence
+                                      )}
+                                      {" • "}
+                                      Answer: {formatConfidence(
+                                        reviewState.answerConfidence
+                                      )}
+                                      {" • "}
+                                      Classification: {formatConfidence(
+                                        reviewState.classificationConfidence
+                                      )}
+                                      {" • "}
+                                      Difficulty: {formatConfidence(
+                                        difficultyConfidence
+                                      )}
+                                    </div>
+                                  );
+                                })()}
 
                               </div>
                             );
