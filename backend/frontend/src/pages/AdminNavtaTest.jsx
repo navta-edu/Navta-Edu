@@ -207,6 +207,7 @@ const emptyImportHints = {
   subject: "",
   exam: "",
   classLevel: "",
+  chapter: "",
 };
 
 // =====================================================
@@ -1437,6 +1438,20 @@ export default function AdminNavtaTest() {
             subject:
               value,
             exam: "",
+            classLevel: "",
+            chapter: "",
+          };
+        }
+
+        if (
+          field ===
+          "classLevel"
+        ) {
+          return {
+            ...previous,
+            classLevel:
+              value,
+            chapter: "",
           };
         }
 
@@ -1453,6 +1468,16 @@ export default function AdminNavtaTest() {
     importHints.subject
       ? SUBJECT_EXAMS[
           importHints.subject
+        ] || []
+      : [];
+
+  const availableImportChapters =
+    importHints.subject &&
+    importHints.classLevel
+      ? CHAPTERS[
+          importHints.subject
+        ]?.[
+          importHints.classLevel
         ] || []
       : [];
 
@@ -1532,6 +1557,15 @@ export default function AdminNavtaTest() {
           );
         }
 
+        if (
+          importHints.chapter
+        ) {
+          formData.append(
+            "chapter",
+            importHints.chapter
+          );
+        }
+
         const response =
           await fetch(
             "/api/navta-test/import",
@@ -1566,12 +1600,39 @@ export default function AdminNavtaTest() {
           );
         }
 
-        const accepted =
+        const acceptedRaw =
           Array.isArray(
             data.acceptedQuestions
           )
             ? data.acceptedQuestions
             : [];
+
+        // If the admin selected import hints, treat them as
+        // authoritative. In particular, a selected chapter
+        // is copied to every accepted question so all approved
+        // questions are saved directly under that chapter.
+        const accepted =
+          acceptedRaw.map(
+            (question) => ({
+              ...question,
+              subject:
+                importHints.subject ||
+                question.subject ||
+                "",
+              exam:
+                importHints.exam ||
+                question.exam ||
+                "",
+              classLevel:
+                importHints.classLevel ||
+                question.classLevel ||
+                "",
+              chapter:
+                importHints.chapter ||
+                question.chapter ||
+                "",
+            })
+          );
 
         const dropped =
           Array.isArray(
@@ -2092,6 +2153,10 @@ export default function AdminNavtaTest() {
 
         .admin-navta-grid.three {
           grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .admin-navta-grid.four {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
         }
 
         .admin-navta-field {
@@ -2624,6 +2689,7 @@ export default function AdminNavtaTest() {
           }
           .admin-navta-grid,
           .admin-navta-grid.three,
+          .admin-navta-grid.four,
           .admin-navta-summary-grid,
           .admin-navta-option-grid {
             grid-template-columns: 1fr;
@@ -2715,7 +2781,7 @@ export default function AdminNavtaTest() {
             </div>
 
             <div
-              className="admin-navta-grid three"
+              className="admin-navta-grid four"
               style={{
                 marginTop: "18px",
               }}
@@ -2810,6 +2876,9 @@ export default function AdminNavtaTest() {
                       event.target.value
                     )
                   }
+                  disabled={
+                    !importHints.subject
+                  }
                 >
                   <option value="">
                     Auto Detect
@@ -2822,6 +2891,44 @@ export default function AdminNavtaTest() {
                         value={item}
                       >
                         {item}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+
+              <div className="admin-navta-field">
+                <label className="admin-navta-label">
+                  Chapter Hint
+                </label>
+
+                <select
+                  className="admin-navta-select"
+                  value={
+                    importHints.chapter
+                  }
+                  onChange={(event) =>
+                    updateImportHint(
+                      "chapter",
+                      event.target.value
+                    )
+                  }
+                  disabled={
+                    !importHints.subject ||
+                    !importHints.classLevel
+                  }
+                >
+                  <option value="">
+                    Auto Detect
+                  </option>
+
+                  {availableImportChapters.map(
+                    (chapter) => (
+                      <option
+                        key={chapter}
+                        value={chapter}
+                      >
+                        {chapter}
                       </option>
                     )
                   )}
