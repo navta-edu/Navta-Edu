@@ -47,6 +47,12 @@ const NAVTA_AI_EMPTY_BATCH_RETRIES = Math.max(
   )
 );
 
+
+const NAVTA_AI_VERIFY_LOW_CONFIDENCE =
+  String(
+    process.env.NAVTA_AI_VERIFY_LOW_CONFIDENCE ?? "true"
+  ).toLowerCase() !== "false";
+
 // =====================================================
 // HELPERS
 // =====================================================
@@ -59,6 +65,31 @@ const safeArray = (value) => {
   return Array.isArray(value)
     ? value
     : [];
+};
+
+const normalizeConfidence = (value) => {
+  const numeric = Number(value);
+
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+
+  if (numeric >= 0 && numeric <= 1) {
+    return numeric;
+  }
+
+  if (numeric > 1 && numeric <= 100) {
+    return numeric / 100;
+  }
+
+  return null;
+};
+
+const LOW_CONFIDENCE_THRESHOLDS = {
+  chapter: 0.9,
+  answer: 0.85,
+  classification: 0.9,
+  difficulty: 0.75,
 };
 
 // =====================================================
@@ -680,6 +711,112 @@ const extractRetryAfterSeconds = (
 };
 
 // =====================================================
+// STRICT GEMINI RESPONSE SCHEMA
+// =====================================================
+
+const NAVTA_QUESTION_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    questions: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          questionNumber: { type: "STRING" },
+          question: { type: "STRING" },
+          subject: { type: "STRING" },
+          exam: { type: "STRING" },
+          classLevel: { type: "STRING" },
+          chapter: { type: "STRING" },
+          difficulty: { type: "STRING" },
+          questionType: { type: "STRING" },
+          options: {
+            type: "ARRAY",
+            items: { type: "STRING" },
+          },
+          correctAnswer: {
+            type: "INTEGER",
+            nullable: true,
+          },
+          modelAnswer: { type: "STRING" },
+          keyPoints: {
+            type: "ARRAY",
+            items: { type: "STRING" },
+          },
+          maxMarks: {
+            type: "NUMBER",
+            nullable: true,
+          },
+          explanation: { type: "STRING" },
+          questionBoundingBox: {
+            type: "OBJECT",
+            nullable: true,
+            properties: {
+              x: { type: "NUMBER" },
+              y: { type: "NUMBER" },
+              width: { type: "NUMBER" },
+              height: { type: "NUMBER" },
+            },
+          },
+          hasVisual: { type: "BOOLEAN" },
+          visualType: { type: "STRING" },
+          visualDescription: { type: "STRING" },
+          visualBoundingBox: {
+            type: "OBJECT",
+            nullable: true,
+            properties: {
+              x: { type: "NUMBER" },
+              y: { type: "NUMBER" },
+              width: { type: "NUMBER" },
+              height: { type: "NUMBER" },
+            },
+          },
+          sourcePage: {
+            type: "INTEGER",
+            nullable: true,
+          },
+          chapterConfidence: { type: "NUMBER" },
+          answerConfidence: { type: "NUMBER" },
+          classificationConfidence: { type: "NUMBER" },
+          difficultyConfidence: { type: "NUMBER" },
+          needsReview: { type: "BOOLEAN" },
+          drop: { type: "BOOLEAN" },
+          dropReason: { type: "STRING" },
+        },
+        required: [
+          "questionNumber",
+          "question",
+          "subject",
+          "exam",
+          "classLevel",
+          "chapter",
+          "difficulty",
+          "questionType",
+          "options",
+          "correctAnswer",
+          "modelAnswer",
+          "keyPoints",
+          "maxMarks",
+          "explanation",
+          "hasVisual",
+          "visualType",
+          "visualDescription",
+          "sourcePage",
+          "chapterConfidence",
+          "answerConfidence",
+          "classificationConfidence",
+          "difficultyConfidence",
+          "needsReview",
+          "drop",
+          "dropReason",
+        ],
+      },
+    },
+  },
+  required: ["questions"],
+};
+
+// =====================================================
 // CALL GEMINI
 // =====================================================
 
@@ -751,6 +888,9 @@ const callGemini = async ({
 
                 responseMimeType:
                   "application/json",
+
+                responseSchema:
+                  NAVTA_QUESTION_RESPONSE_SCHEMA,
 
                 maxOutputTokens,
               },
@@ -957,11 +1097,27 @@ correctAnswer = null
 
 11. Do not drop a readable question only because correctAnswer is null.
 
-12. If chapter is uncertain:
+12. CHAPTER CLASSIFICATION:
 
-chapter = ""
+- If ADMIN HINTS includes a selected chapter, treat that chapter as the intended destination.
+- Never invent a chapter name.
+- If ALLOWED CHAPTERS are supplied, chapter MUST exactly equal one value from that list.
+- If a selected chapter is supplied and the question clearly does not belong to it, set drop=true and explain the mismatch in dropReason.
+- If chapter is uncertain and no selected chapter is supplied, use chapter="" and set needsReview=true.
+- Return chapterConfidence from 0 to 1.
 
-13. If difficulty is uncertain:
+13. CONFIDENCE RULES:
+
+- classificationConfidence: confidence in subject + exam + class.
+- chapterConfidence: confidence in chapter classification.
+- difficultyConfidence: confidence in Easy / Medium / Hard.
+- answerConfidence: confidence in correctAnswer.
+- Use numbers from 0 to 1.
+- Do not inflate confidence.
+- If correctAnswer is null, answerConfidence must be below 0.85.
+- Set needsReview=true when any important classification is uncertain.
+
+14. If difficulty is uncertain:
 
 difficulty = "Medium"
 
@@ -1071,6 +1227,11 @@ RETURN:
       "visualDescription": "",
       "visualBoundingBox": null,
       "sourcePage": null,
+      "chapterConfidence": 0.0,
+      "answerConfidence": 0.0,
+      "classificationConfidence": 0.0,
+      "difficultyConfidence": 0.0,
+      "needsReview": false,
       "drop": false,
       "dropReason": ""
     }
@@ -1214,6 +1375,101 @@ const normalizeDetectedQuestion = ({
       "Source page could not be identified.";
   }
 
+  const selectedChapter =
+    cleanString(hints.chapter);
+
+  const allowedChapters =
+    safeArray(hints.allowedChapters)
+      .map(cleanString)
+      .filter(Boolean);
+
+  const detectedChapter =
+    cleanString(item.chapter);
+
+  let resolvedChapter =
+    selectedChapter ||
+    detectedChapter;
+
+  let chapterConfidence =
+    normalizeConfidence(
+      item.chapterConfidence
+    );
+
+  let answerConfidence =
+    normalizeConfidence(
+      item.answerConfidence
+    );
+
+  let classificationConfidence =
+    normalizeConfidence(
+      item.classificationConfidence
+    );
+
+  let difficultyConfidence =
+    normalizeConfidence(
+      item.difficultyConfidence
+    );
+
+  let needsReview =
+    Boolean(item.needsReview);
+
+  if (
+    resolvedChapter &&
+    allowedChapters.length > 0 &&
+    !allowedChapters.includes(
+      resolvedChapter
+    )
+  ) {
+    if (selectedChapter) {
+      resolvedChapter =
+        selectedChapter;
+    } else {
+      resolvedChapter = "";
+      needsReview = true;
+    }
+  }
+
+  if (
+    selectedChapter &&
+    detectedChapter &&
+    detectedChapter !==
+      selectedChapter
+  ) {
+    needsReview = true;
+  }
+
+  if (
+    chapterConfidence !== null &&
+    chapterConfidence <
+      LOW_CONFIDENCE_THRESHOLDS.chapter
+  ) {
+    needsReview = true;
+  }
+
+  if (
+    answerConfidence !== null &&
+    answerConfidence <
+      LOW_CONFIDENCE_THRESHOLDS.answer
+  ) {
+    needsReview = true;
+  }
+
+  if (
+    classificationConfidence !== null &&
+    classificationConfidence <
+      LOW_CONFIDENCE_THRESHOLDS.classification
+  ) {
+    needsReview = true;
+  }
+
+  if (
+    difficultyConfidence !== null &&
+    difficultyConfidence <
+      LOW_CONFIDENCE_THRESHOLDS.difficulty
+  ) {
+    needsReview = true;
+  }
+
   return {
     questionNumber:
       cleanString(
@@ -1224,32 +1480,30 @@ const normalizeDetectedQuestion = ({
 
     subject:
       normalizeSubject(
-        item.subject
+        hints.subject
       ) ||
       normalizeSubject(
-        hints.subject
+        item.subject
       ),
 
     exam:
       normalizeExam(
-        item.exam
+        hints.exam
       ) ||
       normalizeExam(
-        hints.exam
+        item.exam
       ),
 
     classLevel:
       normalizeClassLevel(
-        item.classLevel
+        hints.classLevel
       ) ||
       normalizeClassLevel(
-        hints.classLevel
+        item.classLevel
       ),
 
     chapter:
-      cleanString(
-        item.chapter
-      ),
+      resolvedChapter,
 
     difficulty:
       normalizeDifficulty(
@@ -1313,11 +1567,359 @@ const normalizeDetectedQuestion = ({
 
     sourcePage,
 
+    chapterConfidence,
+
+    answerConfidence,
+
+    classificationConfidence,
+
+    difficultyConfidence,
+
+    needsReview,
+
     drop,
 
     dropReason,
   };
 };
+
+// =====================================================
+// SECOND-PASS VERIFICATION FOR UNCERTAIN QUESTIONS
+// =====================================================
+
+const shouldVerifyQuestion = (
+  question = {}
+) => {
+  if (!NAVTA_AI_VERIFY_LOW_CONFIDENCE) {
+    return false;
+  }
+
+  if (question.needsReview) {
+    return true;
+  }
+
+  if (
+    question.questionType === "mcq" &&
+    !Number.isInteger(
+      question.correctAnswer
+    )
+  ) {
+    return true;
+  }
+
+  const chapterConfidence =
+    normalizeConfidence(
+      question.chapterConfidence
+    );
+
+  const answerConfidence =
+    normalizeConfidence(
+      question.answerConfidence
+    );
+
+  const classificationConfidence =
+    normalizeConfidence(
+      question.classificationConfidence
+    );
+
+  const difficultyConfidence =
+    normalizeConfidence(
+      question.difficultyConfidence
+    );
+
+  return (
+    (chapterConfidence !== null &&
+      chapterConfidence <
+        LOW_CONFIDENCE_THRESHOLDS.chapter) ||
+    (answerConfidence !== null &&
+      answerConfidence <
+        LOW_CONFIDENCE_THRESHOLDS.answer) ||
+    (classificationConfidence !== null &&
+      classificationConfidence <
+        LOW_CONFIDENCE_THRESHOLDS.classification) ||
+    (difficultyConfidence !== null &&
+      difficultyConfidence <
+        LOW_CONFIDENCE_THRESHOLDS.difficulty)
+  );
+};
+
+const mergeVerifiedQuestion = (
+  original,
+  verified
+) => {
+  if (!verified) {
+    return original;
+  }
+
+  return {
+    ...original,
+    ...verified,
+
+    questionNumber:
+      cleanString(
+        original.questionNumber
+      ) ||
+      cleanString(
+        verified.questionNumber
+      ),
+
+    sourcePage:
+      original.sourcePage ||
+      verified.sourcePage,
+
+    questionBoundingBox:
+      original.questionBoundingBox ||
+      verified.questionBoundingBox,
+
+    hasVisual:
+      original.hasVisual,
+
+    visualType:
+      original.visualType,
+
+    visualDescription:
+      original.visualDescription,
+
+    visualBoundingBox:
+      original.visualBoundingBox,
+  };
+};
+
+const verifyLowConfidenceQuestions =
+  async ({
+    questions = [],
+    validPages = [],
+    hints = {},
+  }) => {
+    const uncertain =
+      safeArray(questions).filter(
+        shouldVerifyQuestion
+      );
+
+    if (uncertain.length === 0) {
+      return questions;
+    }
+
+    const uncertainPages =
+      new Set(
+        uncertain
+          .map(
+            (question) =>
+              Number(
+                question.sourcePage
+              )
+          )
+          .filter(
+            Number.isInteger
+          )
+      );
+
+    const pagesForVerification =
+      safeArray(validPages).filter(
+        (page) =>
+          uncertainPages.has(
+            Number(
+              page.pageNumber
+            )
+          )
+      );
+
+    const verificationPrompt = `
+You are NAVTA AI acting as a SECOND-PASS VERIFIER.
+
+Verify only the uncertain questions listed below against the supplied original PDF page images.
+
+Do not create new questions.
+Do not remove a readable question merely because the answer is uncertain.
+Do not invent missing options or text.
+Preserve the original question wording unless an obvious OCR/vision error must be corrected.
+
+ADMIN HINTS:
+Subject: ${cleanString(hints.subject) || "Auto detect"}
+Exam: ${cleanString(hints.exam) || "Auto detect"}
+Class: ${cleanString(hints.classLevel) || "Auto detect"}
+Selected Chapter: ${cleanString(hints.chapter) || "Auto detect"}
+
+ALLOWED CHAPTERS:
+${safeArray(hints.allowedChapters).length > 0
+  ? safeArray(hints.allowedChapters).join("\n")
+  : "No whitelist supplied"}
+
+Return the same questions only, with corrected:
+- subject
+- exam
+- classLevel
+- chapter
+- difficulty
+- correctAnswer
+- explanation
+- chapterConfidence
+- answerConfidence
+- classificationConfidence
+- difficultyConfidence
+- needsReview
+- drop
+- dropReason
+
+Rules:
+- Confidence values must be from 0 to 1.
+- If the answer is uncertain, correctAnswer=null and needsReview=true.
+- If Selected Chapter is provided, do not silently change to another chapter.
+- If a question clearly does not belong to Selected Chapter, set drop=true and explain.
+- Return JSON only.
+
+QUESTIONS TO VERIFY:
+${JSON.stringify(
+  uncertain.map(
+    (question) => ({
+      questionNumber:
+        question.questionNumber,
+      question:
+        question.question,
+      options:
+        question.options,
+      subject:
+        question.subject,
+      exam:
+        question.exam,
+      classLevel:
+        question.classLevel,
+      chapter:
+        question.chapter,
+      difficulty:
+        question.difficulty,
+      questionType:
+        question.questionType,
+      correctAnswer:
+        question.correctAnswer,
+      sourcePage:
+        question.sourcePage,
+      chapterConfidence:
+        question.chapterConfidence,
+      answerConfidence:
+        question.answerConfidence,
+      classificationConfidence:
+        question.classificationConfidence,
+      difficultyConfidence:
+        question.difficultyConfidence,
+      needsReview:
+        question.needsReview,
+    })
+  )
+)}
+`;
+
+    const parts = [
+      {
+        text:
+          verificationPrompt,
+      },
+    ];
+
+    for (
+      const page of
+      pagesForVerification
+    ) {
+      parts.push({
+        text:
+          `ORIGINAL PDF PAGE ${page.pageNumber}.`,
+      });
+
+      parts.push({
+        inlineData: {
+          mimeType:
+            "image/png",
+          data:
+            imageBufferToBase64(
+              page.buffer
+            ),
+        },
+      });
+    }
+
+    try {
+      const raw =
+        await callGemini({
+          parts,
+          maxOutputTokens:
+            16384,
+        });
+
+      const parsed =
+        parseJsonObject(
+          raw
+        );
+
+      const verified =
+        safeArray(
+          parsed?.questions
+        ).map(
+          (item) =>
+            normalizeDetectedQuestion({
+              item,
+              allowedPageNumbers:
+                pagesForVerification.map(
+                  (page) =>
+                    Number(
+                      page.pageNumber
+                    )
+                ),
+              hints,
+              requirePage:
+                true,
+            })
+        );
+
+      const verifiedMap =
+        new Map();
+
+      verified.forEach(
+        (question) => {
+          const key =
+            `${question.sourcePage || ""}::${cleanString(
+              question.questionNumber
+            )}`;
+
+          verifiedMap.set(
+            key,
+            question
+          );
+        }
+      );
+
+      return safeArray(
+        questions
+      ).map(
+        (question) => {
+          if (
+            !shouldVerifyQuestion(
+              question
+            )
+          ) {
+            return question;
+          }
+
+          const key =
+            `${question.sourcePage || ""}::${cleanString(
+              question.questionNumber
+            )}`;
+
+          return mergeVerifiedQuestion(
+            question,
+            verifiedMap.get(
+              key
+            )
+          );
+        }
+      );
+    } catch (error) {
+      console.warn(
+        `NAVTA second-pass verification skipped because it failed: ${error?.message || ""}`
+      );
+
+      return questions;
+    }
+  };
 
 // =====================================================
 // ANALYSE PAGE BATCH
@@ -1368,6 +1970,18 @@ ${cleanString(hints.exam) || "Auto detect"}
 
 Class:
 ${cleanString(hints.classLevel) || "Auto detect"}
+
+Selected Chapter:
+${cleanString(hints.chapter) || "Auto detect"}
+
+ALLOWED CHAPTERS FOR THIS SUBJECT/CLASS:
+${safeArray(hints.allowedChapters).length > 0
+  ? safeArray(hints.allowedChapters).join("\n")
+  : "No whitelist supplied"}
+
+If Selected Chapter is not "Auto detect", treat it as the intended destination.
+Do not silently assign a different chapter. If the question clearly belongs elsewhere,
+set drop=true and explain why.
 
 PAGES INCLUDED:
 
@@ -1427,21 +2041,31 @@ Each image below is preceded by its exact PDF page number.
         raw
       );
 
-    return safeArray(
-      parsed?.questions
-    ).map(
-      (item) =>
-        normalizeDetectedQuestion({
-          item,
+    const normalizedQuestions =
+      safeArray(
+        parsed?.questions
+      ).map(
+        (item) =>
+          normalizeDetectedQuestion({
+            item,
 
-          allowedPageNumbers,
+            allowedPageNumbers,
 
-          hints,
+            hints,
 
-          requirePage:
-            true,
-        })
-    );
+            requirePage:
+              true,
+          })
+      );
+
+    return verifyLowConfidenceQuestions({
+      questions:
+        normalizedQuestions,
+
+      validPages,
+
+      hints,
+    });
   };
 
 // =====================================================
@@ -2162,6 +2786,22 @@ ${cleanString(hints.exam) || "Auto detect"}
 Class:
 ${cleanString(hints.classLevel) || "Auto detect"}
 
+Selected Chapter:
+${cleanString(hints.chapter) || "Auto detect"}
+
+ALLOWED CHAPTERS:
+${safeArray(hints.allowedChapters).length > 0
+  ? safeArray(hints.allowedChapters).join("\n")
+  : "No whitelist supplied"}
+
+RULES:
+- Never invent chapter names.
+- If Selected Chapter is provided, use it as the intended destination.
+- If the question clearly does not belong to the selected chapter, set drop=true.
+- Return chapterConfidence, answerConfidence, classificationConfidence and difficultyConfidence from 0 to 1.
+- If unsure of the MCQ answer, use correctAnswer=null and set needsReview=true.
+- Do not guess missing options or missing text.
+
 RETURN:
 
 {
@@ -2181,6 +2821,11 @@ RETURN:
       "keyPoints": [],
       "maxMarks": null,
       "explanation": "",
+      "chapterConfidence": 0.0,
+      "answerConfidence": 0.0,
+      "classificationConfidence": 0.0,
+      "difficultyConfidence": 0.0,
+      "needsReview": false,
       "drop": false,
       "dropReason": ""
     }
