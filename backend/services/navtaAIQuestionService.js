@@ -178,6 +178,57 @@ const formatNavtaSimpleScripts = (
   return value;
 };
 
+
+// =====================================================
+// NAVTA ENUMERATED STATEMENT LINE FORMATTER
+// =====================================================
+// Keeps separately labelled statements on separate lines.
+// Examples:
+// (i) ... (ii) ... (iii) ... -> each on its own line
+// (a) ... (b) ... -> each on its own line
+// Statement I ... Statement II ... -> each on its own line
+// Assertion: ... Reason: ... -> separate lines
+// =====================================================
+
+const formatEnumeratedStatements = (input = "") => {
+  let value = String(input ?? "");
+
+  if (!value) {
+    return "";
+  }
+
+  value = value.replace(
+    /\s*(\((?:i|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii|xiii|xiv|xv|xvi|xvii|xviii|xix|xx)\))\s*/gi,
+    "\n$1 "
+  );
+
+  value = value.replace(
+    /\s*(\([a-h]\))\s*/gi,
+    "\n$1 "
+  );
+
+  value = value.replace(
+    /\s*(Statement\s+(?:I|II|III|IV|V|VI|VII|VIII|IX|X)\b)\s*/gi,
+    "\n$1 "
+  );
+
+  value = value.replace(
+    /\s*(Assertion\s*:?\s*)/gi,
+    "\n$1"
+  );
+
+  value = value.replace(
+    /\s*(Reason\s*:?\s*)/gi,
+    "\n$1"
+  );
+
+  return value
+    .replace(/^\s*\n+/, "")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+};
+
 const normalizeConfidence = (value) => {
   const numeric = Number(value);
 
@@ -1321,7 +1372,16 @@ visualDescription = ""
 - Keep fractions, roots, matrices, determinants, integrals, summations and other
   complex mathematics in proper LaTeX for NAVTA's KaTeX renderer.
 
-21. Return JSON ONLY.
+21. STATEMENT / SUBPART LINE FORMATTING — VERY IMPORTANT:
+
+- When a question contains separately labelled statements, preserve EACH statement on its own line inside the question string.
+- Insert a newline before each label when it begins a new statement: (i), (ii), (iii), (iv), (v), etc.; (a), (b), (c), (d), etc.; Statement I/II/III; Assertion:; Reason:.
+- DO NOT merge separate statements into one continuous line.
+- Example: "Which statements are correct?\n(i) First statement\n(ii) Second statement\n(iii) Third statement\n(iv) Fourth statement"
+- Preserve the original words exactly; only improve line separation.
+- Do not add new labels that are not visible in the source.
+
+22. Return JSON ONLY.
 
 Do not return Markdown.
 
@@ -1475,9 +1535,11 @@ const normalizeDetectedQuestion = ({
     );
 
   const question =
-    formatNavtaSimpleScripts(
-      cleanString(
-        item.question
+    formatEnumeratedStatements(
+      formatNavtaSimpleScripts(
+        cleanString(
+          item.question
+        )
       )
     );
 
@@ -1650,9 +1712,11 @@ const normalizeDetectedQuestion = ({
       ),
 
     modelAnswer:
-      formatNavtaSimpleScripts(
-        cleanString(
-          item.modelAnswer
+      formatEnumeratedStatements(
+        formatNavtaSimpleScripts(
+          cleanString(
+            item.modelAnswer
+          )
         )
       ),
 
@@ -1662,8 +1726,12 @@ const normalizeDetectedQuestion = ({
       )
         .map(
           (point) =>
-            cleanString(
-              point
+            formatEnumeratedStatements(
+              formatNavtaSimpleScripts(
+                cleanString(
+                  point
+                )
+              )
             )
         )
         .filter(Boolean),
@@ -1677,9 +1745,11 @@ const normalizeDetectedQuestion = ({
           ),
 
     explanation:
-      formatNavtaSimpleScripts(
-        cleanString(
-          item.explanation
+      formatEnumeratedStatements(
+        formatNavtaSimpleScripts(
+          cleanString(
+            item.explanation
+          )
         )
       ),
 
@@ -2911,6 +2981,11 @@ FORMATTING RULES:
   SiCl₄, NH₄⁺, SO₄²⁻, PO₄³⁻, x².
 - Do not output visible underscore/caret notation for those simple cases when avoidable.
 - Keep complex mathematics in LaTeX.
+- Preserve each separately labelled statement on its own line.
+- Insert a newline before (i), (ii), (iii), (iv), etc. when they begin separate statements.
+- Do the same for (a), (b), (c), (d), Statement I/II/III, and Assertion/Reason blocks.
+- Never merge separately labelled statements into one continuous line.
+- Preserve original wording and labels exactly.
 
 Return JSON only.
 
