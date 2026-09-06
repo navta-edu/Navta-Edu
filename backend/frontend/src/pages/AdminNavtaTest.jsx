@@ -752,6 +752,118 @@ function renderNavtaContent(
 }
 
 
+
+// =====================================================
+// NAVTA SIMPLE SUBSCRIPT / SUPERSCRIPT NORMALIZER
+// =====================================================
+// Converts simple OCR/Gemini notation such as:
+// SiCl_4 -> SiCl₄
+// NH_4^+ -> NH₄⁺
+// SO_4^{2-} -> SO₄²⁻
+// x^2 -> x²
+//
+// Complex LaTeX such as \frac, matrices, integrals, etc.
+// is left untouched for the existing KaTeX renderer.
+// =====================================================
+
+const NAVTA_SUBSCRIPT_MAP = {
+  "0": "₀",
+  "1": "₁",
+  "2": "₂",
+  "3": "₃",
+  "4": "₄",
+  "5": "₅",
+  "6": "₆",
+  "7": "₇",
+  "8": "₈",
+  "9": "₉",
+  "+": "₊",
+  "-": "₋",
+  "=": "₌",
+  "(": "₍",
+  ")": "₎",
+};
+
+const NAVTA_SUPERSCRIPT_MAP = {
+  "0": "⁰",
+  "1": "¹",
+  "2": "²",
+  "3": "³",
+  "4": "⁴",
+  "5": "⁵",
+  "6": "⁶",
+  "7": "⁷",
+  "8": "⁸",
+  "9": "⁹",
+  "+": "⁺",
+  "-": "⁻",
+  "=": "⁼",
+  "(": "⁽",
+  ")": "⁾",
+};
+
+const convertNavtaScriptCharacters = (
+  value,
+  map
+) =>
+  String(value ?? "")
+    .split("")
+    .map(
+      (character) =>
+        map[character] || character
+    )
+    .join("");
+
+const formatNavtaSimpleScripts = (
+  input = ""
+) => {
+  let value =
+    String(input ?? "");
+
+  if (!value) {
+    return "";
+  }
+
+  value = value.replace(
+    /_\{([0-9+\-=()]+)\}/g,
+    (_, content) =>
+      convertNavtaScriptCharacters(
+        content,
+        NAVTA_SUBSCRIPT_MAP
+      )
+  );
+
+  value = value.replace(
+    /_([0-9+\-=()]+)/g,
+    (_, content) =>
+      convertNavtaScriptCharacters(
+        content,
+        NAVTA_SUBSCRIPT_MAP
+      )
+  );
+
+  value = value.replace(
+    /\^\{([0-9+\-=()]+)\}/g,
+    (_, content) =>
+      convertNavtaScriptCharacters(
+        content,
+        NAVTA_SUPERSCRIPT_MAP
+      )
+  );
+
+  value = value.replace(
+    /\^([0-9+\-=()]+)/g,
+    (_, content) =>
+      convertNavtaScriptCharacters(
+        content,
+        NAVTA_SUPERSCRIPT_MAP
+      )
+  );
+
+  return value;
+};
+
+
 function getNavtaQuestionImage(question) {
   const primaryUrl = String(
     question?.questionImage?.url || ""
@@ -1578,6 +1690,42 @@ export default function AdminNavtaTest() {
 
     return {
       ...question,
+
+      question:
+        formatNavtaSimpleScripts(
+          question.question
+        ),
+
+      options:
+        Array.isArray(question.options)
+          ? question.options.map(
+              (option) =>
+                formatNavtaSimpleScripts(
+                  option
+                )
+            )
+          : [],
+
+      explanation:
+        formatNavtaSimpleScripts(
+          question.explanation
+        ),
+
+      modelAnswer:
+        formatNavtaSimpleScripts(
+          question.modelAnswer
+        ),
+
+      keyPoints:
+        Array.isArray(question.keyPoints)
+          ? question.keyPoints.map(
+              (point) =>
+                formatNavtaSimpleScripts(
+                  point
+                )
+            )
+          : [],
+
       subject,
       exam,
       classLevel,
@@ -1737,7 +1885,28 @@ export default function AdminNavtaTest() {
           Array.isArray(
             data.droppedQuestions
           )
-            ? data.droppedQuestions
+            ? data.droppedQuestions.map(
+                (question) => ({
+                  ...question,
+                  question:
+                    formatNavtaSimpleScripts(
+                      question.question
+                    ),
+                  options:
+                    Array.isArray(question.options)
+                      ? question.options.map(
+                          (option) =>
+                            formatNavtaSimpleScripts(
+                              option
+                            )
+                        )
+                      : [],
+                  explanation:
+                    formatNavtaSimpleScripts(
+                      question.explanation
+                    ),
+                })
+              )
             : [];
 
         setAcceptedQuestions(
