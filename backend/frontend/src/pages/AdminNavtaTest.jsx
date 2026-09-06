@@ -2598,9 +2598,51 @@ export default function AdminNavtaTest() {
           background: rgba(15, 23, 42, 0.72);
         }
 
+        .admin-navta-upload-row {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          margin-top: 10px;
+          flex-wrap: wrap;
+        }
+
+        .admin-navta-upload-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 42px;
+          padding: 11px 18px;
+          border: 1px solid rgba(14, 165, 233, 0.55);
+          border-radius: 10px;
+          background: linear-gradient(135deg, #0ea5e9, #2563eb);
+          color: #ffffff;
+          font-size: 13px;
+          font-weight: 800;
+          cursor: pointer;
+          transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+        }
+
+        .admin-navta-upload-button:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 8px 20px rgba(14, 165, 233, 0.2);
+        }
+
         .admin-navta-file-input {
-          width: 100%;
-          color: #cbd5e1;
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+
+        .admin-navta-upload-file-status {
+          color: #94a3b8;
+          font-size: 13px;
+          word-break: break-word;
         }
 
         .admin-navta-file-name {
@@ -2985,6 +3027,17 @@ export default function AdminNavtaTest() {
             padding: 20px 15px;
           }
         }
+
+        @media (max-width: 640px) {
+          .admin-navta-upload-row {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .admin-navta-upload-button {
+            width: 100%;
+          }
+        }
       `}</style>
 
       <div className="admin-navta-test-page">
@@ -3022,24 +3075,40 @@ export default function AdminNavtaTest() {
                 Select PDF, DOCX or TXT
               </label>
 
-              <input
-                type="file"
-                accept=".pdf,.docx,.txt"
-                className="admin-navta-file-input"
-                onChange={(event) => {
-                  const file =
-                    event.target.files?.[0] ||
-                    null;
+              <div className="admin-navta-upload-row">
+                <label
+                  htmlFor="navta-ai-file-upload"
+                  className="admin-navta-upload-button"
+                >
+                  Upload PDF / File
+                </label>
 
-                  setImportFile(
-                    file
-                  );
+                <input
+                  id="navta-ai-file-upload"
+                  type="file"
+                  accept=".pdf,.docx,.txt"
+                  className="admin-navta-file-input"
+                  onChange={(event) => {
+                    const file =
+                      event.target.files?.[0] ||
+                      null;
 
-                  setImportMessage(
-                    ""
-                  );
-                }}
-              />
+                    setImportFile(
+                      file
+                    );
+
+                    setImportMessage(
+                      ""
+                    );
+                  }}
+                />
+
+                <span className="admin-navta-upload-file-status">
+                  {importFile
+                    ? importFile.name
+                    : "No file selected"}
+                </span>
+              </div>
 
               {importFile && (
                 <div className="admin-navta-file-name">
