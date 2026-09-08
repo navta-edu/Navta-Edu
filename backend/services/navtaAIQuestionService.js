@@ -36,7 +36,6 @@ const NAVTA_AI_PAGES_PER_REQUEST = Math.max(
 );
 
 // Retry only pages/batches that unexpectedly return zero questions.
-// This improves completeness without doubling every Gemini request.
 const NAVTA_AI_EMPTY_BATCH_RETRIES = Math.max(
   0,
   Math.min(
@@ -47,6 +46,7 @@ const NAVTA_AI_EMPTY_BATCH_RETRIES = Math.max(
   )
 );
 
+const NAVTA_VISUAL_MARKER = "[[NAVTA_VISUAL]]";
 
 const NAVTA_AI_VERIFY_LOW_CONFIDENCE =
   String(
@@ -67,18 +67,8 @@ const safeArray = (value) => {
     : [];
 };
 
-
 // =====================================================
 // NAVTA SIMPLE SUBSCRIPT / SUPERSCRIPT NORMALIZER
-// =====================================================
-// Converts simple OCR/Gemini notation such as:
-// SiCl_4 -> SiCl₄
-// NH_4^+ -> NH₄⁺
-// SO_4^{2-} -> SO₄²⁻
-// x^2 -> x²
-//
-// Complex LaTeX such as \frac, matrices, integrals, etc.
-// is left untouched for the existing KaTeX renderer.
 // =====================================================
 
 const NAVTA_SUBSCRIPT_MAP = {
@@ -178,16 +168,8 @@ const formatNavtaSimpleScripts = (
   return value;
 };
 
-
 // =====================================================
-// NAVTA ENUMERATED STATEMENT LINE FORMATTER
-// =====================================================
-// Keeps separately labelled statements on separate lines.
-// Examples:
-// (i) ... (ii) ... (iii) ... -> each on its own line
-// (a) ... (b) ... -> each on its own line
-// Statement I ... Statement II ... -> each on its own line
-// Assertion: ... Reason: ... -> separate lines
+// ENUMERATED STATEMENT FORMATTER
 // =====================================================
 
 const formatEnumeratedStatements = (input = "") => {
@@ -229,6 +211,60 @@ const formatEnumeratedStatements = (input = "") => {
     .trim();
 };
 
+// =====================================================
+// FORMAT QUESTION CONTENT
+// =====================================================
+
+const formatNavtaQuestionContent = (
+  input = ""
+) => {
+  const source =
+    String(input ?? "");
+
+  if (!source) {
+    return "";
+  }
+
+  const parts =
+    source.split(
+      /(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g
+    );
+
+  return parts
+    .map(
+      (part) => {
+        if (!part) {
+          return "";
+        }
+
+        if (
+          (
+            part.startsWith("$$") &&
+            part.endsWith("$$")
+          ) ||
+          (
+            part.startsWith("$") &&
+            part.endsWith("$")
+          )
+        ) {
+          return part.trim();
+        }
+
+        return formatEnumeratedStatements(
+          formatNavtaSimpleScripts(
+            part
+          )
+        );
+      }
+    )
+    .join("")
+    .replace(
+      /\n{3,}/g,
+      "\n\n"
+    )
+    .trim();
+};
+
 const normalizeConfidence = (value) => {
   const numeric = Number(value);
 
@@ -236,11 +272,17 @@ const normalizeConfidence = (value) => {
     return null;
   }
 
-  if (numeric >= 0 && numeric <= 1) {
+  if (
+    numeric >= 0 &&
+    numeric <= 1
+  ) {
     return numeric;
   }
 
-  if (numeric > 1 && numeric <= 100) {
+  if (
+    numeric > 1 &&
+    numeric <= 100
+  ) {
     return numeric / 100;
   }
 
@@ -255,7 +297,7 @@ const LOW_CONFIDENCE_THRESHOLDS = {
 };
 
 // =====================================================
-// NORMALIZE QUESTION TYPE
+// NORMALIZERS
 // =====================================================
 
 const normalizeQuestionType = (
@@ -278,10 +320,6 @@ const normalizeQuestionType = (
   return "";
 };
 
-// =====================================================
-// NORMALIZE DIFFICULTY
-// =====================================================
-
 const normalizeDifficulty = (
   value
 ) => {
@@ -303,10 +341,6 @@ const normalizeDifficulty = (
 
   return "";
 };
-
-// =====================================================
-// NORMALIZE SUBJECT
-// =====================================================
 
 const normalizeSubject = (
   value
@@ -340,10 +374,6 @@ const normalizeSubject = (
   return "";
 };
 
-// =====================================================
-// NORMALIZE EXAM
-// =====================================================
-
 const normalizeExam = (
   value
 ) => {
@@ -351,15 +381,11 @@ const normalizeExam = (
     value
   ).toLowerCase();
 
-  if (
-    text.includes("neet")
-  ) {
+  if (text.includes("neet")) {
     return "NEET";
   }
 
-  if (
-    text.includes("jee")
-  ) {
+  if (text.includes("jee")) {
     return "JEE";
   }
 
@@ -372,10 +398,6 @@ const normalizeExam = (
 
   return "";
 };
-
-// =====================================================
-// NORMALIZE CLASS
-// =====================================================
 
 const normalizeClassLevel = (
   value
@@ -401,10 +423,6 @@ const normalizeClassLevel = (
   return "";
 };
 
-// =====================================================
-// CORRECT ANSWER
-// =====================================================
-
 const normalizeCorrectAnswer = (
   value
 ) => {
@@ -425,7 +443,6 @@ const normalizeCorrectAnswer = (
     B: 1,
     C: 2,
     D: 3,
-
     "0": 0,
     "1": 1,
     "2": 2,
@@ -479,7 +496,7 @@ const normalizeVisualType = (
 };
 
 // =====================================================
-// NORMALIZE BOUNDING BOX
+// BOUNDING BOX
 // =====================================================
 
 const normalizeBoundingBox = (
@@ -517,8 +534,7 @@ const normalizeBoundingBox = (
     return null;
   }
 
-  // Convert percentages if AI returns 0-100.
-
+  // Gemini may occasionally return percentages.
   if (
     x > 1 ||
     y > 1 ||
@@ -538,15 +554,6 @@ const normalizeBoundingBox = (
       width /= 100;
       height /= 100;
     }
-  }
-
-  if (
-    x < 0 ||
-    y < 0 ||
-    width <= 0 ||
-    height <= 0
-  ) {
-    return null;
   }
 
   x = Math.min(
@@ -597,7 +604,7 @@ const normalizeBoundingBox = (
 };
 
 // =====================================================
-// IMAGE TO BASE64
+// PAGE IMAGE HELPERS
 // =====================================================
 
 const imageBufferToBase64 = (
@@ -618,10 +625,6 @@ const imageBufferToBase64 = (
     "base64"
   );
 };
-
-// =====================================================
-// VALIDATE RENDERED PAGE
-// =====================================================
 
 const validateRenderedPage = (
   page
@@ -703,21 +706,13 @@ const parseJsonObject = (
     );
   }
 
-  // ============================================
-  // FIRST: NORMAL JSON
-  // ============================================
-
   try {
     return JSON.parse(
       text
     );
   } catch {
-    // Continue.
+    // Continue to recovery.
   }
-
-  // ============================================
-  // SECOND: EXTRACT JSON OBJECT
-  // ============================================
 
   const start =
     text.indexOf("{");
@@ -729,31 +724,25 @@ const parseJsonObject = (
     start !== -1 &&
     end > start
   ) {
-    let sliced =
-      text.slice(
-        start,
-        end + 1
-      );
-
-    // Remove accidental trailing commas.
-    sliced =
-      sliced.replace(
-        /,\s*([}\]])/g,
-        "$1"
-      );
+    const sliced =
+      text
+        .slice(
+          start,
+          end + 1
+        )
+        .replace(
+          /,\s*([}\]])/g,
+          "$1"
+        );
 
     try {
       return JSON.parse(
         sliced
       );
     } catch {
-      // Continue.
+      // Continue to debug output.
     }
   }
-
-  // ============================================
-  // LOG SMALL DEBUG SAMPLE
-  // ============================================
 
   console.error(
     "NAVTA AI INVALID JSON"
@@ -774,48 +763,41 @@ const parseJsonObject = (
   );
 
   throw new Error(
-    "NAVTA AI response was incomplete. Please retry the import."
+    "NAVTA AI response was incomplete or invalid. Please retry the import."
   );
 };
-
-// =====================================================
-// GEMINI TEXT
-// =====================================================
 
 const extractGeminiText = (
   data
 ) => {
-  for (
-    const candidate of
+  const candidates =
     safeArray(
       data?.candidates
-    )
-  ) {
-    const text =
-      safeArray(
-        candidate
-          ?.content
-          ?.parts
-      )
-        .map(
-          (part) => {
-            if (
-              typeof part?.text ===
-              "string"
-            ) {
-              return part.text;
-            }
+    );
 
-            return "";
-          }
+  for (
+    const candidate of
+    candidates
+  ) {
+    const parts =
+      safeArray(
+        candidate?.content?.parts
+      );
+
+    const text =
+      parts
+        .map(
+          (part) =>
+            typeof part?.text ===
+            "string"
+              ? part.text
+              : ""
         )
         .filter(Boolean)
         .join("\n")
         .trim();
 
-    if (
-      text
-    ) {
+    if (text) {
       return text;
     }
   }
@@ -823,21 +805,15 @@ const extractGeminiText = (
   return "";
 };
 
-// =====================================================
-// RATE LIMIT
-// =====================================================
-
 const extractRetryAfterSeconds = (
   response,
   message = ""
 ) => {
   const headerValue =
     Number(
-      response
-        ?.headers
-        ?.get?.(
-          "retry-after"
-        )
+      response?.headers?.get?.(
+        "retry-after"
+      )
     );
 
   if (
@@ -858,14 +834,11 @@ const extractRetryAfterSeconds = (
       /retry\s+in\s+([\d.]+)s/i
     );
 
-  if (
-    match
-  ) {
+  if (match) {
     return Math.ceil(
       Number(
         match[1]
-      ) ||
-      60
+      ) || 60
     );
   }
 
@@ -873,122 +846,14 @@ const extractRetryAfterSeconds = (
 };
 
 // =====================================================
-// STRICT GEMINI RESPONSE SCHEMA
-// =====================================================
-
-const NAVTA_QUESTION_RESPONSE_SCHEMA = {
-  type: "OBJECT",
-  properties: {
-    questions: {
-      type: "ARRAY",
-      items: {
-        type: "OBJECT",
-        properties: {
-          questionNumber: { type: "STRING" },
-          question: { type: "STRING" },
-          subject: { type: "STRING" },
-          exam: { type: "STRING" },
-          classLevel: { type: "STRING" },
-          chapter: { type: "STRING" },
-          difficulty: { type: "STRING" },
-          questionType: { type: "STRING" },
-          options: {
-            type: "ARRAY",
-            items: { type: "STRING" },
-          },
-          correctAnswer: {
-            type: "INTEGER",
-            nullable: true,
-          },
-          modelAnswer: { type: "STRING" },
-          keyPoints: {
-            type: "ARRAY",
-            items: { type: "STRING" },
-          },
-          maxMarks: {
-            type: "NUMBER",
-            nullable: true,
-          },
-          explanation: { type: "STRING" },
-          questionBoundingBox: {
-            type: "OBJECT",
-            nullable: true,
-            properties: {
-              x: { type: "NUMBER" },
-              y: { type: "NUMBER" },
-              width: { type: "NUMBER" },
-              height: { type: "NUMBER" },
-            },
-          },
-          hasVisual: { type: "BOOLEAN" },
-          visualType: { type: "STRING" },
-          visualDescription: { type: "STRING" },
-          visualBoundingBox: {
-            type: "OBJECT",
-            nullable: true,
-            properties: {
-              x: { type: "NUMBER" },
-              y: { type: "NUMBER" },
-              width: { type: "NUMBER" },
-              height: { type: "NUMBER" },
-            },
-          },
-          sourcePage: {
-            type: "INTEGER",
-            nullable: true,
-          },
-          chapterConfidence: { type: "NUMBER" },
-          answerConfidence: { type: "NUMBER" },
-          classificationConfidence: { type: "NUMBER" },
-          difficultyConfidence: { type: "NUMBER" },
-          needsReview: { type: "BOOLEAN" },
-          drop: { type: "BOOLEAN" },
-          dropReason: { type: "STRING" },
-        },
-        required: [
-          "questionNumber",
-          "question",
-          "subject",
-          "exam",
-          "classLevel",
-          "chapter",
-          "difficulty",
-          "questionType",
-          "options",
-          "correctAnswer",
-          "modelAnswer",
-          "keyPoints",
-          "maxMarks",
-          "explanation",
-          "hasVisual",
-          "visualType",
-          "visualDescription",
-          "sourcePage",
-          "chapterConfidence",
-          "answerConfidence",
-          "classificationConfidence",
-          "difficultyConfidence",
-          "needsReview",
-          "drop",
-          "dropReason",
-        ],
-      },
-    },
-  },
-  required: ["questions"],
-};
-
-// =====================================================
-// CALL GEMINI
+// GEMINI REQUEST
 // =====================================================
 
 const callGemini = async ({
   parts,
   maxOutputTokens = 16384,
 }) => {
-  if (
-    !GEMINI_API_KEY
-  ) {
+  if (!GEMINI_API_KEY) {
     throw new Error(
       "GEMINI_API_KEY is not configured on the NAVTA backend."
     );
@@ -1051,9 +916,6 @@ const callGemini = async ({
                 responseMimeType:
                   "application/json",
 
-                responseSchema:
-                  NAVTA_QUESTION_RESPONSE_SCHEMA,
-
                 maxOutputTokens,
               },
             }),
@@ -1078,9 +940,7 @@ const callGemini = async ({
       );
     }
 
-    if (
-      !response.ok
-    ) {
+    if (!response.ok) {
       const message =
         cleanString(
           data?.error?.message
@@ -1088,8 +948,7 @@ const callGemini = async ({
         `Gemini returned HTTP ${response.status}.`;
 
       if (
-        response.status ===
-        429
+        response.status === 429
       ) {
         const retryAfter =
           extractRetryAfterSeconds(
@@ -1121,18 +980,14 @@ const callGemini = async ({
         data
       );
 
-    if (
-      !modelText
-    ) {
+    if (!modelText) {
       throw new Error(
         "Gemini returned an empty response."
       );
     }
 
     return modelText;
-  } catch (
-    error
-  ) {
+  } catch (error) {
     if (
       error?.name ===
       "AbortError"
@@ -1157,188 +1012,201 @@ const callGemini = async ({
 };
 
 // =====================================================
-// PDF PROMPT
+// UNIVERSAL PDF QUESTION PROMPT
 // =====================================================
 
 const PDF_BATCH_PROMPT = `
-You are NAVTA AI.
+You are NAVTA AI, the academic question-separation engine for NAVTA.
 
-You are the academic question-separation engine for the NAVTA learning platform.
-
-You will receive MULTIPLE ORIGINAL RENDERED PDF PAGE IMAGES in one request.
+You receive ORIGINAL RENDERED PDF PAGE IMAGES.
 
 SUPPORTED SUBJECTS:
-
 Physics
 Chemistry
 Maths
 Biology
 
 SUPPORTED EXAMS:
-
 NEET
 JEE
 Boards
 
 SUPPORTED CLASSES:
-
 Class 11
 Class 12
 
 SUPPORTED DIFFICULTIES:
-
 Easy
 Medium
 Hard
 
 SUPPORTED QUESTION TYPES:
-
 mcq
 short
 long
 
-TASK:
+YOUR JOB:
+Detect every COMPLETE and READABLE academic question on the supplied page images.
 
-Detect every COMPLETE and READABLE academic question on every supplied page.
+=======================================================
+CRITICAL QUESTION TEXT RULES
+=======================================================
 
-COMPLETENESS RULES — VERY IMPORTANT:
+1. Preserve the actual wording of the question.
 
-- Scan EACH page from top to bottom and left to right.
-- Do not stop after finding the first few questions.
-- Return every visible complete question on the supplied page(s).
-- Treat every visible question number / numbered stem as a separate candidate.
-- If a page contains 12 readable questions, return 12 questions.
-- Never invent a duplicate question to increase the count.
-- Do not repeat the same question with slightly different wording.
-- Preserve the original question number whenever it is visible.
-- If the same question is visible more than once due to page overlap, return it only once.
+2. Do not rewrite the question unnecessarily.
 
-IMPORTANT RULES:
+3. Do not invent missing question text.
 
-1. The original rendered page is authoritative.
+4. Do not invent missing options.
 
-2. Every question MUST contain the correct sourcePage.
+5. For MCQs, return exactly four options only when four options are visible.
 
-3. questionBoundingBox should identify the complete question on its source page.
-
-questionBoundingBox is INTERNAL NAVTA METADATA.
-
-It is NOT automatically displayed to students.
-
-4. Bounding boxes use normalized values from 0 to 1:
-
-x
-y
-width
-height
-
-5. questionBoundingBox should contain the complete single question:
-
-- question number
-- question statement
-- equations
-- all MCQ options
-- any required figure
-
-6. Do not include the previous or next question in questionBoundingBox.
-
-7. For MCQs return exactly four options when four options are visible.
-
-8. correctAnswer is ZERO-BASED:
-
+6. correctAnswer is zero-based:
 A = 0
 B = 1
 C = 2
 D = 3
 
-9. Try to solve the MCQ during THIS SAME request.
+7. Try to solve the question in this SAME request.
 
-10. If the answer is uncertain:
-
+8. If the correct answer is uncertain:
 correctAnswer = null
+needsReview = true
 
-11. Do not drop a readable question only because correctAnswer is null.
+=======================================================
+UNIVERSAL MATH / SCIENCE RENDERING RULES
+=======================================================
 
-12. CHAPTER CLASSIFICATION:
+Use TEXT OR LATEX when the content can be represented accurately as notation.
 
-- If ADMIN HINTS includes a selected chapter, treat that chapter as the intended destination.
-- Never invent a chapter name.
-- If ALLOWED CHAPTERS are supplied, chapter MUST exactly equal one value from that list.
-- If a selected chapter is supplied and the question clearly does not belong to it, set drop=true and explain the mismatch in dropReason.
-- If chapter is uncertain and no selected chapter is supplied, use chapter="" and set needsReview=true.
-- Return chapterConfidence from 0 to 1.
+This includes:
 
-13. CONFIDENCE RULES:
+- arithmetic
+- algebra
+- fractions
+- powers
+- roots
+- logarithms
+- trigonometry
+- limits
+- derivatives
+- integrals
+- summations
+- vectors
+- matrices
+- determinants
+- systems of equations
+- coordinate expressions
+- physics equations
+- physics formulas
+- ordinary chemical equations
+- ordinary ionic equations
+- simple molecular formulas
 
-- classificationConfidence: confidence in subject + exam + class.
-- chapterConfidence: confidence in chapter classification.
-- difficultyConfidence: confidence in Easy / Medium / Hard.
-- answerConfidence: confidence in correctAnswer.
-- Use numbers from 0 to 1.
-- Do not inflate confidence.
-- If correctAnswer is null, answerConfidence must be below 0.85.
-- Set needsReview=true when any important classification is uncertain.
+Use valid LaTeX delimiters:
 
-14. If difficulty is uncertain:
+Inline:
+$...$
 
-difficulty = "Medium"
-
-14. Set drop=true only if the actual question is unreadable, incomplete,
-or cannot be separated safely.
-
-15. VISUAL RULE — VERY IMPORTANT:
-
-hasVisual=true ONLY when the original question contains a genuine visual
-that should be preserved as an image.
+Block:
+$$...$$
 
 Examples:
 
-- graph
-- coordinate graph
-- geometry figure
-- circuit
-- ray diagram
-- apparatus
-- biological diagram
-- map
-- image-based table
-- figure referred to by the question
-- chemical structural drawing that cannot be represented reliably as text
+$x^2+y^2=r^2$
 
-16. THESE ARE NOT VISUAL DIAGRAMS:
+$\\frac{a+b}{c}$
 
-- normal equations
-- fractions
-- square roots
-- matrices
-- determinants
-- vectors written symbolically
-- integrals
-- summations
-- trigonometric expressions
-- Greek symbols
-- algebraic expressions
-- normal chemical equations written as text
+$\\sqrt{x^2+y^2}$
 
-For these:
+$\\int_0^\\pi \\sin x\\,dx$
+
+$\\begin{bmatrix}
+a & b \\\\
+c & d
+\\end{bmatrix}$
+
+$\\begin{vmatrix}
+a & b \\\\
+c & d
+\\end{vmatrix}$
+
+IMPORTANT:
+
+Matrices and determinants are NOT images.
+
+For matrices and determinants:
 
 hasVisual = false
 visualType = "none"
 visualBoundingBox = null
-visualDescription = ""
 
-17. If hasVisual=true:
+=======================================================
+CHEMISTRY RULES
+=======================================================
 
-visualType must describe the visual.
+Simple chemical formulas and linear equations should remain text.
 
-visualBoundingBox MUST contain ONLY the actual diagram / graph / figure.
+Examples:
 
-visualBoundingBox MUST NOT be the whole question box unless the entire
-question itself is genuinely an image.
+H₂O
+NH₄⁺
+SO₄²⁻
+CH₃COOH
+
+Simple reaction equations that can be represented correctly in one line may remain text.
+
+However, use a REAL VISUAL for chemistry when spatial layout carries meaning.
+
+Examples:
+
+- organic structural formula
+- skeletal structure
+- reaction mechanism
+- curved-arrow mechanism
+- reaction scheme
+- reagent written above/below a reaction arrow
+- multi-step reaction map
+- stereochemistry
+- wedge/dash structure
+- ring drawing
+- molecular structure whose geometry matters
+
+For these:
+
+hasVisual = true
+visualType = "chemical-structure"
+
+DO NOT flatten such a visual into approximate plain text.
+
+DO NOT reconstruct a reaction scheme like:
+
+B <- reagent substrate -> A
+
+if the original page uses a spatial reaction diagram.
+
+Instead preserve the original diagram using visualBoundingBox.
+
+=======================================================
+OTHER REAL VISUALS
+=======================================================
+
+Use a REAL VISUAL for:
+
+- graph
+- circuit
+- geometry diagram
+- ray diagram
+- apparatus
+- biological diagram
+- map
+- figure
+- image-based table
+- scientific diagram whose layout carries meaning
 
 Allowed visualType values:
 
-none
 diagram
 graph
 figure
@@ -1350,44 +1218,140 @@ biology
 image
 other
 
-18. If hasVisual=false:
+=======================================================
+VISUAL MARKER RULE
+=======================================================
+
+When a genuine visual belongs inside the question text, insert EXACTLY:
+
+${NAVTA_VISUAL_MARKER}
+
+at the location where the visual appears.
+
+Example:
+
+"Study the circuit shown below:
+${NAVTA_VISUAL_MARKER}
+Find the current through the resistor."
+
+Another example:
+
+"But-2-yne is reacted separately as shown:
+${NAVTA_VISUAL_MARKER}
+Identify the incorrect statements."
+
+Do NOT describe or reconstruct the visual in the question string when the visual itself will be preserved.
+
+There must be at most ONE ${NAVTA_VISUAL_MARKER} per question.
+
+If the question has no genuine visual, do not insert the marker.
+
+=======================================================
+VISUAL BOUNDING BOX RULE
+=======================================================
+
+visualBoundingBox must contain ONLY the genuine visual.
+
+It must NOT contain:
+
+- the entire question
+- normal question prose
+- answer options
+- question number
+- unrelated nearby content
+
+Use normalized coordinates from 0 to 1:
+
+{
+  "x": 0.1,
+  "y": 0.2,
+  "width": 0.5,
+  "height": 0.3
+}
+
+If hasVisual=false:
 
 visualType = "none"
-visualBoundingBox = null
 visualDescription = ""
+visualBoundingBox = null
 
-19. Keep mathematical content in LaTeX where appropriate.
+If hasVisual=true:
 
-20. SIMPLE SUBSCRIPT / SUPERSCRIPT FORMATTING:
+visualBoundingBox MUST be provided.
 
-- For simple chemical formula subscripts, ionic charges and simple numeric powers,
-  prefer Unicode subscript/superscript characters in plain text.
-- Examples:
-  SiCl_4 -> SiCl₄
-  NH_4^+ -> NH₄⁺
-  SO_4^{2-} -> SO₄²⁻
-  PO_4^{3-} -> PO₄³⁻
-  x^2 -> x²
-- Do NOT rewrite complex mathematics into Unicode.
-- Keep fractions, roots, matrices, determinants, integrals, summations and other
-  complex mathematics in proper LaTeX for NAVTA's KaTeX renderer.
+=======================================================
+QUESTION BOUNDING BOX
+=======================================================
 
-21. STATEMENT / SUBPART LINE FORMATTING — VERY IMPORTANT:
+questionBoundingBox describes the complete question region on the source page.
 
-- When a question contains separately labelled statements, preserve EACH statement on its own line inside the question string.
-- Insert a newline before each label when it begins a new statement: (i), (ii), (iii), (iv), (v), etc.; (a), (b), (c), (d), etc.; Statement I/II/III; Assertion:; Reason:.
-- DO NOT merge separate statements into one continuous line.
-- Example: "Which statements are correct?\n(i) First statement\n(ii) Second statement\n(iii) Third statement\n(iv) Fourth statement"
-- Preserve the original words exactly; only improve line separation.
-- Do not add new labels that are not visible in the source.
+This is internal metadata only.
 
-22. Return JSON ONLY.
+It is NOT automatically used as a student-facing image.
+
+Never use questionBoundingBox as a substitute for visualBoundingBox.
+
+=======================================================
+CLASSIFICATION
+=======================================================
+
+Return:
+
+subject
+exam
+classLevel
+chapter
+difficulty
+questionType
+
+Do not invent a chapter outside the supplied chapter whitelist.
+
+If a Selected Chapter is supplied by the admin, treat it as the intended destination.
+
+If the question clearly belongs to a different chapter:
+drop = true
+
+If chapter classification is uncertain:
+needsReview = true
+
+=======================================================
+CONFIDENCE
+=======================================================
+
+Return values from 0 to 1:
+
+chapterConfidence
+answerConfidence
+classificationConfidence
+difficultyConfidence
+
+Do not fake confidence.
+
+=======================================================
+DROP RULES
+=======================================================
+
+drop=true only when:
+
+- question is unreadable
+- question is materially incomplete
+- required MCQ options are missing
+- question cannot safely be separated
+- question clearly conflicts with the selected chapter
+
+Do not drop a readable question only because correctAnswer is uncertain.
+
+=======================================================
+OUTPUT
+=======================================================
+
+Return JSON ONLY.
 
 Do not return Markdown.
 
 Do not return explanations outside JSON.
 
-RETURN:
+Return exactly:
 
 {
   "questions": [
@@ -1440,10 +1404,8 @@ const normalizeDetectedQuestion = ({
     )
       .map(
         (option) =>
-          formatNavtaSimpleScripts(
-            cleanString(
-              option
-            )
+          formatNavtaQuestionContent(
+            option
           )
       )
       .filter(Boolean);
@@ -1478,29 +1440,20 @@ const normalizeDetectedQuestion = ({
       item.hasVisual
     );
 
-  // A real visual MUST have its own
-  // separate visual bounding box.
-
   if (
     !hasVisual ||
     !visualBoundingBox
   ) {
-    hasVisual =
-      false;
-
-    visualType =
-      "none";
-
-    visualBoundingBox =
-      null;
+    hasVisual = false;
+    visualType = "none";
+    visualBoundingBox = null;
   }
 
   if (
     hasVisual &&
     visualType === "none"
   ) {
-    visualType =
-      "other";
+    visualType = "other";
   }
 
   let sourcePage =
@@ -1534,20 +1487,37 @@ const normalizeDetectedQuestion = ({
       item.dropReason
     );
 
-  const question =
-    formatEnumeratedStatements(
-      formatNavtaSimpleScripts(
-        cleanString(
-          item.question
-        )
-      )
+  let question =
+    formatNavtaQuestionContent(
+      item.question
     );
 
+  // If Gemini identified a genuine visual but forgot
+  // the marker, add it after the question text.
   if (
-    !question
+    hasVisual &&
+    !question.includes(
+      NAVTA_VISUAL_MARKER
+    )
   ) {
-    drop =
-      true;
+    question =
+      `${question}\n${NAVTA_VISUAL_MARKER}`.trim();
+  }
+
+  // Remove accidental visual markers when no genuine
+  // visual was detected.
+  if (!hasVisual) {
+    question =
+      question
+        .replaceAll(
+          NAVTA_VISUAL_MARKER,
+          ""
+        )
+        .trim();
+  }
+
+  if (!question) {
+    drop = true;
 
     dropReason =
       dropReason ||
@@ -1558,76 +1528,37 @@ const normalizeDetectedQuestion = ({
     requirePage &&
     !sourcePage
   ) {
-    drop =
-      true;
+    drop = true;
 
     dropReason =
       dropReason ||
       "Source page could not be identified.";
   }
 
-  const selectedChapter =
-    cleanString(hints.chapter);
-
-  const allowedChapters =
-    safeArray(hints.allowedChapters)
-      .map(cleanString)
-      .filter(Boolean);
-
-  const detectedChapter =
-    cleanString(item.chapter);
-
-  let resolvedChapter =
-    selectedChapter ||
-    detectedChapter;
-
-  let chapterConfidence =
+  const chapterConfidence =
     normalizeConfidence(
       item.chapterConfidence
     );
 
-  let answerConfidence =
+  const answerConfidence =
     normalizeConfidence(
       item.answerConfidence
     );
 
-  let classificationConfidence =
+  const classificationConfidence =
     normalizeConfidence(
       item.classificationConfidence
     );
 
-  let difficultyConfidence =
+  const difficultyConfidence =
     normalizeConfidence(
       item.difficultyConfidence
     );
 
   let needsReview =
-    Boolean(item.needsReview);
-
-  if (
-    resolvedChapter &&
-    allowedChapters.length > 0 &&
-    !allowedChapters.includes(
-      resolvedChapter
-    )
-  ) {
-    if (selectedChapter) {
-      resolvedChapter =
-        selectedChapter;
-    } else {
-      resolvedChapter = "";
-      needsReview = true;
-    }
-  }
-
-  if (
-    selectedChapter &&
-    detectedChapter &&
-    detectedChapter !==
-      selectedChapter
-  ) {
-    needsReview = true;
-  }
+    Boolean(
+      item.needsReview
+    );
 
   if (
     chapterConfidence !== null &&
@@ -1671,30 +1602,35 @@ const normalizeDetectedQuestion = ({
 
     subject:
       normalizeSubject(
-        hints.subject
+        item.subject
       ) ||
       normalizeSubject(
-        item.subject
+        hints.subject
       ),
 
     exam:
       normalizeExam(
-        hints.exam
+        item.exam
       ) ||
       normalizeExam(
-        item.exam
+        hints.exam
       ),
 
     classLevel:
       normalizeClassLevel(
-        hints.classLevel
+        item.classLevel
       ) ||
       normalizeClassLevel(
-        item.classLevel
+        hints.classLevel
       ),
 
     chapter:
-      resolvedChapter,
+      cleanString(
+        item.chapter
+      ) ||
+      cleanString(
+        hints.chapter
+      ),
 
     difficulty:
       normalizeDifficulty(
@@ -1712,12 +1648,8 @@ const normalizeDetectedQuestion = ({
       ),
 
     modelAnswer:
-      formatEnumeratedStatements(
-        formatNavtaSimpleScripts(
-          cleanString(
-            item.modelAnswer
-          )
-        )
+      formatNavtaQuestionContent(
+        item.modelAnswer
       ),
 
     keyPoints:
@@ -1726,31 +1658,26 @@ const normalizeDetectedQuestion = ({
       )
         .map(
           (point) =>
-            formatEnumeratedStatements(
-              formatNavtaSimpleScripts(
-                cleanString(
-                  point
-                )
-              )
+            formatNavtaQuestionContent(
+              point
             )
         )
         .filter(Boolean),
 
     maxMarks:
-      item.maxMarks === null ||
-      item.maxMarks === undefined
-        ? null
-        : Number(
+      Number.isFinite(
+        Number(
+          item.maxMarks
+        )
+      )
+        ? Number(
             item.maxMarks
-          ),
+          )
+        : null,
 
     explanation:
-      formatEnumeratedStatements(
-        formatNavtaSimpleScripts(
-          cleanString(
-            item.explanation
-          )
-        )
+      formatNavtaQuestionContent(
+        item.explanation
       ),
 
     questionBoundingBox,
@@ -1785,7 +1712,6 @@ const normalizeDetectedQuestion = ({
     dropReason,
   };
 };
-
 // =====================================================
 // SECOND-PASS VERIFICATION FOR UNCERTAIN QUESTIONS
 // =====================================================
@@ -1793,11 +1719,15 @@ const normalizeDetectedQuestion = ({
 const shouldVerifyQuestion = (
   question = {}
 ) => {
-  if (!NAVTA_AI_VERIFY_LOW_CONFIDENCE) {
+  if (
+    !NAVTA_AI_VERIFY_LOW_CONFIDENCE
+  ) {
     return false;
   }
 
-  if (question.needsReview) {
+  if (
+    question.needsReview
+  ) {
     return true;
   }
 
@@ -1831,18 +1761,26 @@ const shouldVerifyQuestion = (
     );
 
   return (
-    (chapterConfidence !== null &&
+    (
+      chapterConfidence !== null &&
       chapterConfidence <
-        LOW_CONFIDENCE_THRESHOLDS.chapter) ||
-    (answerConfidence !== null &&
+        LOW_CONFIDENCE_THRESHOLDS.chapter
+    ) ||
+    (
+      answerConfidence !== null &&
       answerConfidence <
-        LOW_CONFIDENCE_THRESHOLDS.answer) ||
-    (classificationConfidence !== null &&
+        LOW_CONFIDENCE_THRESHOLDS.answer
+    ) ||
+    (
+      classificationConfidence !== null &&
       classificationConfidence <
-        LOW_CONFIDENCE_THRESHOLDS.classification) ||
-    (difficultyConfidence !== null &&
+        LOW_CONFIDENCE_THRESHOLDS.classification
+    ) ||
+    (
+      difficultyConfidence !== null &&
       difficultyConfidence <
-        LOW_CONFIDENCE_THRESHOLDS.difficulty)
+        LOW_CONFIDENCE_THRESHOLDS.difficulty
+    )
   );
 };
 
@@ -1850,7 +1788,9 @@ const mergeVerifiedQuestion = (
   original,
   verified
 ) => {
-  if (!verified) {
+  if (
+    !verified
+  ) {
     return original;
   }
 
@@ -1895,11 +1835,15 @@ const verifyLowConfidenceQuestions =
     hints = {},
   }) => {
     const uncertain =
-      safeArray(questions).filter(
+      safeArray(
+        questions
+      ).filter(
         shouldVerifyQuestion
       );
 
-    if (uncertain.length === 0) {
+    if (
+      uncertain.length === 0
+    ) {
       return questions;
     }
 
@@ -1918,7 +1862,9 @@ const verifyLowConfidenceQuestions =
       );
 
     const pagesForVerification =
-      safeArray(validPages).filter(
+      safeArray(
+        validPages
+      ).filter(
         (page) =>
           uncertainPages.has(
             Number(
@@ -1933,22 +1879,41 @@ You are NAVTA AI acting as a SECOND-PASS VERIFIER.
 Verify only the uncertain questions listed below against the supplied original PDF page images.
 
 Do not create new questions.
+
 Do not remove a readable question merely because the answer is uncertain.
+
 Do not invent missing options or text.
+
 Preserve the original question wording unless an obvious OCR/vision error must be corrected.
 
 ADMIN HINTS:
-Subject: ${cleanString(hints.subject) || "Auto detect"}
-Exam: ${cleanString(hints.exam) || "Auto detect"}
-Class: ${cleanString(hints.classLevel) || "Auto detect"}
-Selected Chapter: ${cleanString(hints.chapter) || "Auto detect"}
+
+Subject:
+${cleanString(hints.subject) || "Auto detect"}
+
+Exam:
+${cleanString(hints.exam) || "Auto detect"}
+
+Class:
+${cleanString(hints.classLevel) || "Auto detect"}
+
+Selected Chapter:
+${cleanString(hints.chapter) || "Auto detect"}
 
 ALLOWED CHAPTERS:
-${safeArray(hints.allowedChapters).length > 0
-  ? safeArray(hints.allowedChapters).join("\n")
-  : "No whitelist supplied"}
+
+${
+  safeArray(
+    hints.allowedChapters
+  ).length > 0
+    ? safeArray(
+        hints.allowedChapters
+      ).join("\n")
+    : "No whitelist supplied"
+}
 
 Return the same questions only, with corrected:
+
 - subject
 - exam
 - classLevel
@@ -1965,6 +1930,7 @@ Return the same questions only, with corrected:
 - dropReason
 
 Rules:
+
 - Confidence values must be from 0 to 1.
 - If the answer is uncertain, correctAnswer=null and needsReview=true.
 - If Selected Chapter is provided, do not silently change to another chapter.
@@ -1972,39 +1938,55 @@ Rules:
 - Return JSON only.
 
 QUESTIONS TO VERIFY:
+
 ${JSON.stringify(
   uncertain.map(
     (question) => ({
       questionNumber:
         question.questionNumber,
+
       question:
         question.question,
+
       options:
         question.options,
+
       subject:
         question.subject,
+
       exam:
         question.exam,
+
       classLevel:
         question.classLevel,
+
       chapter:
         question.chapter,
+
       difficulty:
         question.difficulty,
+
       questionType:
         question.questionType,
+
       correctAnswer:
         question.correctAnswer,
+
       sourcePage:
         question.sourcePage,
+
       chapterConfidence:
         question.chapterConfidence,
+
       answerConfidence:
         question.answerConfidence,
+
       classificationConfidence:
         question.classificationConfidence,
+
       difficultyConfidence:
         question.difficultyConfidence,
+
       needsReview:
         question.needsReview,
     })
@@ -2032,6 +2014,7 @@ ${JSON.stringify(
         inlineData: {
           mimeType:
             "image/png",
+
           data:
             imageBufferToBase64(
               page.buffer
@@ -2044,6 +2027,7 @@ ${JSON.stringify(
       const raw =
         await callGemini({
           parts,
+
           maxOutputTokens:
             16384,
         });
@@ -2060,6 +2044,7 @@ ${JSON.stringify(
           (item) =>
             normalizeDetectedQuestion({
               item,
+
               allowedPageNumbers:
                 pagesForVerification.map(
                   (page) =>
@@ -2067,7 +2052,9 @@ ${JSON.stringify(
                       page.pageNumber
                     )
                 ),
+
               hints,
+
               requirePage:
                 true,
             })
@@ -2115,7 +2102,9 @@ ${JSON.stringify(
           );
         }
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.warn(
         `NAVTA second-pass verification skipped because it failed: ${error?.message || ""}`
       );
@@ -2148,8 +2137,7 @@ const analyseRenderedPageBatch =
         );
 
     if (
-      validPages.length ===
-      0
+      validPages.length === 0
     ) {
       return [];
     }
@@ -2178,13 +2166,22 @@ Selected Chapter:
 ${cleanString(hints.chapter) || "Auto detect"}
 
 ALLOWED CHAPTERS FOR THIS SUBJECT/CLASS:
-${safeArray(hints.allowedChapters).length > 0
-  ? safeArray(hints.allowedChapters).join("\n")
-  : "No whitelist supplied"}
+
+${
+  safeArray(
+    hints.allowedChapters
+  ).length > 0
+    ? safeArray(
+        hints.allowedChapters
+      ).join("\n")
+    : "No whitelist supplied"
+}
 
 If Selected Chapter is not "Auto detect", treat it as the intended destination.
-Do not silently assign a different chapter. If the question clearly belongs elsewhere,
-set drop=true and explain why.
+
+Do not silently assign a different chapter.
+
+If the question clearly belongs elsewhere, set drop=true and explain why.
 
 PAGES INCLUDED:
 
@@ -2296,14 +2293,11 @@ const analyseNavtaPage =
 // STRONG QUESTION DEDUPLICATION
 // =====================================================
 //
-// Gemini can occasionally return the same question twice with:
-// - different whitespace
-// - different LaTeX delimiters
-// - a slightly different question-number prefix
-// - tiny punctuation differences
+// Gemini can occasionally return the same question twice
+// with tiny formatting differences.
 //
-// NAVTA therefore creates a canonical fingerprint and also
-// performs a conservative near-duplicate comparison.
+// NAVTA creates a canonical fingerprint and performs a
+// conservative near-duplicate comparison.
 // =====================================================
 
 const normalizeQuestionForFingerprint = (
@@ -2313,34 +2307,42 @@ const normalizeQuestionForFingerprint = (
     value
   )
     .toLowerCase()
+
     .replace(
       /^\s*(?:q(?:uestion)?\.?\s*)?\d+[a-z]?\s*[\).:\-]\s*/i,
       ""
     )
+
     .replace(
       /\$\$?/g,
       " "
     )
+
     .replace(
       /\\(?:left|right|mathrm|mathbf|mathit|text)\b/g,
       ""
     )
+
     .replace(
       /\\begin\{[^}]+\}|\\end\{[^}]+\}/g,
       " "
     )
+
     .replace(
       /\\[,;:! ]/g,
       " "
     )
+
     .replace(
       /[^a-z0-9]+/g,
       " "
     )
+
     .replace(
       /\s+/g,
       " "
     )
+
     .trim();
 };
 
@@ -2394,10 +2396,14 @@ const jaccardSimilarity = (
   right = ""
 ) => {
   const a =
-    tokenSet(left);
+    tokenSet(
+      left
+    );
 
   const b =
-    tokenSet(right);
+    tokenSet(
+      right
+    );
 
   if (
     a.size === 0 ||
@@ -2410,13 +2416,15 @@ const jaccardSimilarity = (
     0;
 
   for (
-    const token of a
+    const token of
+    a
   ) {
     if (
-      b.has(token)
+      b.has(
+        token
+      )
     ) {
-      intersection +=
-        1;
+      intersection += 1;
     }
   }
 
@@ -2452,14 +2460,13 @@ const sameOptions = (
 
   if (
     left.length !==
-      right.length
+    right.length
   ) {
     return false;
   }
 
   if (
-    left.length ===
-      0
+    left.length === 0
   ) {
     return true;
   }
@@ -2521,17 +2528,14 @@ const areLikelyDuplicateQuestions = (
       b?.question
     );
 
-  // Strong rule: same visible question number and very similar stem.
   if (
     sameNumber &&
-    similarity >= 0.88
+    similarity >=
+      0.88
   ) {
     return true;
   }
 
-  // Conservative rule for duplicates where Gemini changed the number
-  // or one result lost the number. Require almost identical wording
-  // AND identical options so genuinely different questions survive.
   if (
     similarity >= 0.96 &&
     sameOptions(
@@ -2622,8 +2626,7 @@ const removeQuestionDuplicates = (
       );
 
     if (
-      duplicateIndex ===
-      -1
+      duplicateIndex === -1
     ) {
       result.push(
         candidate
@@ -2635,7 +2638,6 @@ const removeQuestionDuplicates = (
     removed +=
       1;
 
-    // Keep whichever copy contains more useful information.
     if (
       questionCompletenessScore(
         candidate
@@ -2678,8 +2680,7 @@ const analyseRenderedPages =
       !Array.isArray(
         pages
       ) ||
-      pages.length ===
-        0
+      pages.length === 0
     ) {
       return [];
     }
@@ -2695,9 +2696,9 @@ const analyseRenderedPages =
             Buffer.isBuffer(
               page.buffer
             ) &&
-            page.buffer.length >
-              0
+            page.buffer.length > 0
         )
+
         .map(
           (page) => ({
             ...page,
@@ -2708,6 +2709,7 @@ const analyseRenderedPages =
               ),
           })
         )
+
         .sort(
           (a, b) =>
             a.pageNumber -
@@ -2715,8 +2717,7 @@ const analyseRenderedPages =
         );
 
     if (
-      validPages.length ===
-      0
+      validPages.length === 0
     ) {
       throw new Error(
         "NAVTA AI received no valid rendered PDF page images."
@@ -2803,9 +2804,6 @@ const analyseRenderedPages =
           lastError =
             error;
 
-          // Do not silently skip a page. A partial import is worse
-          // than a clear failure because the admin may assume all
-          // questions were captured.
           if (
             attempt >=
             attempts
@@ -2977,14 +2975,22 @@ For MCQs:
 - if uncertain use null
 
 FORMATTING RULES:
+
 - For simple chemical subscripts, ionic charges and numeric powers, prefer Unicode:
   SiCl₄, NH₄⁺, SO₄²⁻, PO₄³⁻, x².
+
 - Do not output visible underscore/caret notation for those simple cases when avoidable.
+
 - Keep complex mathematics in LaTeX.
+
 - Preserve each separately labelled statement on its own line.
+
 - Insert a newline before (i), (ii), (iii), (iv), etc. when they begin separate statements.
+
 - Do the same for (a), (b), (c), (d), Statement I/II/III, and Assertion/Reason blocks.
+
 - Never merge separately labelled statements into one continuous line.
+
 - Preserve original wording and labels exactly.
 
 Return JSON only.
@@ -3004,11 +3010,19 @@ Selected Chapter:
 ${cleanString(hints.chapter) || "Auto detect"}
 
 ALLOWED CHAPTERS:
-${safeArray(hints.allowedChapters).length > 0
-  ? safeArray(hints.allowedChapters).join("\n")
-  : "No whitelist supplied"}
+
+${
+  safeArray(
+    hints.allowedChapters
+  ).length > 0
+    ? safeArray(
+        hints.allowedChapters
+      ).join("\n")
+    : "No whitelist supplied"
+}
 
 RULES:
+
 - Never invent chapter names.
 - If Selected Chapter is provided, use it as the intended destination.
 - If the question clearly does not belong to the selected chapter, set drop=true.
