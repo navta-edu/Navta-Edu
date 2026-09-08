@@ -248,8 +248,8 @@ const NAVTA_AI_VISUAL_CROP_PADDING = Math.max(
   Math.min(
     0.15,
     Number(
-      process.env.NAVTA_AI_VISUAL_CROP_PADDING || 0.07
-    ) || 0.07
+      process.env.NAVTA_AI_VISUAL_CROP_PADDING || 0.1
+    ) || 0.1
   )
 );
 
@@ -653,6 +653,733 @@ const resolveBestVisualCropBox = (
   };
 };
 
+
+// =====================================================
+// OPTION / QUESTION TEXT REPAIR
+// =====================================================
+// Gemini sometimes returns MCQ choices inside question text instead of
+// the options array. This safety layer repairs those cases before
+// validation and before saving to MongoDB.
+// =====================================================
+
+const normalizeLineBreaks = (
+  value = ""
+) => {
+  return cleanString(
+    value
+  )
+    .replace(
+      /\r\n?/g,
+      "\n"
+    )
+    .replace(
+      /[ \t]+\n/g,
+      "\n"
+    )
+    .replace(
+      /\n[ \t]+/g,
+      "\n"
+    )
+    .replace(
+      /[ \t]{2,}/g,
+      " "
+    )
+    .replace(
+      /\n{3,}/g,
+      "\n\n"
+    )
+    .trim();
+};
+
+const compactOptionText = (
+  value = ""
+) => {
+  return normalizeLineBreaks(
+    value
+  )
+    .replace(
+      /^\s*(?:(?:\(\s*(?:[1-4]|[A-Da-d])\s*\))|(?:(?:[1-4]|[A-Da-d])\s*[\).:-]))\s*/,
+      ""
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+};
+
+const normalizeOptionArray = (
+  value
+) => {
+  return safeArray(
+    value
+  )
+    .map(
+      compactOptionText
+    )
+    .filter(Boolean);
+};
+
+const getMarkerLabel = (
+  marker = ""
+) => {
+  return cleanString(
+    marker
+  )
+    .replace(
+      /[()\s.:\-]/g,
+      ""
+    );
+};
+
+const collectMarkers = (
+  text = "",
+  markerRegex,
+  labels = []
+) => {
+  const source =
+    String(text || "");
+
+  const result =
+    [];
+
+  let match;
+
+  markerRegex.lastIndex = 0;
+
+  while (
+    (match = markerRegex.exec(source))
+  ) {
+    const leading =
+      match[1] || "";
+
+    const marker =
+      match[2] || "";
+
+    const label =
+      getMarkerLabel(
+        marker
+      );
+
+    if (
+      !labels.includes(
+        label
+      )
+    ) {
+      continue;
+    }
+
+    const start =
+      match.index +
+      leading.length;
+
+    result.push({
+      label,
+
+      start,
+
+      end:
+        markerRegex.lastIndex,
+
+      marker,
+    });
+  }
+
+  return result;
+};
+
+const containsQuestionContinuation = (
+  value = ""
+) => {
+  const text =
+    cleanString(value).toLowerCase();
+
+  return (
+    /\?\s*(?:$|\n)/.test(text) ||
+    /\b(?:which|identify|choose|select|find|calculate|determine|among|following|correct|incorrect)\b/.test(text)
+  );
+};
+
+const optionLooksUnsafe = (
+  value = ""
+) => {
+  const text =
+    compactOptionText(value);
+
+  if (
+    !text
+  ) {
+    return true;
+  }
+
+  if (
+    text.length > 600
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
+const scoreOptionBlock = (
+  source = "",
+  block
+) => {
+  if (
+    !block
+  ) {
+    return -1;
+  }
+
+  let score =
+    block.start;
+
+  if (
+    block.start >
+    source.length * 0.35
+  ) {
+    score += 1000;
+  }
+
+  if (
+    block.start >
+    source.length * 0.55
+  ) {
+    score += 1000;
+  }
+
+  if (
+    block.kind === "number"
+  ) {
+    score += 500;
+  }
+
+  if (
+    block.kind === "lower-letter"
+  ) {
+    score += 300;
+  }
+
+  return score;
+};
+
+const extractOrderedOptionBlock = (
+  text = "",
+  config = {}
+) => {
+  const source =
+    normalizeLineBreaks(
+      text
+    );
+
+  if (
+    !source
+  ) {
+    return null;
+  }
+
+  const markers =
+    collectMarkers(
+      source,
+      config.regex,
+      config.labels
+    );
+
+  if (
+    markers.length < 4
+  ) {
+    return null;
+  }
+
+  const candidates =
+    [];
+
+  for (
+    let index = 0;
+    index < markers.length;
+    index += 1
+  ) {
+    const first =
+      markers[index];
+
+    if (
+      first.label !==
+      config.labels[0]
+    ) {
+      continue;
+    }
+
+    const chosen =
+      [first];
+
+    let searchFrom =
+      index + 1;
+
+    for (
+      let labelIndex = 1;
+      labelIndex < config.labels.length;
+      labelIndex += 1
+    ) {
+      const nextIndex =
+        markers.findIndex(
+          (marker, markerIndex) =>
+            markerIndex >= searchFrom &&
+            marker.label ===
+              config.labels[labelIndex] &&
+            marker.start >
+              chosen[chosen.length - 1].end
+        );
+
+      if (
+        nextIndex === -1
+      ) {
+        break;
+      }
+
+      chosen.push(
+        markers[nextIndex]
+      );
+
+      searchFrom =
+        nextIndex + 1;
+    }
+
+    if (
+      chosen.length !== 4
+    ) {
+      continue;
+    }
+
+    const options =
+      chosen.map(
+        (marker, optionIndex) => {
+          const next =
+            chosen[optionIndex + 1];
+
+          const end =
+            next
+              ? next.start
+              : source.length;
+
+          return compactOptionText(
+            source.slice(
+              marker.end,
+              end
+            )
+          );
+        }
+      );
+
+    if (
+      options.some(
+        optionLooksUnsafe
+      )
+    ) {
+      continue;
+    }
+
+    // Prevent internal compound lists like (A), (B), (C), (D) from being
+    // converted into final MCQ options when the real question continues
+    // after the list.
+    if (
+      config.kind !== "number" &&
+      chosen[0].start <
+        source.length * 0.35 &&
+      containsQuestionContinuation(
+        options[3]
+      )
+    ) {
+      continue;
+    }
+
+    candidates.push({
+      kind:
+        config.kind,
+
+      start:
+        chosen[0].start,
+
+      end:
+        source.length,
+
+      question:
+        normalizeQuestionText(
+          source.slice(
+            0,
+            chosen[0].start
+          )
+        ),
+
+      options,
+
+      markerStyle:
+        config.kind,
+    });
+  }
+
+  if (
+    candidates.length === 0
+  ) {
+    return null;
+  }
+
+  return candidates.sort(
+    (a, b) =>
+      scoreOptionBlock(
+        source,
+        b
+      ) -
+      scoreOptionBlock(
+        source,
+        a
+      )
+  )[0];
+};
+
+const OPTION_BLOCK_CONFIGS = [
+  {
+    kind:
+      "number",
+
+    labels:
+      ["1", "2", "3", "4"],
+
+    regex:
+      /(^|[\s\n;:,])((?:\(\s*[1-4]\s*\)|[1-4]\s*[\).]))(?=\s|$)/g,
+  },
+  {
+    kind:
+      "lower-letter",
+
+    labels:
+      ["a", "b", "c", "d"],
+
+    regex:
+      /(^|[\s\n;:,])((?:\(\s*[a-d]\s*\)|[a-d]\s*[\).]))(?=\s|$)/g,
+  },
+  {
+    kind:
+      "upper-letter",
+
+    labels:
+      ["A", "B", "C", "D"],
+
+    regex:
+      /(^|[\s\n;:,])((?:\(\s*[A-D]\s*\)|[A-D]\s*[\).]))(?=\s|$)/g,
+  },
+];
+
+const extractBestOptionBlock = (
+  text = ""
+) => {
+  const blocks =
+    OPTION_BLOCK_CONFIGS
+      .map(
+        (config) =>
+          extractOrderedOptionBlock(
+            text,
+            config
+          )
+      )
+      .filter(Boolean);
+
+  if (
+    blocks.length === 0
+  ) {
+    return null;
+  }
+
+  return blocks.sort(
+    (a, b) =>
+      scoreOptionBlock(
+        text,
+        b
+      ) -
+      scoreOptionBlock(
+        text,
+        a
+      )
+  )[0];
+};
+
+const normalizedOptionFingerprint = (
+  value = ""
+) => {
+  return compactOptionText(
+    value
+  )
+    .toLowerCase()
+    .replace(
+      /[^a-z0-9]+/g,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+};
+
+const optionArraysLookSimilar = (
+  left = [],
+  right = []
+) => {
+  const a =
+    normalizeOptionArray(
+      left
+    ).map(
+      normalizedOptionFingerprint
+    );
+
+  const b =
+    normalizeOptionArray(
+      right
+    ).map(
+      normalizedOptionFingerprint
+    );
+
+  if (
+    a.length !== 4 ||
+    b.length !== 4
+  ) {
+    return false;
+  }
+
+  return a.every(
+    (value, index) =>
+      value &&
+      value === b[index]
+  );
+};
+
+const replaceRepeatedLabelsWithLines = (
+  text = "",
+  regex,
+  minCount = 2
+) => {
+  const source =
+    String(text || "");
+
+  const matches =
+    Array.from(
+      source.matchAll(
+        regex
+      )
+    );
+
+  if (
+    matches.length < minCount
+  ) {
+    return source;
+  }
+
+  return source.replace(
+    regex,
+    (...args) => {
+      const match =
+        args[0];
+
+      const offset =
+        args[args.length - 2];
+
+      const whole =
+        args[args.length - 1];
+
+      const before =
+        whole.slice(
+          Math.max(
+            0,
+            offset - 35
+          ),
+          offset
+        ).toLowerCase();
+
+      // Keep inline references like "compound (C)" untouched.
+      if (
+        /\b(?:compound|option|choice|answer|statement)\s*$/.test(
+          before
+        )
+      ) {
+        return match;
+      }
+
+      if (
+        offset === 0 ||
+        whole[offset - 1] === "\n"
+      ) {
+        return match.trimStart();
+      }
+
+      return `\n${match.trimStart()}`;
+    }
+  );
+};
+
+const normalizeQuestionText = (
+  value = ""
+) => {
+  let text =
+    normalizeLineBreaks(
+      value
+    );
+
+  if (
+    !text
+  ) {
+    return "";
+  }
+
+  text = text.replace(
+    /([^\n])\s+(\((?:i|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii)\))\s+/gi,
+    "$1\n$2 "
+  );
+
+  text = text.replace(
+    /([^\n])\s+(Statement\s+(?:I|II|III|IV|V|VI|VII|VIII|IX|X)\b)/g,
+    "$1\n$2"
+  );
+
+  text = text.replace(
+    /([^\n])\s+(Assertion\s*:)/gi,
+    "$1\n$2"
+  );
+
+  text = text.replace(
+    /([^\n])\s+(Reason\s*:)/gi,
+    "$1\n$2"
+  );
+
+  text = replaceRepeatedLabelsWithLines(
+    text,
+    /((?:\(?[a-d]\)?[\).])\s+)/g,
+    2
+  );
+
+  text = replaceRepeatedLabelsWithLines(
+    text,
+    /((?:\(?[A-D]\)?[\).])\s+)/g,
+    2
+  );
+
+  text = replaceRepeatedLabelsWithLines(
+    text,
+    /(^|\s)((?:[1-9][0-9]?\.)\s+)/g,
+    3
+  );
+
+  return normalizeLineBreaks(
+    text
+  );
+};
+
+const repairQuestionAndOptions = (
+  rawQuestion = {}
+) => {
+  const warnings =
+    [];
+
+  let questionText =
+    normalizeQuestionText(
+      rawQuestion?.question
+    );
+
+  let options =
+    normalizeOptionArray(
+      rawQuestion?.options
+    );
+
+  if (
+    options.length === 1
+  ) {
+    const optionBlock =
+      extractBestOptionBlock(
+        options[0]
+      );
+
+    if (
+      optionBlock?.options?.length === 4
+    ) {
+      options =
+        optionBlock.options;
+
+      warnings.push(
+        "NAVTA repaired four MCQ options that were merged into one option field."
+      );
+    }
+  }
+
+  const blockFromQuestion =
+    extractBestOptionBlock(
+      questionText
+    );
+
+  if (
+    blockFromQuestion?.options?.length === 4
+  ) {
+    const shouldUseBlockOptions =
+      options.length !== 4;
+
+    const shouldStripBlockOnly =
+      options.length === 4 &&
+      (
+        optionArraysLookSimilar(
+          options,
+          blockFromQuestion.options
+        ) ||
+        blockFromQuestion.start >
+          questionText.length * 0.4
+      );
+
+    if (
+      shouldUseBlockOptions ||
+      shouldStripBlockOnly
+    ) {
+      questionText =
+        blockFromQuestion.question ||
+        questionText;
+
+      if (
+        shouldUseBlockOptions
+      ) {
+        options =
+          blockFromQuestion.options;
+      }
+
+      warnings.push(
+        "NAVTA removed final MCQ options from Question Text and placed them in Option A/B/C/D fields."
+      );
+    }
+  }
+
+  if (
+    options.length > 4
+  ) {
+    options =
+      options.slice(
+        0,
+        4
+      );
+
+    warnings.push(
+      "NAVTA found more than four MCQ options and kept the first four for admin review."
+    );
+  }
+
+  return {
+    question:
+      normalizeQuestionText(
+        questionText
+      ),
+
+    options:
+      options.map(
+        compactOptionText
+      ),
+
+    warnings,
+  };
+};
+
 // =====================================================
 // NORMALIZE SUBJECT
 // =====================================================
@@ -821,6 +1548,11 @@ const validateDetectedQuestion = (
       rawQuestion?.chapter
     );
 
+  const repairedQuestion =
+    repairQuestionAndOptions(
+      rawQuestion
+    );
+
   const normalizedQuestionBoundingBox =
     normalizeBoundingBox(
       rawQuestion?.questionBoundingBox
@@ -840,9 +1572,7 @@ const validateDetectedQuestion = (
     ...rawQuestion,
 
     question:
-      cleanString(
-        rawQuestion?.question
-      ),
+      repairedQuestion.question,
 
     subject:
       hintedSubject ||
@@ -880,18 +1610,7 @@ const validateDetectedQuestion = (
       ).toLowerCase(),
 
     options:
-      safeArray(
-        rawQuestion?.options
-      )
-        .map(
-          (option) =>
-            cleanString(
-              option
-            )
-        )
-        .filter(
-          Boolean
-        ),
+      repairedQuestion.options,
 
     explanation:
       cleanString(
@@ -965,8 +1684,12 @@ const validateDetectedQuestion = (
 
     needsReview:
       Boolean(
-        rawQuestion?.needsReview
+        rawQuestion?.needsReview ||
+        repairedQuestion.warnings.length > 0
       ),
+
+    importRepairWarnings:
+      repairedQuestion.warnings,
   };
 
   const reasons =
@@ -1658,6 +2381,18 @@ const buildImportQuestion = ({
 
     result.questionImages =
       [];
+  }
+
+  if (
+    safeArray(
+      question.importRepairWarnings
+    ).length > 0
+  ) {
+    result.importRepairWarnings =
+      question.importRepairWarnings;
+
+    result.needsReview =
+      true;
   }
 
   if (
