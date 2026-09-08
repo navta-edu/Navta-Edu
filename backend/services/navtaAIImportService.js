@@ -229,6 +229,61 @@ const QUESTION_PROCESS_CONCURRENCY = Math.max(
   )
 );
 
+// Better PDF render quality for diagram crops.
+// 2.2 is a safe default: clearer diagrams without making uploads too slow.
+const NAVTA_AI_PDF_RENDER_SCALE = Math.max(
+  1.6,
+  Math.min(
+    3,
+    Number(
+      process.env.NAVTA_AI_PDF_RENDER_SCALE || 2.2
+    ) || 2.2
+  )
+);
+
+// Padding is normalized to the page size.
+// 0.07 means 7% page padding around a diagram box.
+const NAVTA_AI_VISUAL_CROP_PADDING = Math.max(
+  0,
+  Math.min(
+    0.15,
+    Number(
+      process.env.NAVTA_AI_VISUAL_CROP_PADDING || 0.07
+    ) || 0.07
+  )
+);
+
+// Fallback full-question crop needs smaller padding.
+const NAVTA_AI_QUESTION_CROP_PADDING = Math.max(
+  0,
+  Math.min(
+    0.1,
+    Number(
+      process.env.NAVTA_AI_QUESTION_CROP_PADDING || 0.04
+    ) || 0.04
+  )
+);
+
+const NAVTA_AI_MIN_VISUAL_BOX_WIDTH = Math.max(
+  0.005,
+  Math.min(
+    0.08,
+    Number(
+      process.env.NAVTA_AI_MIN_VISUAL_BOX_WIDTH || 0.025
+    ) || 0.025
+  )
+);
+
+const NAVTA_AI_MIN_VISUAL_BOX_HEIGHT = Math.max(
+  0.005,
+  Math.min(
+    0.08,
+    Number(
+      process.env.NAVTA_AI_MIN_VISUAL_BOX_HEIGHT || 0.025
+    ) || 0.025
+  )
+);
+
 // =====================================================
 // HELPERS
 // =====================================================
@@ -294,6 +349,308 @@ const getFileType = (
       ".",
       ""
     );
+};
+
+const toFiniteNumber = (
+  value
+) => {
+  const number =
+    Number(value);
+
+  return Number.isFinite(
+    number
+  )
+    ? number
+    : null;
+};
+
+const normalizeBoundingBox = (
+  box
+) => {
+  if (
+    !box ||
+    typeof box !== "object"
+  ) {
+    return null;
+  }
+
+  let x =
+    toFiniteNumber(
+      box.x
+    );
+
+  let y =
+    toFiniteNumber(
+      box.y
+    );
+
+  let width =
+    toFiniteNumber(
+      box.width
+    );
+
+  let height =
+    toFiniteNumber(
+      box.height
+    );
+
+  if (
+    [
+      x,
+      y,
+      width,
+      height,
+    ].some(
+      (value) =>
+        value === null
+    )
+  ) {
+    return null;
+  }
+
+  // Gemini sometimes returns percentages instead of 0-1 values.
+  if (
+    x > 1 ||
+    y > 1 ||
+    width > 1 ||
+    height > 1
+  ) {
+    if (
+      x >= 0 &&
+      y >= 0 &&
+      x <= 100 &&
+      y <= 100 &&
+      width > 0 &&
+      height > 0 &&
+      width <= 100 &&
+      height <= 100
+    ) {
+      x /= 100;
+      y /= 100;
+      width /= 100;
+      height /= 100;
+    }
+  }
+
+  if (
+    x < 0 ||
+    y < 0 ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return null;
+  }
+
+  x = Math.max(
+    0,
+    Math.min(
+      1,
+      x
+    )
+  );
+
+  y = Math.max(
+    0,
+    Math.min(
+      1,
+      y
+    )
+  );
+
+  width = Math.max(
+    0,
+    Math.min(
+      1 - x,
+      width
+    )
+  );
+
+  height = Math.max(
+    0,
+    Math.min(
+      1 - y,
+      height
+    )
+  );
+
+  if (
+    width <= 0 ||
+    height <= 0
+  ) {
+    return null;
+  }
+
+  return {
+    x,
+    y,
+    width,
+    height,
+  };
+};
+
+const expandBoundingBox = (
+  box,
+  padding = 0
+) => {
+  const normalized =
+    normalizeBoundingBox(
+      box
+    );
+
+  if (
+    !normalized
+  ) {
+    return null;
+  }
+
+  const safePadding =
+    Math.max(
+      0,
+      Math.min(
+        0.2,
+        Number(
+          padding
+        ) || 0
+      )
+    );
+
+  const x =
+    Math.max(
+      0,
+      normalized.x -
+        safePadding
+    );
+
+  const y =
+    Math.max(
+      0,
+      normalized.y -
+        safePadding
+    );
+
+  const right =
+    Math.min(
+      1,
+      normalized.x +
+        normalized.width +
+        safePadding
+    );
+
+  const bottom =
+    Math.min(
+      1,
+      normalized.y +
+        normalized.height +
+        safePadding
+    );
+
+  const width =
+    right - x;
+
+  const height =
+    bottom - y;
+
+  if (
+    width <= 0 ||
+    height <= 0
+  ) {
+    return normalized;
+  }
+
+  return {
+    x,
+    y,
+    width,
+    height,
+  };
+};
+
+const isUsableVisualBoundingBox = (
+  box
+) => {
+  const normalized =
+    normalizeBoundingBox(
+      box
+    );
+
+  if (
+    !normalized
+  ) {
+    return false;
+  }
+
+  return (
+    normalized.width >=
+      NAVTA_AI_MIN_VISUAL_BOX_WIDTH &&
+    normalized.height >=
+      NAVTA_AI_MIN_VISUAL_BOX_HEIGHT
+  );
+};
+
+const resolveBestVisualCropBox = (
+  question = {}
+) => {
+  const visualBox =
+    normalizeBoundingBox(
+      question.visualBoundingBox
+    );
+
+  const questionBox =
+    normalizeBoundingBox(
+      question.questionBoundingBox
+    );
+
+  if (
+    isUsableVisualBoundingBox(
+      visualBox
+    )
+  ) {
+    return {
+      box:
+        expandBoundingBox(
+          visualBox,
+          NAVTA_AI_VISUAL_CROP_PADDING
+        ),
+
+      originalBox:
+        visualBox,
+
+      usedFallback:
+        false,
+    };
+  }
+
+  // Fallback: when Gemini detects a visual but the diagram box is missing,
+  // too tiny, or unreliable, crop the whole question area instead.
+  // This is better than saving a cut-off or blank diagram.
+  if (
+    questionBox
+  ) {
+    return {
+      box:
+        expandBoundingBox(
+          questionBox,
+          NAVTA_AI_QUESTION_CROP_PADDING
+        ),
+
+      originalBox:
+        questionBox,
+
+      usedFallback:
+        true,
+    };
+  }
+
+  return {
+    box:
+      null,
+
+    originalBox:
+      null,
+
+    usedFallback:
+      false,
+  };
 };
 
 // =====================================================
@@ -464,6 +821,21 @@ const validateDetectedQuestion = (
       rawQuestion?.chapter
     );
 
+  const normalizedQuestionBoundingBox =
+    normalizeBoundingBox(
+      rawQuestion?.questionBoundingBox
+    );
+
+  const normalizedVisualBoundingBox =
+    normalizeBoundingBox(
+      rawQuestion?.visualBoundingBox
+    );
+
+  const hasDetectedVisual =
+    Boolean(
+      rawQuestion?.hasVisual
+    );
+
   const question = {
     ...rawQuestion,
 
@@ -547,8 +919,11 @@ const validateDetectedQuestion = (
 
     hasVisual:
       Boolean(
-        rawQuestion?.hasVisual &&
-        rawQuestion?.visualBoundingBox
+        hasDetectedVisual &&
+        (
+          normalizedVisualBoundingBox ||
+          normalizedQuestionBoundingBox
+        )
       ),
 
     visualType:
@@ -562,9 +937,11 @@ const validateDetectedQuestion = (
         rawQuestion?.visualDescription
       ),
 
+    questionBoundingBox:
+      normalizedQuestionBoundingBox,
+
     visualBoundingBox:
-      rawQuestion?.visualBoundingBox ||
-      null,
+      normalizedVisualBoundingBox,
 
     chapterConfidence:
       normalizeConfidence(
@@ -870,25 +1247,13 @@ const validateDetectedQuestion = (
 };
 
 // =====================================================
-// PROCESS GENUINE VISUAL ONLY
+// PROCESS GENUINE VISUAL WITH SAFE CROP
 // =====================================================
 //
-// IMPORTANT CHANGE:
-//
-// OLD:
-//
-// questionBoundingBox
-// ↓
-// whole question screenshot
-//
-// NEW:
-//
-// hasVisual === true
-// +
-// visualBoundingBox
-// ↓
-// crop only real diagram / graph / figure
-//
+// NAVTA stores a screenshot only for genuine diagrams / graphs / figures.
+// The crop is padded because Gemini bounding boxes are often slightly tight.
+// If visualBoundingBox is missing or too small, NAVTA falls back to the full
+// questionBoundingBox so the admin/student never receives a half-cut diagram.
 // =====================================================
 
 const processQuestionVisual =
@@ -898,8 +1263,7 @@ const processQuestionVisual =
     sourceFileName,
   }) => {
     if (
-      !question?.hasVisual ||
-      !question?.visualBoundingBox
+      !question?.hasVisual
     ) {
       return {
         questionImage:
@@ -922,11 +1286,24 @@ const processQuestionVisual =
       };
     }
 
-    try {
-      // =======================================
-      // CROP ONLY visualBoundingBox
-      // =======================================
+    const crop =
+      resolveBestVisualCropBox(
+        question
+      );
 
+    if (
+      !crop.box
+    ) {
+      return {
+        questionImage:
+          null,
+
+        screenshotWarning:
+          "NAVTA detected a visual but no usable diagram or question crop box was available.",
+      };
+    }
+
+    try {
       const cropped =
         await createQuestionDiagram({
           question: {
@@ -936,8 +1313,7 @@ const processQuestionVisual =
               true,
 
             visualBoundingBox:
-              question
-                .visualBoundingBox,
+              crop.box,
           },
 
           pageBuffer:
@@ -960,10 +1336,6 @@ const processQuestionVisual =
             "NAVTA detected a visual but could not crop it.",
         };
       }
-
-      // =======================================
-      // SAFE NAME
-      // =======================================
 
       const safeFileName =
         cleanString(
@@ -993,10 +1365,6 @@ const processQuestionVisual =
           ) ||
         "question";
 
-      // =======================================
-      // CLOUDINARY
-      // =======================================
-
       const upload =
         await uploadQuestionImage({
           buffer:
@@ -1021,9 +1389,10 @@ const processQuestionVisual =
         };
       }
 
-      // =======================================
-      // RETURN
-      // =======================================
+      const fallbackWarning =
+        crop.usedFallback
+          ? "NAVTA used the full question crop because the detected diagram crop was missing, too small, or unreliable."
+          : null;
 
       return {
         questionImage: {
@@ -1057,11 +1426,19 @@ const processQuestionVisual =
             cropped.height,
 
           bbox:
-            question.visualBoundingBox,
+            crop.box,
+
+          originalBbox:
+            crop.originalBox,
+
+          usedFallbackCrop:
+            Boolean(
+              crop.usedFallback
+            ),
         },
 
         screenshotWarning:
-          null,
+          fallbackWarning,
       };
     } catch (
       error
@@ -1173,6 +1550,10 @@ const buildImportQuestion = ({
 
     questionBoundingBox:
       question.questionBoundingBox ||
+      null,
+
+    visualBoundingBox:
+      question.visualBoundingBox ||
       null,
 
     sourceDocument: {
@@ -1521,7 +1902,7 @@ const processPdfImport =
           file.buffer,
 
         scale:
-          1.6,
+          NAVTA_AI_PDF_RENDER_SCALE,
 
         maxPages:
           MAX_PDF_PAGES_PER_IMPORT,
@@ -1663,8 +2044,7 @@ const processPdfImport =
           //
 
           if (
-            !question.hasVisual ||
-            !question.visualBoundingBox
+            !question.hasVisual
           ) {
             return {
               accepted:
