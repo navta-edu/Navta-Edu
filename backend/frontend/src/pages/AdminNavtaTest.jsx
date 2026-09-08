@@ -864,7 +864,24 @@ const formatNavtaSimpleScripts = (
 };
 
 
+const NAVTA_VISUAL_MARKER =
+  "[[NAVTA_VISUAL]]";
+
 function getNavtaQuestionImage(question) {
+  const visualType = String(
+    question?.visualType || "none"
+  ).trim();
+
+  const hasRealVisual =
+    Boolean(
+      question?.hasVisual
+    ) &&
+    visualType !== "none";
+
+  if (!hasRealVisual) {
+    return null;
+  }
+
   const primaryUrl = String(
     question?.questionImage?.url || ""
   ).trim();
@@ -875,37 +892,188 @@ function getNavtaQuestionImage(question) {
       altText:
         String(
           question?.questionImage?.altText ||
+            question?.visualDescription ||
             question?.questionNumber ||
-            "NAVTA question"
-        ).trim() || "NAVTA question",
+            "NAVTA question visual"
+        ).trim() ||
+        "NAVTA question visual",
+      visualType,
     };
   }
 
-  const firstImage = Array.isArray(
-    question?.questionImages
-  )
-    ? question.questionImages.find(
-        (image) =>
-          image &&
-          typeof image === "object" &&
-          String(image.url || "").trim()
-      )
-    : null;
+  const firstImage =
+    Array.isArray(
+      question?.questionImages
+    )
+      ? question.questionImages.find(
+          (image) =>
+            image &&
+            typeof image === "object" &&
+            String(
+              image.url || ""
+            ).trim()
+        )
+      : null;
 
   if (firstImage) {
     return {
-      url: String(firstImage.url || "").trim(),
+      url: String(
+        firstImage.url || ""
+      ).trim(),
+
       altText:
         String(
           firstImage.altText ||
+            question?.visualDescription ||
             question?.questionNumber ||
-            "NAVTA question"
-        ).trim() || "NAVTA question",
+            "NAVTA question visual"
+        ).trim() ||
+        "NAVTA question visual",
+
+      visualType,
     };
   }
 
   return null;
 }
+
+function NavtaVisual({
+  question,
+  className = "",
+  shellClassName = "",
+}) {
+  const image =
+    getNavtaQuestionImage(
+      question
+    );
+
+  if (!image?.url) {
+    return null;
+  }
+
+  return (
+    <div
+      className={
+        shellClassName
+      }
+      style={{
+        width: "100%",
+        display: "flex",
+        justifyContent: "center",
+        margin: "12px 0 16px",
+      }}
+    >
+      <img
+        src={image.url}
+        alt={image.altText}
+        className={className}
+        loading="eager"
+        decoding="async"
+        style={{
+          display: "block",
+          maxWidth: "100%",
+          width: "auto",
+          height: "auto",
+          maxHeight: "420px",
+          objectFit: "contain",
+        }}
+        onError={(event) => {
+          event.currentTarget.style.display =
+            "none";
+        }}
+      />
+    </div>
+  );
+}
+
+function NavtaQuestionContent({
+  question,
+  visualClassName = "",
+  visualShellClassName = "",
+}) {
+  const text =
+    String(
+      question?.question || ""
+    );
+
+  const image =
+    getNavtaQuestionImage(
+      question
+    );
+
+  if (!image?.url) {
+    return (
+      <>
+        {renderNavtaContent(
+          text
+            .split(
+              NAVTA_VISUAL_MARKER
+            )
+            .join("")
+            .trim()
+        )}
+      </>
+    );
+  }
+
+  if (
+    !text.includes(
+      NAVTA_VISUAL_MARKER
+    )
+  ) {
+    return (
+      <>
+        {renderNavtaContent(
+          text
+        )}
+
+        <NavtaVisual
+          question={question}
+          className={
+            visualClassName
+          }
+          shellClassName={
+            visualShellClassName
+          }
+        />
+      </>
+    );
+  }
+
+  const [
+    beforeVisual,
+    ...afterParts
+  ] =
+    text.split(
+      NAVTA_VISUAL_MARKER
+    );
+
+  const afterVisual =
+    afterParts.join("");
+
+  return (
+    <>
+      {renderNavtaContent(
+        beforeVisual
+      )}
+
+      <NavtaVisual
+        question={question}
+        className={
+          visualClassName
+        }
+        shellClassName={
+          visualShellClassName
+        }
+      />
+
+      {renderNavtaContent(
+        afterVisual
+      )}
+    </>
+  );
+}
+
 
 // =====================================================
 // MAIN COMPONENT
@@ -3460,26 +3628,12 @@ export default function AdminNavtaTest() {
                                   </span>
 
                                   <div className="admin-navta-review-text">
-                                    {getNavtaQuestionImage(question)?.url && (
-                                      <div className="admin-navta-question-preview-image-shell">
-                                        <img
-                                          src={getNavtaQuestionImage(question).url}
-                                          alt={getNavtaQuestionImage(question).altText}
-                                          className="admin-navta-question-preview-image"
-                                          loading="lazy"
-                                          decoding="async"
-                                          onError={(event) => {
-                                            event.currentTarget.style.display = "none";
-                                          }}
-                                        />
-                                      </div>
-                                    )}
-
                                     <div className="admin-navta-rendered-question">
-                                      {renderNavtaContent(
-                                        question.question ||
-                                          "Question text unavailable"
-                                      )}
+                                      <NavtaQuestionContent
+                                        question={question}
+                                        visualClassName="admin-navta-question-preview-image"
+                                        visualShellClassName="admin-navta-question-preview-image-shell"
+                                      />
                                     </div>
                                   </div>
 
