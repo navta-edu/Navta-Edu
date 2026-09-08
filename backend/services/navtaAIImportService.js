@@ -77,6 +77,7 @@ const ALLOWED_CHAPTERS = {
       "Oscillations",
       "Waves",
     ],
+
     "Class 12": [
       "Electric Charges and Fields",
       "Electrostatic Potential and Capacitance",
@@ -107,6 +108,7 @@ const ALLOWED_CHAPTERS = {
       "Organic Chemistry: Some Basic Principles and Techniques",
       "Hydrocarbons",
     ],
+
     "Class 12": [
       "Solutions",
       "Electrochemistry",
@@ -138,6 +140,7 @@ const ALLOWED_CHAPTERS = {
       "Statistics",
       "Probability",
     ],
+
     "Class 12": [
       "Relations and Functions",
       "Inverse Trigonometric Functions",
@@ -177,6 +180,7 @@ const ALLOWED_CHAPTERS = {
       "Neural Control and Coordination",
       "Chemical Coordination and Integration",
     ],
+
     "Class 12": [
       "Sexual Reproduction in Flowering Plants",
       "Human Reproduction",
@@ -229,8 +233,6 @@ const QUESTION_PROCESS_CONCURRENCY = Math.max(
   )
 );
 
-// Better PDF render quality for diagram crops.
-// 2.2 is a safe default: clearer diagrams without making uploads too slow.
 const NAVTA_AI_PDF_RENDER_SCALE = Math.max(
   1.6,
   Math.min(
@@ -241,26 +243,13 @@ const NAVTA_AI_PDF_RENDER_SCALE = Math.max(
   )
 );
 
-// Padding is normalized to the page size.
-// 0.07 means 7% page padding around a diagram box.
 const NAVTA_AI_VISUAL_CROP_PADDING = Math.max(
   0,
   Math.min(
     0.15,
     Number(
-      process.env.NAVTA_AI_VISUAL_CROP_PADDING || 0.07
-    ) || 0.07
-  )
-);
-
-// Fallback full-question crop needs smaller padding.
-const NAVTA_AI_QUESTION_CROP_PADDING = Math.max(
-  0,
-  Math.min(
-    0.1,
-    Number(
-      process.env.NAVTA_AI_QUESTION_CROP_PADDING || 0.04
-    ) || 0.04
+      process.env.NAVTA_AI_VISUAL_CROP_PADDING || 0.025
+    ) || 0.025
   )
 );
 
@@ -408,7 +397,6 @@ const normalizeBoundingBox = (
     return null;
   }
 
-  // Gemini sometimes returns percentages instead of 0-1 values.
   if (
     x > 1 ||
     y > 1 ||
@@ -587,6 +575,20 @@ const isUsableVisualBoundingBox = (
   );
 };
 
+// =====================================================
+// IMPORTANT VISUAL CROP RULE
+// =====================================================
+//
+// We DO NOT fall back to the full questionBoundingBox.
+//
+// If Gemini detects a real visual, it must provide a usable
+// visualBoundingBox.
+//
+// This prevents NAVTA from storing the entire question as
+// a giant screenshot when only a diagram/reaction/graph is
+// required.
+// =====================================================
+
 const resolveBestVisualCropBox = (
   question = {}
 ) => {
@@ -595,58 +597,32 @@ const resolveBestVisualCropBox = (
       question.visualBoundingBox
     );
 
-  const questionBox =
-    normalizeBoundingBox(
-      question.questionBoundingBox
-    );
-
   if (
-    isUsableVisualBoundingBox(
+    !isUsableVisualBoundingBox(
       visualBox
     )
   ) {
     return {
       box:
-        expandBoundingBox(
-          visualBox,
-          NAVTA_AI_VISUAL_CROP_PADDING
-        ),
+        null,
 
       originalBox:
-        visualBox,
+        null,
 
       usedFallback:
         false,
     };
   }
 
-  // Fallback: when Gemini detects a visual but the diagram box is missing,
-  // too tiny, or unreliable, crop the whole question area instead.
-  // This is better than saving a cut-off or blank diagram.
-  if (
-    questionBox
-  ) {
-    return {
-      box:
-        expandBoundingBox(
-          questionBox,
-          NAVTA_AI_QUESTION_CROP_PADDING
-        ),
-
-      originalBox:
-        questionBox,
-
-      usedFallback:
-        true,
-    };
-  }
-
   return {
     box:
-      null,
+      expandBoundingBox(
+        visualBox,
+        NAVTA_AI_VISUAL_CROP_PADDING
+      ),
 
     originalBox:
-      null,
+      visualBox,
 
     usedFallback:
       false,
@@ -775,21 +751,6 @@ const normalizeClassLevel = (
 
 // =====================================================
 // VALIDATE QUESTION
-// =====================================================
-//
-// IMPORTANT:
-//
-// Ordinary equations / matrices / determinants
-// DO NOT require a screenshot.
-//
-// Images are optional and only used when:
-//
-// hasVisual = true
-//
-// AND:
-//
-// visualBoundingBox exists.
-//
 // =====================================================
 
 const validateDetectedQuestion = (
@@ -920,10 +881,7 @@ const validateDetectedQuestion = (
     hasVisual:
       Boolean(
         hasDetectedVisual &&
-        (
-          normalizedVisualBoundingBox ||
-          normalizedQuestionBoundingBox
-        )
+        normalizedVisualBoundingBox
       ),
 
     visualType:
@@ -972,10 +930,6 @@ const validateDetectedQuestion = (
   const reasons =
     [];
 
-  // =========================================
-  // DROP
-  // =========================================
-
   if (
     question.drop
   ) {
@@ -987,10 +941,6 @@ const validateDetectedQuestion = (
     );
   }
 
-  // =========================================
-  // QUESTION
-  // =========================================
-
   if (
     !question.question
   ) {
@@ -998,10 +948,6 @@ const validateDetectedQuestion = (
       "Question text is missing."
     );
   }
-
-  // =========================================
-  // SUBJECT
-  // =========================================
 
   if (
     !VALID_SUBJECTS.has(
@@ -1013,10 +959,6 @@ const validateDetectedQuestion = (
     );
   }
 
-  // =========================================
-  // EXAM
-  // =========================================
-
   if (
     !VALID_EXAMS.has(
       question.exam
@@ -1027,10 +969,6 @@ const validateDetectedQuestion = (
     );
   }
 
-  // =========================================
-  // CLASS
-  // =========================================
-
   if (
     !VALID_CLASSES.has(
       question.classLevel
@@ -1040,10 +978,6 @@ const validateDetectedQuestion = (
       "Class level could not be identified."
     );
   }
-
-  // =========================================
-  // CHAPTER
-  // =========================================
 
   if (
     !question.chapter
@@ -1082,10 +1016,6 @@ const validateDetectedQuestion = (
       true;
   }
 
-  // =========================================
-  // DIFFICULTY
-  // =========================================
-
   if (
     !VALID_DIFFICULTIES.has(
       question.difficulty
@@ -1098,10 +1028,6 @@ const validateDetectedQuestion = (
       true;
   }
 
-  // =========================================
-  // QUESTION TYPE
-  // =========================================
-
   if (
     !VALID_QUESTION_TYPES.has(
       question.questionType
@@ -1111,10 +1037,6 @@ const validateDetectedQuestion = (
       "Question type could not be identified."
     );
   }
-
-  // =========================================
-  // JEE / NEET
-  // =========================================
 
   if (
     [
@@ -1130,10 +1052,6 @@ const validateDetectedQuestion = (
       `${question.exam} questions must be MCQ.`
     );
   }
-
-  // =========================================
-  // MCQ
-  // =========================================
 
   if (
     question.questionType ===
@@ -1173,10 +1091,6 @@ const validateDetectedQuestion = (
         "NAVTA AI could not determine the MCQ answer confidently during the PDF analysis.";
     }
   }
-
-  // =========================================
-  // CONFIDENCE REVIEW RULES
-  // =========================================
 
   if (
     question.chapterConfidence !==
@@ -1218,10 +1132,6 @@ const validateDetectedQuestion = (
       true;
   }
 
-  // =========================================
-  // NO VISUAL
-  // =========================================
-
   if (
     !question.hasVisual
   ) {
@@ -1245,15 +1155,8 @@ const validateDetectedQuestion = (
     question,
   };
 };
-
 // =====================================================
 // PROCESS GENUINE VISUAL WITH SAFE CROP
-// =====================================================
-//
-// NAVTA stores a screenshot only for genuine diagrams / graphs / figures.
-// The crop is padded because Gemini bounding boxes are often slightly tight.
-// If visualBoundingBox is missing or too small, NAVTA falls back to the full
-// questionBoundingBox so the admin/student never receives a half-cut diagram.
 // =====================================================
 
 const processQuestionVisual =
@@ -1299,7 +1202,7 @@ const processQuestionVisual =
           null,
 
         screenshotWarning:
-          "NAVTA detected a visual but no usable diagram or question crop box was available.",
+          "NAVTA detected a visual but no usable visualBoundingBox was available. Whole-question visual fallback is disabled.",
       };
     }
 
@@ -1389,11 +1292,6 @@ const processQuestionVisual =
         };
       }
 
-      const fallbackWarning =
-        crop.usedFallback
-          ? "NAVTA used the full question crop because the detected diagram crop was missing, too small, or unreliable."
-          : null;
-
       return {
         questionImage: {
           url:
@@ -1432,13 +1330,11 @@ const processQuestionVisual =
             crop.originalBox,
 
           usedFallbackCrop:
-            Boolean(
-              crop.usedFallback
-            ),
+            false,
         },
 
         screenshotWarning:
-          fallbackWarning,
+          null,
       };
     } catch (
       error
@@ -1571,9 +1467,9 @@ const buildImportQuestion = ({
     },
   };
 
-  // =========================================
+  // ===================================================
   // MCQ
-  // =========================================
+  // ===================================================
 
   if (
     question.questionType ===
@@ -1602,9 +1498,9 @@ const buildImportQuestion = ({
     }
   }
 
-  // =========================================
-  // WRITTEN
-  // =========================================
+  // ===================================================
+  // SHORT / LONG ANSWER
+  // ===================================================
 
   if (
     [
@@ -1638,9 +1534,9 @@ const buildImportQuestion = ({
     }
   }
 
-  // =========================================
-  // REAL VISUAL ONLY
-  // =========================================
+  // ===================================================
+  // QUESTION VISUAL
+  // ===================================================
 
   if (
     questionImage?.url
@@ -1660,6 +1556,10 @@ const buildImportQuestion = ({
       [];
   }
 
+  // ===================================================
+  // VISUAL WARNING
+  // ===================================================
+
   if (
     visualWarning
   ) {
@@ -1675,6 +1575,15 @@ const buildImportQuestion = ({
 
 // =====================================================
 // LIMITED CONCURRENCY
+// =====================================================
+//
+// This prevents NAVTA from trying to process/upload too
+// many question diagrams simultaneously.
+//
+// It also helps reduce:
+// - server load
+// - Cloudinary load
+// - memory spikes
 // =====================================================
 
 const mapWithConcurrency = async (
@@ -1758,12 +1667,15 @@ const mapWithConcurrency = async (
 // IMPORT-LEVEL DUPLICATE GUARD
 // =====================================================
 //
-// This is a second safety layer after AI-service dedupe.
-// It runs BEFORE visual cropping / Cloudinary upload so a
-// duplicate question does not waste image processing.
+// AI can occasionally detect the same question twice,
+// especially when:
 //
-// The controller performs one more database-level check
-// before saving approved questions.
+// - a question crosses page boundaries
+// - a PDF has unusual spacing
+// - the same question number is visually repeated
+//
+// We therefore create a simplified fingerprint before
+// continuing with visual processing.
 // =====================================================
 
 const normalizeImportFingerprintText = (
@@ -1773,32 +1685,52 @@ const normalizeImportFingerprintText = (
     value
   )
     .toLowerCase()
+
+    // Remove leading question numbers such as:
+    // 1.
+    // 1)
+    // Q1.
+    // Question 1:
     .replace(
       /^\s*(?:q(?:uestion)?\.?\s*)?\d+[a-z]?\s*[\).:\-]\s*/i,
       ""
     )
+
+    // Remove common LaTeX delimiters
     .replace(
       /\$\$?/g,
       " "
     )
+
+    // Remove formatting-only LaTeX commands
     .replace(
       /\\(?:left|right|mathrm|mathbf|mathit|text)\b/g,
       ""
     )
+
+    // Remove begin/end environment declarations
     .replace(
       /\\begin\{[^}]+\}|\\end\{[^}]+\}/g,
       " "
     )
+
+    // Keep only useful comparison characters
     .replace(
       /[^a-z0-9]+/g,
       " "
     )
+
     .replace(
       /\s+/g,
       " "
     )
+
     .trim();
 };
+
+// =====================================================
+// BUILD QUESTION FINGERPRINT
+// =====================================================
 
 const buildImportFingerprint = (
   question = {}
@@ -1815,13 +1747,21 @@ const buildImportFingerprint = (
       .map(
         normalizeImportFingerprintText
       )
-      .filter(Boolean)
-      .join("|");
+      .filter(
+        Boolean
+      )
+      .join(
+        "|"
+      );
 
   return stem
     ? `${stem}||${options}`
     : "";
 };
+
+// =====================================================
+// REMOVE DUPLICATE QUESTIONS
+// =====================================================
 
 const removeImportDuplicates = (
   questions = []
@@ -1881,7 +1821,6 @@ const removeImportDuplicates = (
 
   return result;
 };
-
 // =====================================================
 // PROCESS PDF
 // =====================================================
@@ -1892,9 +1831,9 @@ const processPdfImport =
     documentResult,
     hints,
   }) => {
-    // =========================================
-    // RENDER PDF
-    // =========================================
+    // =================================================
+    // RENDER PDF PAGES
+    // =================================================
 
     const rendered =
       await renderPdfPages({
@@ -1920,9 +1859,24 @@ const processPdfImport =
       `NAVTA rendered ${rendered.pages.length} PDF page(s).`
     );
 
-    // =========================================
-    // AI ANALYSIS
-    // =========================================
+    // =================================================
+    // ANALYSE PDF WITH NAVTA AI
+    // =================================================
+    //
+    // IMPORTANT:
+    //
+    // analyseRenderedPages() already processes the
+    // rendered PDF pages using the batching system in:
+    //
+    // navtaAIQuestionService.js
+    //
+    // Do NOT call Gemini once again for every question
+    // here.
+    //
+    // This prevents the old problem where a 5-page PDF
+    // could generate many unnecessary Gemini requests
+    // and hit the API quota.
+    // =================================================
 
     const detectedQuestionsRaw =
       await analyseRenderedPages({
@@ -1936,6 +1890,10 @@ const processPdfImport =
         hints,
       });
 
+    // =================================================
+    // SECOND DUPLICATE PROTECTION
+    // =================================================
+
     const detectedQuestions =
       removeImportDuplicates(
         detectedQuestionsRaw
@@ -1945,9 +1903,9 @@ const processPdfImport =
       `NAVTA AI detected ${detectedQuestions.length} unique question(s) before validation.`
     );
 
-    // =========================================
-    // PAGE MAP
-    // =========================================
+    // =================================================
+    // CREATE PAGE LOOKUP
+    // =================================================
 
     const pageMap =
       new Map(
@@ -1962,15 +1920,15 @@ const processPdfImport =
         )
       );
 
+    // =================================================
+    // VALIDATE QUESTIONS
+    // =================================================
+
     const preliminaryAccepted =
       [];
 
     const droppedQuestions =
       [];
-
-    // =========================================
-    // VALIDATION
-    // =========================================
 
     for (
       const rawQuestion of
@@ -2015,9 +1973,40 @@ const processPdfImport =
       `NAVTA preliminary dropped: ${droppedQuestions.length}`
     );
 
-    // =========================================
+    // =================================================
     // PROCESS VISUALS
-    // =========================================
+    // =================================================
+    //
+    // Normal equations are NOT screenshots.
+    //
+    // Examples that remain text/LaTeX:
+    //
+    // x² + y² = r²
+    //
+    // \frac{a}{b}
+    //
+    // \int x dx
+    //
+    // matrices
+    //
+    // determinants
+    //
+    // vectors
+    //
+    // chemical formulas that can be represented using
+    // text/Unicode/LaTeX
+    //
+    // Real visual objects may become images:
+    //
+    // graph
+    // circuit
+    // geometry diagram
+    // biology diagram
+    // organic structure
+    // reaction scheme
+    // apparatus
+    // labelled scientific figure
+    // =================================================
 
     const processed =
       await mapWithConcurrency(
@@ -2035,13 +2024,9 @@ const processPdfImport =
               )
             );
 
-          // =====================================
-          // NORMAL TEXT / MATH
-          // =====================================
-          //
-          // No screenshot.
-          // No Cloudinary upload.
-          //
+          // =============================================
+          // NO REAL VISUAL
+          // =============================================
 
           if (
             !question.hasVisual
@@ -2066,9 +2051,9 @@ const processPdfImport =
             };
           }
 
-          // =====================================
-          // ACTUAL VISUAL
-          // =====================================
+          // =============================================
+          // REAL VISUAL
+          // =============================================
 
           const visual =
             await processQuestionVisual({
@@ -2104,20 +2089,25 @@ const processPdfImport =
         }
       );
 
-    // =========================================
-    // FINAL QUESTIONS
-    // =========================================
+    // =================================================
+    // FINAL ACCEPTED QUESTIONS
+    // =================================================
 
     const acceptedQuestions =
       processed
         .filter(
           (item) =>
-            item?.accepted
+            item?.accepted &&
+            item?.question
         )
         .map(
           (item) =>
             item.question
         );
+
+    // =================================================
+    // RETURN PDF RESULT
+    // =================================================
 
     return {
       acceptedQuestions,
@@ -2146,7 +2136,7 @@ const processPdfImport =
   };
 
 // =====================================================
-// TXT / DOCX
+// PROCESS TXT / DOCX
 // =====================================================
 
 const processTextImport =
@@ -2156,7 +2146,11 @@ const processTextImport =
     hints,
     fileType,
   }) => {
-    const detectedQuestions =
+    // =================================================
+    // AI QUESTION SEPARATION
+    // =================================================
+
+    const detectedQuestionsRaw =
       await analyseTextQuestions({
         text:
           documentResult?.text ||
@@ -2165,11 +2159,24 @@ const processTextImport =
         hints,
       });
 
+    // =================================================
+    // DUPLICATE PROTECTION
+    // =================================================
+
+    const detectedQuestions =
+      removeImportDuplicates(
+        detectedQuestionsRaw
+      );
+
     const acceptedQuestions =
       [];
 
     const droppedQuestions =
       [];
+
+    // =================================================
+    // VALIDATE EACH QUESTION
+    // =================================================
 
     for (
       const rawQuestion of
@@ -2217,6 +2224,10 @@ const processTextImport =
       );
     }
 
+    // =================================================
+    // RETURN TXT / DOCX RESULT
+    // =================================================
+
     return {
       acceptedQuestions,
 
@@ -2241,7 +2252,7 @@ const processTextImport =
   };
 
 // =====================================================
-// MAIN IMPORT
+// MAIN NAVTA AI IMPORT
 // =====================================================
 
 const analyseNavtaImport =
@@ -2252,9 +2263,9 @@ const analyseNavtaImport =
     classLevel,
     chapter,
   }) => {
-    // =========================================
-    // FILE CHECK
-    // =========================================
+    // =================================================
+    // FILE VALIDATION
+    // =================================================
 
     if (
       !file
@@ -2276,9 +2287,9 @@ const analyseNavtaImport =
       );
     }
 
-    // =========================================
+    // =================================================
     // FILE TYPE
-    // =========================================
+    // =================================================
 
     const fileType =
       getFileType(
@@ -2299,18 +2310,22 @@ const analyseNavtaImport =
       );
     }
 
-    // =========================================
-    // EXTRACT DOCUMENT
-    // =========================================
+    console.log(
+      `NAVTA AI import started: ${file.originalname}`
+    );
+
+    // =================================================
+    // EXTRACT DOCUMENT CONTENT
+    // =================================================
 
     const documentResult =
       await processNavtaDocument(
         file
       );
 
-    // =========================================
-    // ADMIN HINTS
-    // =========================================
+    // =================================================
+    // NORMALIZE ADMIN SELECTIONS
+    // =================================================
 
     const hints = {
       subject:
@@ -2334,15 +2349,24 @@ const analyseNavtaImport =
         ),
     };
 
+    // =================================================
+    // GET CHAPTER WHITELIST
+    // =================================================
+
     hints.allowedChapters =
       getAllowedChapters(
         hints.subject,
         hints.classLevel
       );
 
+    // =================================================
+    // VALIDATE SELECTED CHAPTER
+    // =================================================
+
     if (
       hints.chapter &&
-      hints.allowedChapters.length > 0 &&
+      hints.allowedChapters.length >
+        0 &&
       !hints.allowedChapters.includes(
         hints.chapter
       )
@@ -2352,9 +2376,9 @@ const analyseNavtaImport =
       );
     }
 
-    // =========================================
-    // PROCESS
-    // =========================================
+    // =================================================
+    // PROCESS DOCUMENT
+    // =================================================
 
     const result =
       fileType ===
@@ -2376,9 +2400,9 @@ const analyseNavtaImport =
             fileType,
           });
 
-    // =========================================
-    // NEEDS REVIEW
-    // =========================================
+    // =================================================
+    // COUNT QUESTIONS NEEDING REVIEW
+    // =================================================
 
     const needsReview =
       result.acceptedQuestions.filter(
@@ -2386,26 +2410,39 @@ const analyseNavtaImport =
           question.needsReview
       ).length;
 
-    // =========================================
-    // RETURN
-    // =========================================
+    // =================================================
+    // FINAL SUMMARY
+    // =================================================
+
+    const summary = {
+      detected:
+        result.acceptedQuestions.length +
+        result.droppedQuestions.length,
+
+      accepted:
+        result.acceptedQuestions.length,
+
+      dropped:
+        result.droppedQuestions.length,
+
+      needsReview,
+    };
+
+    console.log(
+      `NAVTA AI import completed: ${file.originalname}`,
+      JSON.stringify(
+        summary
+      )
+    );
+
+    // =================================================
+    // FINAL RESPONSE
+    // =================================================
 
     return {
       ...result,
 
-      summary: {
-        detected:
-          result.acceptedQuestions.length +
-          result.droppedQuestions.length,
-
-        accepted:
-          result.acceptedQuestions.length,
-
-        dropped:
-          result.droppedQuestions.length,
-
-        needsReview,
-      },
+      summary,
     };
   };
 
