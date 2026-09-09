@@ -695,9 +695,28 @@ function wrapBareNavtaLatex(
 function renderNavtaContent(
   input = ""
 ) {
+  // Never allow the internal NAVTA visual placeholder
+  // to appear as student-facing text.
+  const safeInput =
+    String(
+      input ?? ""
+    )
+      .replace(
+        /\[\[\s*NAVTA[_\s-]*VISUAL\s*\]\]/gi,
+        ""
+      )
+      .replace(
+        /\[\s*NAVTA[_\s-]*VISUAL\s*\]/gi,
+        ""
+      )
+      .replace(
+        /\bNAVTA[_\s-]+VISUAL\b/gi,
+        ""
+      );
+
   let value =
     normaliseNavtaLatex(
-      input
+      safeInput
     );
 
   if (!value) {
@@ -811,71 +830,169 @@ function renderNavtaContent(
 const NAVTA_VISUAL_MARKER =
   "[[NAVTA_VISUAL]]";
 
-function getNavtaQuestionImage(question) {
-  const visualType = String(
-    question?.visualType || "none"
-  ).trim();
+function normaliseNavtaVisualMarker(
+  input = ""
+) {
+  return String(
+    input ?? ""
+  )
+    .replace(
+      /\[\[\s*NAVTA[_\s-]*VISUAL\s*\]\]/gi,
+      NAVTA_VISUAL_MARKER
+    )
+    .replace(
+      /\[\s*NAVTA[_\s-]*VISUAL\s*\]/gi,
+      NAVTA_VISUAL_MARKER
+    )
+    .replace(
+      /\bNAVTA[_\s-]+VISUAL\b/gi,
+      NAVTA_VISUAL_MARKER
+    );
+}
 
-  const hasRealVisual =
-    Boolean(
-      question?.hasVisual
-    ) &&
-    visualType !== "none";
+function getNavtaQuestionImage(
+  question
+) {
+  // ==========================================
+  // PRIMARY IMAGE
+  // ==========================================
+  //
+  // IMPORTANT:
+  // Do NOT require hasVisual or visualType here.
+  //
+  // Older NAVTA questions can already contain a
+  // valid Cloudinary questionImage URL even when
+  // those metadata fields were not saved.
+  // ==========================================
 
-  if (!hasRealVisual) {
-    return null;
-  }
+  const primaryImage =
+    question?.questionImage;
 
-  const primaryUrl = String(
-    question?.questionImage?.url || ""
-  ).trim();
+  const primaryUrl =
+    typeof primaryImage ===
+      "string"
+      ? primaryImage.trim()
+      : String(
+          primaryImage?.url ||
+            ""
+        ).trim();
 
   if (primaryUrl) {
     return {
-      url: primaryUrl,
+      url:
+        primaryUrl,
+
       altText:
         String(
-          question?.questionImage?.altText ||
-            question?.visualDescription ||
-            question?.questionNumber ||
-            "NAVTA question visual"
+          typeof primaryImage ===
+            "object"
+            ? (
+                primaryImage?.altText ||
+                question?.visualDescription ||
+                question?.questionNumber ||
+                "Question visual"
+              )
+            : (
+                question?.visualDescription ||
+                question?.questionNumber ||
+                "Question visual"
+              )
         ).trim() ||
-        "NAVTA question visual",
-      visualType,
+        "Question visual",
+
+      visualType:
+        String(
+          question?.visualType ||
+            (
+              typeof primaryImage ===
+                "object"
+                ? primaryImage?.visualType
+                : ""
+            ) ||
+            "other"
+        ).trim() ||
+        "other",
     };
   }
+
+  // ==========================================
+  // FALLBACK IMAGE ARRAY
+  // ==========================================
 
   const firstImage =
     Array.isArray(
       question?.questionImages
     )
       ? question.questionImages.find(
-          (image) =>
-            image &&
-            typeof image === "object" &&
-            String(
-              image.url || ""
-            ).trim()
+          (image) => {
+            if (
+              typeof image ===
+              "string"
+            ) {
+              return Boolean(
+                image.trim()
+              );
+            }
+
+            return Boolean(
+              image &&
+              typeof image ===
+                "object" &&
+              String(
+                image.url || ""
+              ).trim()
+            );
+          }
         )
       : null;
 
   if (firstImage) {
-    return {
-      url: String(
-        firstImage.url || ""
-      ).trim(),
+    const imageUrl =
+      typeof firstImage ===
+        "string"
+        ? firstImage.trim()
+        : String(
+            firstImage.url ||
+              ""
+          ).trim();
 
-      altText:
-        String(
-          firstImage.altText ||
-            question?.visualDescription ||
-            question?.questionNumber ||
-            "NAVTA question visual"
-        ).trim() ||
-        "NAVTA question visual",
+    if (imageUrl) {
+      return {
+        url:
+          imageUrl,
 
-      visualType,
-    };
+        altText:
+          String(
+            typeof firstImage ===
+              "object"
+              ? (
+                  firstImage.altText ||
+                  question?.visualDescription ||
+                  question?.questionNumber ||
+                  "Question visual"
+                )
+              : (
+                  question?.visualDescription ||
+                  question?.questionNumber ||
+                  "Question visual"
+                )
+          ).trim() ||
+          "Question visual",
+
+        visualType:
+          String(
+            question?.visualType ||
+              (
+                typeof firstImage ===
+                  "object"
+                  ? firstImage.visualType
+                  : ""
+              ) ||
+              "other"
+          ).trim() ||
+          "other",
+      };
+    }
   }
 
   return null;
@@ -913,6 +1030,7 @@ function NavtaVisual({
         className={className}
         loading="eager"
         decoding="async"
+        referrerPolicy="no-referrer"
         style={{
           display: "block",
           maxWidth: "100%",
@@ -920,8 +1038,14 @@ function NavtaVisual({
           height: "auto",
           maxHeight: "420px",
           objectFit: "contain",
+          borderRadius: "10px",
         }}
         onError={(event) => {
+          console.error(
+            "NAVTA question visual failed to load:",
+            image.url
+          );
+
           event.currentTarget.style.display =
             "none";
         }}
@@ -935,9 +1059,17 @@ function NavtaQuestionContent({
   visualClassName = "",
   visualShellClassName = "",
 }) {
-  const text =
+  const rawText =
     String(
-      question?.question || ""
+      question?.question ||
+        ""
+    );
+
+  // Normalize older or slightly malformed NAVTA
+  // visual placeholders to one internal marker.
+  const text =
+    normaliseNavtaVisualMarker(
+      rawText
     );
 
   const image =
@@ -945,26 +1077,67 @@ function NavtaQuestionContent({
       question
     );
 
-  if (!image?.url) {
+  const parts =
+    text.split(
+      NAVTA_VISUAL_MARKER
+    );
+
+  // ==========================================
+  // IMAGE + MARKER
+  // ==========================================
+  //
+  // Replace [[NAVTA_VISUAL]] with the actual
+  // screenshot at the exact marker location.
+  // ==========================================
+
+  if (
+    image?.url &&
+    parts.length >
+      1
+  ) {
+    const beforeVisual =
+      parts[0] ||
+      "";
+
+    const afterVisual =
+      parts
+        .slice(1)
+        .join("");
+
     return (
       <>
         {renderNavtaContent(
-          text
-            .split(
-              NAVTA_VISUAL_MARKER
-            )
-            .join("")
-            .trim()
+          beforeVisual
+        )}
+
+        <NavtaVisual
+          question={
+            question
+          }
+          className={
+            visualClassName
+          }
+          shellClassName={
+            visualShellClassName
+          }
+        />
+
+        {renderNavtaContent(
+          afterVisual
         )}
       </>
     );
   }
 
-  if (
-    !text.includes(
-      NAVTA_VISUAL_MARKER
-    )
-  ) {
+  // ==========================================
+  // IMAGE WITHOUT MARKER
+  // ==========================================
+  //
+  // Older saved questions may have an image URL
+  // but no marker. Show the image after the text.
+  // ==========================================
+
+  if (image?.url) {
     return (
       <>
         {renderNavtaContent(
@@ -972,7 +1145,9 @@ function NavtaQuestionContent({
         )}
 
         <NavtaVisual
-          question={question}
+          question={
+            question
+          }
           className={
             visualClassName
           }
@@ -984,35 +1159,22 @@ function NavtaQuestionContent({
     );
   }
 
-  const [
-    beforeVisual,
-    ...afterParts
-  ] =
-    text.split(
-      NAVTA_VISUAL_MARKER
-    );
+  // ==========================================
+  // NO IMAGE
+  // ==========================================
+  //
+  // Never show NAVTA_VISUAL text to students.
+  // ==========================================
 
-  const afterVisual =
-    afterParts.join("");
+  const cleanText =
+    parts
+      .join("")
+      .trim();
 
   return (
     <>
       {renderNavtaContent(
-        beforeVisual
-      )}
-
-      <NavtaVisual
-        question={question}
-        className={
-          visualClassName
-        }
-        shellClassName={
-          visualShellClassName
-        }
-      />
-
-      {renderNavtaContent(
-        afterVisual
+        cleanText
       )}
     </>
   );
