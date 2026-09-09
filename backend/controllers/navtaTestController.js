@@ -1905,6 +1905,122 @@ exports.confirmAIImport = async (req, res) => {
       }
 
       // ======================================
+      // PRESERVE NAVTA VISUAL METADATA
+      // ======================================
+
+      const hasSavedVisualImage =
+        Boolean(
+          payload.questionImage?.url
+        ) ||
+        (
+          Array.isArray(
+            payload.questionImages
+          ) &&
+          payload.questionImages.some(
+            (image) =>
+              Boolean(
+                typeof image === "string"
+                  ? image.trim()
+                  : image?.url
+              )
+          )
+        );
+
+      payload.hasVisual =
+        Boolean(
+          rawQuestion.hasVisual ||
+          hasSavedVisualImage
+        );
+
+      payload.visualType =
+        payload.hasVisual
+          ? (
+              String(
+                rawQuestion.visualType ||
+                "other"
+              ).trim() ||
+              "other"
+            )
+          : "none";
+
+      payload.visualDescription =
+        String(
+          rawQuestion.visualDescription ||
+          ""
+        ).trim();
+
+      if (
+        rawQuestion.visualBoundingBox &&
+        typeof rawQuestion
+          .visualBoundingBox ===
+          "object"
+      ) {
+        const visualBox =
+          rawQuestion.visualBoundingBox;
+
+        const visualX =
+          Number(
+            visualBox.x
+          );
+
+        const visualY =
+          Number(
+            visualBox.y
+          );
+
+        const visualWidth =
+          Number(
+            visualBox.width
+          );
+
+        const visualHeight =
+          Number(
+            visualBox.height
+          );
+
+        if (
+          Number.isFinite(
+            visualX
+          ) &&
+          Number.isFinite(
+            visualY
+          ) &&
+          Number.isFinite(
+            visualWidth
+          ) &&
+          Number.isFinite(
+            visualHeight
+          ) &&
+          visualX >= 0 &&
+          visualY >= 0 &&
+          visualWidth > 0 &&
+          visualHeight > 0 &&
+          visualX <= 1 &&
+          visualY <= 1 &&
+          visualX +
+            visualWidth <=
+            1.0001 &&
+          visualY +
+            visualHeight <=
+            1.0001
+        ) {
+          payload.visualBoundingBox = {
+            x:
+              visualX,
+
+            y:
+              visualY,
+
+            width:
+              visualWidth,
+
+            height:
+              visualHeight,
+          };
+        }
+      }
+
+      // ======================================
       // PRESERVE AI SOURCE DOCUMENT
       // ======================================
 
@@ -2357,9 +2473,13 @@ exports.generateTest = async (req, res) => {
             explanation: 1,
             chapter: 1,
 
-            // Screenshot-first AI questions
+            // NAVTA AI visual / screenshot fields
             questionImage: 1,
             questionImages: 1,
+            hasVisual: 1,
+            visualType: 1,
+            visualDescription: 1,
+            visualBoundingBox: 1,
             studentQuestionFormat: 1,
             sourceDocument: 1,
           },
@@ -3052,8 +3172,63 @@ exports.generateBossBattle = async (req, res) => {
               ? question.questionImages
               : [],
 
+          hasVisual:
+            Boolean(
+              question.hasVisual ||
+              question.questionImage?.url ||
+              (
+                Array.isArray(
+                  question.questionImages
+                ) &&
+                question.questionImages.some(
+                  (image) =>
+                    Boolean(
+                      typeof image === "string"
+                        ? image.trim()
+                        : image?.url
+                    )
+                )
+              )
+            ),
+
+          visualType:
+            String(
+              question.visualType ||
+              (
+                question.questionImage?.url
+                  ? "other"
+                  : "none"
+              )
+            ).trim() ||
+            "none",
+
+          visualDescription:
+            String(
+              question.visualDescription ||
+              ""
+            ).trim(),
+
+          visualBoundingBox:
+            question.visualBoundingBox ||
+            null,
+
           studentQuestionFormat:
-            question.questionImage?.url
+            (
+              question.questionImage?.url ||
+              (
+                Array.isArray(
+                  question.questionImages
+                ) &&
+                question.questionImages.some(
+                  (image) =>
+                    Boolean(
+                      typeof image === "string"
+                        ? image.trim()
+                        : image?.url
+                    )
+                )
+              )
+            )
               ? "image"
               : (
                   question.studentQuestionFormat ||
@@ -3982,8 +4157,63 @@ exports.generateRevengeBattle = async (req, res) => {
               ? question.questionImages
               : [],
 
+          hasVisual:
+            Boolean(
+              question.hasVisual ||
+              question.questionImage?.url ||
+              (
+                Array.isArray(
+                  question.questionImages
+                ) &&
+                question.questionImages.some(
+                  (image) =>
+                    Boolean(
+                      typeof image === "string"
+                        ? image.trim()
+                        : image?.url
+                    )
+                )
+              )
+            ),
+
+          visualType:
+            String(
+              question.visualType ||
+              (
+                question.questionImage?.url
+                  ? "other"
+                  : "none"
+              )
+            ).trim() ||
+            "none",
+
+          visualDescription:
+            String(
+              question.visualDescription ||
+              ""
+            ).trim(),
+
+          visualBoundingBox:
+            question.visualBoundingBox ||
+            null,
+
           studentQuestionFormat:
-            question.questionImage?.url
+            (
+              question.questionImage?.url ||
+              (
+                Array.isArray(
+                  question.questionImages
+                ) &&
+                question.questionImages.some(
+                  (image) =>
+                    Boolean(
+                      typeof image === "string"
+                        ? image.trim()
+                        : image?.url
+                    )
+                )
+              )
+            )
               ? "image"
               : (
                   question.studentQuestionFormat ||
