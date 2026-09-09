@@ -1179,6 +1179,11 @@ export default function AdminNavtaTest() {
   ] = useState("");
 
   const [
+    deletingFilteredQuestions,
+    setDeletingFilteredQuestions
+  ] = useState(false);
+
+  const [
     questionFilters,
     setQuestionFilters
   ] = useState({
@@ -1392,6 +1397,206 @@ export default function AdminNavtaTest() {
       } finally {
         setDeletingQuestionId(
           ""
+        );
+      }
+    };
+
+  // ===================================================
+  // BULK DELETE FILTERED QUESTIONS
+  // ===================================================
+
+  const getActiveQuestionFilters =
+    (
+      filters = questionFilters
+    ) => {
+      return Object.fromEntries(
+        Object.entries(
+          filters
+        )
+          .map(
+            ([key, value]) => [
+              key,
+              String(
+                value || ""
+              ).trim(),
+            ]
+          )
+          .filter(
+            (
+              [
+                ,
+                value
+              ]
+            ) =>
+              Boolean(
+                value
+              )
+          )
+      );
+    };
+
+  const getFilterDescription =
+    (
+      filters
+    ) => {
+      const labels = {
+        subject:
+          "Subject",
+        exam:
+          "Preparation",
+        classLevel:
+          "Class",
+        chapter:
+          "Chapter",
+        difficulty:
+          "Difficulty",
+        questionType:
+          "Question Type",
+      };
+
+      return Object.entries(
+        filters
+      )
+        .map(
+          ([key, value]) =>
+            `${labels[key] || key}: ${value}`
+        )
+        .join("\n");
+    };
+
+  const deleteFilteredQuestions =
+    async () => {
+      const activeFilters =
+        getActiveQuestionFilters();
+
+      const filterEntries =
+        Object.entries(
+          activeFilters
+        );
+
+      if (
+        filterEntries.length ===
+        0
+      ) {
+        setQuestionBankMessage(
+          "Select at least one filter before using bulk delete."
+        );
+
+        return;
+      }
+
+      const filterDescription =
+        getFilterDescription(
+          activeFilters
+        );
+
+      const visibleCount =
+        savedQuestions.length;
+
+      const subjectOnlyDelete =
+        Boolean(
+          activeFilters.subject
+        ) &&
+        filterEntries.length ===
+          1;
+
+      const warning =
+        subjectOnlyDelete
+          ? `WARNING: This will permanently delete ALL saved ${activeFilters.subject} questions.\n\n${filterDescription}\n\nThis action cannot be undone. Continue?`
+          : `Permanently delete all NAVTA TEST questions matching these filters?\n\n${filterDescription}\n\nCurrently showing ${visibleCount} matching question${
+              visibleCount === 1
+                ? ""
+                : "s"
+            } in this view.\n\nThis action cannot be undone.`;
+
+      const confirmed =
+        window.confirm(
+          warning
+        );
+
+      if (
+        !confirmed
+      ) {
+        return;
+      }
+
+      setDeletingFilteredQuestions(
+        true
+      );
+
+      setQuestionBankMessage(
+        ""
+      );
+
+      try {
+        const params =
+          new URLSearchParams();
+
+        filterEntries.forEach(
+          ([key, value]) => {
+            params.set(
+              key,
+              value
+            );
+          }
+        );
+
+        const response =
+          await fetch(
+            `/api/navta-test/questions/bulk?${params.toString()}`,
+            {
+              method:
+                "DELETE",
+
+              credentials:
+                "include",
+
+              headers:
+                buildAdminHeaders(),
+            }
+          );
+
+        let data = {};
+
+        try {
+          data =
+            await response.json();
+        } catch {
+          data = {};
+        }
+
+        if (
+          !response.ok
+        ) {
+          throw new Error(
+            data.message ||
+              "Unable to delete the filtered questions."
+          );
+        }
+
+        setQuestionBankMessage(
+          data.message ||
+            `${data.deletedCount || 0} filtered question(s) deleted successfully.`
+        );
+
+        await fetchSavedQuestions(
+          questionFilters
+        );
+      } catch (
+        error
+      ) {
+        console.error(
+          "NAVTA filtered question delete error:",
+          error
+        );
+
+        setQuestionBankMessage(
+          error.message ||
+            "Unable to delete the filtered questions."
+        );
+      } finally {
+        setDeletingFilteredQuestions(
+          false
         );
       }
     };
@@ -3083,7 +3288,8 @@ export default function AdminNavtaTest() {
         }
 
         .admin-navta-bank-refresh,
-        .admin-navta-bank-clear {
+        .admin-navta-bank-clear,
+        .admin-navta-bank-delete-filtered {
           border: 1px solid #334155;
           border-radius: 10px;
           padding: 10px 14px;
@@ -3100,6 +3306,23 @@ export default function AdminNavtaTest() {
         .admin-navta-bank-clear {
           background: #0f172a;
           color: #cbd5e1;
+        }
+
+        .admin-navta-bank-delete-filtered {
+          background: rgba(239, 68, 68, 0.12);
+          color: #fca5a5;
+          border-color: rgba(239, 68, 68, 0.45);
+        }
+
+        .admin-navta-bank-delete-filtered:hover:not(:disabled) {
+          background: rgba(239, 68, 68, 0.2);
+          border-color: #ef4444;
+          color: #ffffff;
+        }
+
+        .admin-navta-bank-delete-filtered:disabled {
+          cursor: not-allowed;
+          opacity: 0.5;
         }
 
         .admin-navta-bank-list {
@@ -4368,7 +4591,7 @@ export default function AdminNavtaTest() {
           ================================================= */}
 
           <div className="admin-navta-info">
-            Question Manager: View saved NAVTA TEST questions and permanently delete any question that should no longer appear in student tests.
+            Question Manager: View saved NAVTA TEST questions, delete individual questions, or permanently delete all questions matching the selected Subject / Preparation / Class / Chapter / Difficulty / Question Type filters.
           </div>
 
           <div className="admin-navta-test-card">
@@ -4583,6 +4806,42 @@ export default function AdminNavtaTest() {
                   }
                 >
                   Clear Filters
+                </button>
+
+                <button
+                  type="button"
+                  className="admin-navta-bank-delete-filtered"
+                  onClick={
+                    deleteFilteredQuestions
+                  }
+                  disabled={
+                    deletingFilteredQuestions ||
+                    questionBankLoading ||
+                    Object.values(
+                      questionFilters
+                    ).every(
+                      (value) =>
+                        !String(
+                          value || ""
+                        ).trim()
+                    )
+                  }
+                  title={
+                    Object.values(
+                      questionFilters
+                    ).some(
+                      (value) =>
+                        String(
+                          value || ""
+                        ).trim()
+                    )
+                      ? "Delete every saved question matching the selected filters"
+                      : "Select at least one filter first"
+                  }
+                >
+                  {deletingFilteredQuestions
+                    ? "Deleting..."
+                    : "Delete Filtered Questions"}
                 </button>
               </div>
 
