@@ -3,15 +3,39 @@
     "units",
     "measurement",
     "dimensional analysis",
-    "errors",
-    "significant figures"
+    "dimensional formula",
+    "fundamental units",
+    "derived units",
+    "SI units",
+    "CGS",
+    "MKS",
+    "FPS",
+    "accuracy",
+    "precision",
+    "least count",
+    "error",
+    "absolute error",
+    "relative error",
+    "percentage error",
+    "significant figures",
+    "vernier caliper",
+    "screw gauge",
+    "micrometer"
   ],
 
   "Motion in a Straight Line": [
-    "velocity",
+    "distance",
     "displacement",
+    "velocity",
     "speed",
     "acceleration",
-    "uniform motion"
+    "retardation",
+    "average velocity",
+    "average speed",
+    "uniform motion",
+    "non uniform motion",
+    "equation of motion",
+    "free fall",
+    "graph"
   ]
 }
