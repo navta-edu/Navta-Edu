@@ -1,1 +1,11 @@
-
+{
+  "force": "N",
+  "energy": "J",
+  "power": "W",
+  "pressure": "Pa",
+  "charge": "C",
+  "current": "A",
+  "voltage": "V",
+  "resistance": "Ω",
+  "frequency": "Hz"
+}
