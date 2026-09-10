@@ -22,79 +22,6 @@ const {
 } = require("./navtaImageService");
 
 // =====================================================
-// NAVTA AI V2 LOCAL INTELLIGENCE PIPELINE
-// =====================================================
-// These services run before/alongside Gemini. Every call is
-// guarded below so an optional local-cleaning failure never
-// takes down the existing production importer.
-
-const navtaOCRCleaner = require("./navtaOCRCleaner");
-const navtaAIRouter = require("./navtaAIRouter");
-const navtaDuplicateDetector = require("./navtaDuplicateDetector");
-
-const NAVTA_AI_V2_ENABLED =
-  String(process.env.NAVTA_AI_V2_ENABLED ?? "true").toLowerCase() !== "false";
-
-const NAVTA_AI_V2_CLEAN_TEXT =
-  String(process.env.NAVTA_AI_V2_CLEAN_TEXT ?? "true").toLowerCase() !== "false";
-
-const safeV2CleanText = (value = "", subject = "") => {
-  const original = String(value || "");
-
-  if (!NAVTA_AI_V2_ENABLED || !NAVTA_AI_V2_CLEAN_TEXT || !original.trim()) {
-    return original;
-  }
-
-  try {
-    const cleaned = navtaOCRCleaner.clean(original, subject);
-    return typeof cleaned === "string" && cleaned.trim() ? cleaned : original;
-  } catch (error) {
-    console.warn("NAVTA AI V2 OCR cleaner skipped:", error?.message || error);
-    return original;
-  }
-};
-
-const getV2QuestionMetadata = (question = {}) => {
-  if (!NAVTA_AI_V2_ENABLED) {
-    return {};
-  }
-
-  try {
-    const confidence = Number(navtaAIRouter.calculateConfidence(question));
-    const questionText = String(question?.question || "");
-    const equationType = navtaOCRCleaner.hasEquation(questionText)
-      ? navtaOCRCleaner.detectEquationType(questionText)
-      : null;
-
-    return {
-      confidence: Number.isFinite(confidence) ? confidence : null,
-      needsAI: Number.isFinite(confidence)
-        ? navtaAIRouter.shouldUseAI({ ...question, confidence })
-        : false,
-      equationType,
-      navtaAIVersion: 2,
-    };
-  } catch (error) {
-    console.warn("NAVTA AI V2 metadata skipped:", error?.message || error);
-    return { navtaAIVersion: 2 };
-  }
-};
-
-const logV2RouterStatistics = (text = "", subject = "") => {
-  if (!NAVTA_AI_V2_ENABLED || !String(text || "").trim()) {
-    return;
-  }
-
-  try {
-    const localResult = navtaAIRouter.process(text, subject);
-    const stats = navtaAIRouter.getStatistics(localResult);
-    console.log("NAVTA AI V2 local router statistics:", stats);
-  } catch (error) {
-    console.warn("NAVTA AI V2 router diagnostics skipped:", error?.message || error);
-  }
-};
-
-// =====================================================
 // VALID VALUES
 // =====================================================
 
@@ -823,6 +750,132 @@ const normalizeClassLevel = (
 };
 
 // =====================================================
+// REMOVE DUPLICATED MCQ OPTIONS FROM QUESTION STEM
+// =====================================================
+//
+// Gemini/PDF extraction can occasionally return the same
+// four MCQ options both inside `question` and in `options`.
+// This helper removes ONLY a labelled trailing option block.
+// It does not remove ordinary numbered statements from the
+// middle of a question.
+//
+// No external service is required, so this cannot cause the
+// backend to fail because of a missing V2 helper module.
+// =====================================================
+
+const escapeRegex = (
+  value = ""
+) =>
+  String(
+    value
+  ).replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+
+const stripDuplicatedOptionsFromQuestion = (
+  questionText = "",
+  options = []
+) => {
+  const text =
+    cleanString(
+      questionText
+    );
+
+  const cleanOptions =
+    safeArray(
+      options
+    )
+      .map(
+        (option) =>
+          cleanString(
+            option
+          )
+      )
+      .filter(Boolean);
+
+  if (
+    !text ||
+    cleanOptions.length !== 4
+  ) {
+    return text;
+  }
+
+  const numericLabels = [
+    String.raw`(?:\(\s*1\s*\)|1[\.\)])`,
+    String.raw`(?:\(\s*2\s*\)|2[\.\)])`,
+    String.raw`(?:\(\s*3\s*\)|3[\.\)])`,
+    String.raw`(?:\(\s*4\s*\)|4[\.\)])`,
+  ];
+
+  const alphaLabels = [
+    String.raw`(?:\(\s*[Aa]\s*\)|[Aa][\.\)])`,
+    String.raw`(?:\(\s*[Bb]\s*\)|[Bb][\.\)])`,
+    String.raw`(?:\(\s*[Cc]\s*\)|[Cc][\.\)])`,
+    String.raw`(?:\(\s*[Dd]\s*\)|[Dd][\.\)])`,
+  ];
+
+  const buildTrailingPattern = (
+    labels
+  ) => {
+    const parts =
+      cleanOptions.map(
+        (option, index) => {
+          const escaped =
+            escapeRegex(
+              option
+            ).replace(
+              /\s+/g,
+              String.raw`\s+`
+            );
+
+          return (
+            `${labels[index]}` +
+            String.raw`\s*` +
+            escaped
+          );
+        }
+      );
+
+    return new RegExp(
+      String.raw`\s*` +
+        parts.join(
+          String.raw`\s*`
+        ) +
+        String.raw`\s*$`,
+      "i"
+    );
+  };
+
+  for (
+    const labels of [
+      numericLabels,
+      alphaLabels,
+    ]
+  ) {
+    const pattern =
+      buildTrailingPattern(
+        labels
+      );
+
+    if (
+      pattern.test(
+        text
+      )
+    ) {
+      return text
+        .replace(
+          pattern,
+          ""
+        )
+        .trim();
+    }
+  }
+
+  return text;
+};
+
+// =====================================================
 // VALIDATE QUESTION
 // =====================================================
 
@@ -999,6 +1052,19 @@ const validateDetectedQuestion = (
         rawQuestion?.needsReview
       ),
   };
+
+  if (
+    question.questionType ===
+      "mcq" &&
+    question.options.length ===
+      4
+  ) {
+    question.question =
+      stripDuplicatedOptionsFromQuestion(
+        question.question,
+        question.options
+      );
+  }
 
   const reasons =
     [];
@@ -1538,10 +1604,6 @@ const buildImportQuestion = ({
       importedByAI:
         true,
     },
-
-    ...getV2QuestionMetadata(
-      question
-    ),
   };
 
   // ===================================================
@@ -2454,27 +2516,6 @@ const analyseNavtaImport =
     }
 
     // =================================================
-    // NAVTA AI V2 OCR PRE-CLEAN
-    // =================================================
-
-    const cleanedDocumentResult = {
-      ...documentResult,
-      text: safeV2CleanText(
-        documentResult?.text || "",
-        hints.subject
-      ),
-    };
-
-    // Local routing is diagnostic at this stage. Gemini remains the
-    // authoritative extractor/classifier, preserving the existing
-    // visual-page and confidence workflow while we reduce quota use
-    // incrementally.
-    logV2RouterStatistics(
-      cleanedDocumentResult.text,
-      hints.subject
-    );
-
-    // =================================================
     // PROCESS DOCUMENT
     // =================================================
 
@@ -2484,16 +2525,14 @@ const analyseNavtaImport =
         ? await processPdfImport({
             file,
 
-            documentResult:
-              cleanedDocumentResult,
+            documentResult,
 
             hints,
           })
         : await processTextImport({
             file,
 
-            documentResult:
-              cleanedDocumentResult,
+            documentResult,
 
             hints,
 
