@@ -224,6 +224,406 @@ const BOSS_DIFFICULTY_TARGETS = {
 // HELPERS
 // ============================================
 
+// ============================================
+// NAVTA AI V2 STUDENT / IMPORT HELPERS
+// ============================================
+
+const NAVTA_VISUAL_MARKER = "[[NAVTA_VISUAL]]";
+
+function getQuestionImageUrl(image) {
+  if (typeof image === "string") {
+    return image.trim();
+  }
+
+  if (
+    image &&
+    typeof image === "object"
+  ) {
+    return String(
+      image.url || ""
+    ).trim();
+  }
+
+  return "";
+}
+
+function normalizeQuestionImage(
+  image,
+  fallback = {}
+) {
+  const url =
+    getQuestionImageUrl(image);
+
+  if (!url) {
+    return null;
+  }
+
+  if (
+    image &&
+    typeof image === "object"
+  ) {
+    return {
+      url,
+
+      publicId:
+        String(
+          image.publicId || ""
+        ).trim(),
+
+      altText:
+        String(
+          image.altText ||
+          fallback.altText ||
+          "Question diagram"
+        ).trim(),
+
+      sourcePage:
+        Number(
+          image.sourcePage ??
+          fallback.sourcePage
+        ) || null,
+
+      width:
+        Number(
+          image.width
+        ) || null,
+
+      height:
+        Number(
+          image.height
+        ) || null,
+    };
+  }
+
+  return {
+    url,
+
+    publicId: "",
+
+    altText:
+      String(
+        fallback.altText ||
+        "Question diagram"
+      ).trim(),
+
+    sourcePage:
+      Number(
+        fallback.sourcePage
+      ) || null,
+
+    width: null,
+
+    height: null,
+  };
+}
+
+function normalizeQuestionImages(
+  question = {}
+) {
+  const images = [];
+
+  const primary =
+    normalizeQuestionImage(
+      question.questionImage,
+      {
+        altText:
+          question.visualDescription ||
+          "Question diagram",
+
+        sourcePage:
+          question.sourceDocument
+            ?.pageNumber,
+      }
+    );
+
+  if (primary?.url) {
+    images.push(primary);
+  }
+
+  if (
+    Array.isArray(
+      question.questionImages
+    )
+  ) {
+    for (
+      const image of
+      question.questionImages
+    ) {
+      const normalized =
+        normalizeQuestionImage(
+          image,
+          {
+            altText:
+              question.visualDescription ||
+              "Question diagram",
+
+            sourcePage:
+              question.sourceDocument
+                ?.pageNumber,
+          }
+        );
+
+      if (
+        normalized?.url &&
+        !images.some(
+          (existing) =>
+            existing.url ===
+            normalized.url
+        )
+      ) {
+        images.push(
+          normalized
+        );
+      }
+    }
+  }
+
+  return images;
+}
+
+function hasQuestionVisualImage(
+  question = {}
+) {
+  return (
+    normalizeQuestionImages(
+      question
+    ).length > 0
+  );
+}
+
+function normalizeOptionCompareText(
+  value = ""
+) {
+  return String(
+    value ?? ""
+  )
+    .replace(
+      /\[\[NAVTA_VISUAL\]\]/gi,
+      " "
+    )
+    .replace(
+      /[“”]/g,
+      '"'
+    )
+    .replace(
+      /[‘’]/g,
+      "'"
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim()
+    .toLowerCase();
+}
+
+function escapeRegExp(
+  value = ""
+) {
+  return String(
+    value
+  ).replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+}
+
+function stripDuplicatedMCQOptions(
+  questionText = "",
+  options = []
+) {
+  const originalText =
+    String(
+      questionText ?? ""
+    ).trim();
+
+  const cleanOptions =
+    Array.isArray(options)
+      ? options
+          .map(
+            (option) =>
+              String(
+                option ?? ""
+              ).trim()
+          )
+          .filter(Boolean)
+      : [];
+
+  if (
+    !originalText ||
+    cleanOptions.length !== 4
+  ) {
+    return originalText;
+  }
+
+  const labelSets = [
+    [
+      String.raw`(?:\(\s*1\s*\)|1[\.\)])`,
+      String.raw`(?:\(\s*2\s*\)|2[\.\)])`,
+      String.raw`(?:\(\s*3\s*\)|3[\.\)])`,
+      String.raw`(?:\(\s*4\s*\)|4[\.\)])`,
+    ],
+
+    [
+      String.raw`(?:\(\s*[Aa]\s*\)|[Aa][\.\)])`,
+      String.raw`(?:\(\s*[Bb]\s*\)|[Bb][\.\)])`,
+      String.raw`(?:\(\s*[Cc]\s*\)|[Cc][\.\)])`,
+      String.raw`(?:\(\s*[Dd]\s*\)|[Dd][\.\)])`,
+    ],
+  ];
+
+  for (
+    const labels of labelSets
+  ) {
+    const optionParts =
+      cleanOptions.map(
+        (option, index) => {
+          const escaped =
+            escapeRegExp(
+              option
+            ).replace(
+              /\s+/g,
+              String.raw`\s+`
+            );
+
+          return (
+            `${labels[index]}` +
+            String.raw`\s*` +
+            escaped
+          );
+        }
+      );
+
+    const pattern =
+      new RegExp(
+        String.raw`\s*` +
+        optionParts.join(
+          String.raw`\s*`
+        ) +
+        String.raw`\s*$`,
+        "i"
+      );
+
+    if (
+      pattern.test(
+        originalText
+      )
+    ) {
+      return originalText
+        .replace(
+          pattern,
+          ""
+        )
+        .trim();
+    }
+  }
+
+  // Conservative fallback:
+  // only remove a labelled option block from the tail.
+  const normalized =
+    normalizeOptionCompareText(
+      originalText
+    );
+
+  const tailStart =
+    Math.max(
+      0,
+      Math.floor(
+        normalized.length *
+        0.45
+      )
+    );
+
+  const tail =
+    normalized.slice(
+      tailStart
+    );
+
+  const allOptionsPresent =
+    cleanOptions.every(
+      (option) =>
+        tail.includes(
+          normalizeOptionCompareText(
+            option
+          )
+        )
+    );
+
+  const numericLabels =
+    /(?:\(\s*1\s*\)|1[\.\)]).*(?:\(\s*2\s*\)|2[\.\)]).*(?:\(\s*3\s*\)|3[\.\)]).*(?:\(\s*4\s*\)|4[\.\)])/is;
+
+  const alphaLabels =
+    /(?:\(\s*a\s*\)|a[\.\)]).*(?:\(\s*b\s*\)|b[\.\)]).*(?:\(\s*c\s*\)|c[\.\)]).*(?:\(\s*d\s*\)|d[\.\)])/is;
+
+  if (
+    !allOptionsPresent ||
+    (
+      !numericLabels.test(
+        tail
+      ) &&
+      !alphaLabels.test(
+        tail
+      )
+    )
+  ) {
+    return originalText;
+  }
+
+  const firstOptionPattern =
+    /(?:^|\s)(?:\(\s*(?:1|A)\s*\)|(?:1|A)[\.\)])\s*/gi;
+
+  const matches =
+    [
+      ...originalText.matchAll(
+        firstOptionPattern
+      ),
+    ];
+
+  const candidate =
+    matches.find(
+      (match) =>
+        Number(
+          match.index
+        ) >=
+        Math.floor(
+          originalText.length *
+          0.35
+        )
+    );
+
+  if (!candidate) {
+    return originalText;
+  }
+
+  return originalText
+    .slice(
+      0,
+      candidate.index
+    )
+    .trim();
+}
+
+function preserveVisualMarker(
+  questionText = "",
+  hasVisual = false
+) {
+  const text =
+    String(
+      questionText ?? ""
+    ).trim();
+
+  if (
+    !hasVisual ||
+    text.includes(
+      NAVTA_VISUAL_MARKER
+    )
+  ) {
+    return text;
+  }
+
+  return text;
+}
+
 function normaliseQuestionType(exam, questionType) {
   if (exam !== "Boards") {
     return "mcq";
@@ -821,6 +1221,12 @@ exports.createQuestion = async (req, res) => {
 
       payload.options =
         cleanedOptions;
+
+      payload.question =
+        stripDuplicatedMCQOptions(
+          payload.question,
+          cleanedOptions
+        );
 
       payload.correctAnswer =
         answerIndex;
@@ -1666,6 +2072,12 @@ exports.confirmAIImport = async (req, res) => {
         payload.options =
           options;
 
+        payload.question =
+          stripDuplicatedMCQOptions(
+            payload.question,
+            options
+          );
+
         if (
           Number.isInteger(
             answerIndex
@@ -1789,119 +2201,26 @@ exports.confirmAIImport = async (req, res) => {
       // PRESERVE AI QUESTION IMAGE
       // ======================================
 
-      if (
-        rawQuestion.questionImage &&
-        typeof rawQuestion
-          .questionImage ===
-          "object" &&
-        rawQuestion.questionImage.url
-      ) {
-        payload.questionImage = {
-          url:
-            String(
-              rawQuestion
-                .questionImage
-                .url || ""
-            ).trim(),
-
-          publicId:
-            String(
-              rawQuestion
-                .questionImage
-                .publicId || ""
-            ).trim(),
-
-          altText:
-            String(
-              rawQuestion
-                .questionImage
-                .altText ||
-                "Question diagram"
-            ).trim(),
-
-          sourcePage:
-            Number(
-              rawQuestion
-                .questionImage
-                .sourcePage
-            ) || null,
-
-          width:
-            Number(
-              rawQuestion
-                .questionImage
-                .width
-            ) || null,
-
-          height:
-            Number(
-              rawQuestion
-                .questionImage
-                .height
-            ) || null,
-        };
-      }
-
-      // ======================================
-      // PRESERVE MULTIPLE AI IMAGES
-      // ======================================
-
-      if (
-        Array.isArray(
-          rawQuestion.questionImages
-        )
-      ) {
-        payload.questionImages =
+      const normalizedImportImages =
+        normalizeQuestionImages(
           rawQuestion
-            .questionImages
-            .filter(
-              (image) =>
-                image &&
-                typeof image ===
-                  "object" &&
-                image.url
-            )
-            .map(
-              (image) => ({
-                url:
-                  String(
-                    image.url || ""
-                  ).trim(),
+        );
 
-                publicId:
-                  String(
-                    image.publicId ||
-                      ""
-                  ).trim(),
-
-                altText:
-                  String(
-                    image.altText ||
-                      "Question diagram"
-                  ).trim(),
-
-                sourcePage:
-                  Number(
-                    image.sourcePage
-                  ) || null,
-
-                width:
-                  Number(
-                    image.width
-                  ) || null,
-
-                height:
-                  Number(
-                    image.height
-                  ) || null,
-              })
-            );
-      } else if (
-        payload.questionImage?.url
+      if (
+        normalizedImportImages.length >
+        0
       ) {
-        payload.questionImages = [
-          payload.questionImage,
-        ];
+        payload.questionImage =
+          normalizedImportImages[0];
+
+        payload.questionImages =
+          normalizedImportImages;
+      } else {
+        payload.questionImage =
+          null;
+
+        payload.questionImages =
+          [];
       }
 
       // ======================================
@@ -1909,21 +2228,8 @@ exports.confirmAIImport = async (req, res) => {
       // ======================================
 
       const hasSavedVisualImage =
-        Boolean(
-          payload.questionImage?.url
-        ) ||
-        (
-          Array.isArray(
-            payload.questionImages
-          ) &&
-          payload.questionImages.some(
-            (image) =>
-              Boolean(
-                typeof image === "string"
-                  ? image.trim()
-                  : image?.url
-              )
-          )
+        hasQuestionVisualImage(
+          payload
         );
 
       payload.hasVisual =
@@ -2480,6 +2786,7 @@ exports.generateTest = async (req, res) => {
             visualType: 1,
             visualDescription: 1,
             visualBoundingBox: 1,
+            questionBoundingBox: 1,
             studentQuestionFormat: 1,
             sourceDocument: 1,
           },
@@ -3175,7 +3482,11 @@ exports.generateBossBattle = async (req, res) => {
           hasVisual:
             Boolean(
               question.hasVisual ||
-              question.questionImage?.url ||
+              Boolean(
+                getQuestionImageUrl(
+                  question.questionImage
+                )
+              ) ||
               (
                 Array.isArray(
                   question.questionImages
@@ -3195,7 +3506,9 @@ exports.generateBossBattle = async (req, res) => {
             String(
               question.visualType ||
               (
-                question.questionImage?.url
+                hasQuestionVisualImage(
+                  question
+                )
                   ? "other"
                   : "none"
               )
@@ -3212,9 +3525,15 @@ exports.generateBossBattle = async (req, res) => {
             question.visualBoundingBox ||
             null,
 
+          questionBoundingBox:
+            question.questionBoundingBox ||
+            null,
+
           studentQuestionFormat:
             (
-              question.questionImage?.url ||
+              hasQuestionVisualImage(
+                question
+              ) ||
               (
                 Array.isArray(
                   question.questionImages
@@ -4160,7 +4479,11 @@ exports.generateRevengeBattle = async (req, res) => {
           hasVisual:
             Boolean(
               question.hasVisual ||
-              question.questionImage?.url ||
+              Boolean(
+                getQuestionImageUrl(
+                  question.questionImage
+                )
+              ) ||
               (
                 Array.isArray(
                   question.questionImages
@@ -4180,7 +4503,9 @@ exports.generateRevengeBattle = async (req, res) => {
             String(
               question.visualType ||
               (
-                question.questionImage?.url
+                hasQuestionVisualImage(
+                  question
+                )
                   ? "other"
                   : "none"
               )
@@ -4197,9 +4522,15 @@ exports.generateRevengeBattle = async (req, res) => {
             question.visualBoundingBox ||
             null,
 
+          questionBoundingBox:
+            question.questionBoundingBox ||
+            null,
+
           studentQuestionFormat:
             (
-              question.questionImage?.url ||
+              hasQuestionVisualImage(
+                question
+              ) ||
               (
                 Array.isArray(
                   question.questionImages
