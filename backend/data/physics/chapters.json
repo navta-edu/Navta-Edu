@@ -3,14 +3,326 @@
     "id": "phy_11_01",
     "name": "Units and Measurements",
     "class": 11,
-    "keywords": ["units", "measurement", "dimensional analysis", "errors", "significant figures"],
-    "exams": ["JEE", "NEET", "Boards"]
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Units",
+      "Measurements",
+      "Dimensions",
+      "Dimensional Analysis",
+      "Errors"
+    ]
   },
   {
     "id": "phy_11_02",
     "name": "Motion in a Straight Line",
     "class": 11,
-    "keywords": ["velocity", "acceleration", "distance", "displacement"],
-    "exams": ["JEE", "NEET", "Boards"]
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "1D Motion",
+      "Rectilinear Motion",
+      "Linear Motion"
+    ]
+  },
+  {
+    "id": "phy_11_03",
+    "name": "Motion in a Plane",
+    "class": 11,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "2D Motion",
+      "Projectile Motion",
+      "Vectors"
+    ]
+  },
+  {
+    "id": "phy_11_04",
+    "name": "Laws of Motion",
+    "class": 11,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Newton Laws",
+      "Newton's Laws",
+      "Force"
+    ]
+  },
+  {
+    "id": "phy_11_05",
+    "name": "Work, Energy and Power",
+    "class": 11,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "WEP",
+      "Energy",
+      "Power",
+      "Work"
+    ]
+  },
+  {
+    "id": "phy_11_06",
+    "name": "System of Particles and Rotational Motion",
+    "class": 11,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "COM",
+      "Centre of Mass",
+      "Rotational Motion",
+      "Angular Momentum"
+    ]
+  },
+  {
+    "id": "phy_11_07",
+    "name": "Gravitation",
+    "class": 11,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Gravity",
+      "Universal Gravitation",
+      "Satellite Motion"
+    ]
+  },
+  {
+    "id": "phy_11_08",
+    "name": "Mechanical Properties of Solids",
+    "class": 11,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Elasticity",
+      "Young Modulus",
+      "Stress Strain"
+    ]
+  },
+  {
+    "id": "phy_11_09",
+    "name": "Mechanical Properties of Fluids",
+    "class": 11,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Fluid Mechanics",
+      "Bernoulli",
+      "Viscosity"
+    ]
+  },
+  {
+    "id": "phy_11_10",
+    "name": "Thermal Properties of Matter",
+    "class": 11,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Heat",
+      "Expansion",
+      "Calorimetry"
+    ]
+  },
+  {
+    "id": "phy_11_11",
+    "name": "Thermodynamics",
+    "class": 11,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "First Law",
+      "Second Law",
+      "Heat Engine"
+    ]
+  },
+  {
+    "id": "phy_11_12",
+    "name": "Kinetic Theory",
+    "class": 11,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "KTG",
+      "Gas Laws",
+      "Ideal Gas"
+    ]
+  },
+  {
+    "id": "phy_11_13",
+    "name": "Oscillations",
+    "class": 11,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "SHM",
+      "Simple Harmonic Motion"
+    ]
+  },
+  {
+    "id": "phy_11_14",
+    "name": "Waves",
+    "class": 11,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Sound Waves",
+      "Wave Motion",
+      "Standing Waves"
+    ]
+  },
+  {
+    "id": "phy_12_01",
+    "name": "Electric Charges and Fields",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Electrostatics",
+      "Coulomb Law"
+    ]
+  },
+  {
+    "id": "phy_12_02",
+    "name": "Electrostatic Potential and Capacitance",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Capacitance",
+      "Potential"
+    ]
+  },
+  {
+    "id": "phy_12_03",
+    "name": "Current Electricity",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Ohm Law",
+      "Kirchhoff Law"
+    ]
+  },
+  {
+    "id": "phy_12_04",
+    "name": "Moving Charges and Magnetism",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Lorentz Force",
+      "Magnetic Field"
+    ]
+  },
+  {
+    "id": "phy_12_05",
+    "name": "Magnetism and Matter",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Magnetic Materials",
+      "Bar Magnet"
+    ]
+  },
+  {
+    "id": "phy_12_06",
+    "name": "Electromagnetic Induction",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "EMI",
+      "Faraday Law"
+    ]
+  },
+  {
+    "id": "phy_12_07",
+    "name": "Alternating Current",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "AC",
+      "LCR Circuit"
+    ]
+  },
+  {
+    "id": "phy_12_08",
+    "name": "Electromagnetic Waves",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "EM Waves"
+    ]
+  },
+  {
+    "id": "phy_12_09",
+    "name": "Ray Optics and Optical Instruments",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Ray Optics",
+      "Mirror",
+      "Lens"
+    ]
+  },
+  {
+    "id": "phy_12_10",
+    "name": "Wave Optics",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Interference",
+      "Diffraction",
+      "Polarization"
+    ]
+  },
+  {
+    "id": "phy_12_11",
+    "name": "Dual Nature of Radiation and Matter",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Photoelectric Effect",
+      "de Broglie"
+    ]
+  },
+  {
+    "id": "phy_12_12",
+    "name": "Atoms",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Bohr Model"
+    ]
+  },
+  {
+    "id": "phy_12_13",
+    "name": "Nuclei",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Radioactivity",
+      "Nuclear Physics"
+    ]
+  },
+  {
+    "id": "phy_12_14",
+    "name": "Semiconductor Electronics",
+    "class": 12,
+    "board": ["CBSE", "ICSE", "State"],
+    "exams": ["JEE Main", "JEE Advanced", "NEET"],
+    "aliases": [
+      "Diode",
+      "Transistor",
+      "Logic Gates"
+    ]
   }
 ]
