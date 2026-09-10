@@ -1,11 +1,12 @@
 {
-  "force": "N",
-  "energy": "J",
-  "power": "W",
-  "pressure": "Pa",
-  "charge": "C",
-  "current": "A",
-  "voltage": "V",
-  "resistance": "Ω",
-  "frequency": "Hz"
+  "Force": "N",
+  "Work": "J",
+  "Power": "W",
+  "Pressure": "Pa",
+  "Charge": "C",
+  "Potential Difference": "V",
+  "Resistance": "Ω",
+  "Current": "A",
+  "Frequency": "Hz",
+  "Capacitance": "F"
 }
