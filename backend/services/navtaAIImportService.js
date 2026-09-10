@@ -749,6 +749,33 @@ const normalizeClassLevel = (
   return "";
 };
 
+
+// =====================================================
+// ESSENTIAL VISUAL LANGUAGE DETECTOR
+// =====================================================
+// This never invents a crop box and never uses questionBoundingBox.
+const questionTextStronglyImpliesVisual = (value = "") => {
+  const text = cleanString(value).toLowerCase();
+  if (!text) return false;
+
+  return [
+    /\bfollowing\s+reaction\b/i,
+    /\bfollowing\s+reaction\s+scheme\b/i,
+    /\bfollowing\s+scheme\b/i,
+    /\bfollowing\s+structure\b/i,
+    /\bfollowing\s+diagram\b/i,
+    /\bfollowing\s+figure\b/i,
+    /\bfollowing\s+graph\b/i,
+    /\bfollowing\s+circuit\b/i,
+    /\bfollowing\s+ray\s+diagram\b/i,
+    /\bfollowing\s+apparatus\b/i,
+    /\bshown\s+below\b/i,
+    /\bshown\s+in\s+the\s+(?:figure|diagram|graph|circuit)\b/i,
+    /\bgiven\s+(?:below|above)\b/i,
+    /\bfrom\s+the\s+(?:figure|diagram|graph|circuit)\b/i,
+  ].some((pattern) => pattern.test(text));
+};
+
 // =====================================================
 // REMOVE DUPLICATED MCQ OPTIONS FROM QUESTION STEM
 // =====================================================
@@ -918,9 +945,28 @@ const validateDetectedQuestion = (
       rawQuestion?.visualBoundingBox
     );
 
+  const visualIsStronglyImplied =
+    questionTextStronglyImpliesVisual(
+      rawQuestion?.question
+    );
+
+  // Recover only when Gemini actually supplied a visualBoundingBox.
+  // Never fall back to questionBoundingBox.
   const hasDetectedVisual =
     Boolean(
-      rawQuestion?.hasVisual
+      normalizedVisualBoundingBox &&
+      (
+        rawQuestion?.hasVisual ||
+        visualIsStronglyImplied ||
+        (
+          cleanString(
+            rawQuestion?.visualType
+          ).toLowerCase() !== "none" &&
+          cleanString(
+            rawQuestion?.visualType
+          ) !== ""
+        )
+      )
     );
 
   const question = {
@@ -1272,6 +1318,17 @@ const validateDetectedQuestion = (
   }
 
   if (
+    visualIsStronglyImplied &&
+    !question.hasVisual
+  ) {
+    question.needsReview =
+      true;
+
+    question.visualReviewReason =
+      "Question wording requires a visual, but NAVTA AI did not return a usable visualBoundingBox. Re-import or review the source page.";
+  }
+
+  if (
     !question.hasVisual
   ) {
     question.visualType =
@@ -1556,6 +1613,10 @@ const buildImportQuestion = ({
             ""
           )
         : "",
+
+    visualReviewReason:
+      question.visualReviewReason ||
+      "",
 
     needsReview:
       Boolean(
