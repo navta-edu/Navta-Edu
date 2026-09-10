@@ -246,10 +246,10 @@ const NAVTA_AI_PDF_RENDER_SCALE = Math.max(
 const NAVTA_AI_VISUAL_CROP_PADDING = Math.max(
   0,
   Math.min(
-    0.15,
+    0.04,
     Number(
-      process.env.NAVTA_AI_VISUAL_CROP_PADDING || 0.025
-    ) || 0.025
+      process.env.NAVTA_AI_VISUAL_CROP_PADDING || 0.008
+    ) || 0.008
   )
 );
 
@@ -572,6 +572,28 @@ const isUsableVisualBoundingBox = (
       NAVTA_AI_MIN_VISUAL_BOX_WIDTH &&
     normalized.height >=
       NAVTA_AI_MIN_VISUAL_BOX_HEIGHT
+  );
+};
+
+const normalizeOptionVisualBoundingBoxes = (
+  value
+) => {
+  const source =
+    safeArray(value);
+
+  return [0, 1, 2, 3].map(
+    (index) => {
+      const box =
+        normalizeBoundingBox(
+          source[index]
+        );
+
+      return isUsableVisualBoundingBox(
+        box
+      )
+        ? box
+        : null;
+    }
   );
 };
 
@@ -918,6 +940,11 @@ const validateDetectedQuestion = (
       rawQuestion?.visualBoundingBox
     );
 
+  const normalizedOptionVisualBoundingBoxes =
+    normalizeOptionVisualBoundingBoxes(
+      rawQuestion?.optionVisualBoundingBoxes
+    );
+
   const hasDetectedVisual =
     Boolean(
       rawQuestion?.hasVisual
@@ -1026,6 +1053,14 @@ const validateDetectedQuestion = (
 
     visualBoundingBox:
       normalizedVisualBoundingBox,
+
+    optionVisualBoundingBoxes:
+      normalizedOptionVisualBoundingBoxes,
+
+    hasOptionVisuals:
+      normalizedOptionVisualBoundingBoxes.some(
+        Boolean
+      ),
 
     chapterConfidence:
       normalizeConfidence(
@@ -1495,15 +1530,216 @@ const processQuestionVisual =
   };
 
 // =====================================================
+// PROCESS OPTION-LEVEL VISUALS
+// =====================================================
+
+const processOptionVisuals =
+  async ({
+    question,
+    renderedPage,
+    sourceFileName,
+  }) => {
+    const boxes =
+      normalizeOptionVisualBoundingBoxes(
+        question?.optionVisualBoundingBoxes
+      );
+
+    if (
+      !boxes.some(Boolean)
+    ) {
+      return {
+        optionImages:
+          [null, null, null, null],
+
+        optionVisualWarnings:
+          [],
+      };
+    }
+
+    if (!renderedPage) {
+      return {
+        optionImages:
+          [null, null, null, null],
+
+        optionVisualWarnings: [
+          "Source PDF page could not be located for visual answer options.",
+        ],
+      };
+    }
+
+    const safeFileName =
+      cleanString(
+        sourceFileName
+      )
+        .replace(
+          /[^a-zA-Z0-9._-]/g,
+          "-"
+        )
+        .slice(
+          0,
+          80
+        ) ||
+      "navta-question";
+
+    const questionNumber =
+      cleanString(
+        question.questionNumber
+      )
+        .replace(
+          /[^a-zA-Z0-9_-]/g,
+          "-"
+        )
+        .slice(
+          0,
+          30
+        ) ||
+      "question";
+
+    const optionImages =
+      [null, null, null, null];
+
+    const optionVisualWarnings =
+      [];
+
+    await Promise.all(
+      boxes.map(
+        async (
+          originalBox,
+          optionIndex
+        ) => {
+          if (!originalBox) {
+            return;
+          }
+
+          // Use only the option's own box.
+          // Never use questionBoundingBox or the stem visual box.
+          const cropBox =
+            expandBoundingBox(
+              originalBox,
+              NAVTA_AI_VISUAL_CROP_PADDING
+            );
+
+          try {
+            const cropped =
+              await createQuestionDiagram({
+                question: {
+                  hasVisual:
+                    true,
+
+                  visualBoundingBox:
+                    cropBox,
+                },
+
+                pageBuffer:
+                  renderedPage.buffer,
+              });
+
+            if (
+              !cropped ||
+              !Buffer.isBuffer(
+                cropped.buffer
+              ) ||
+              cropped.buffer.length ===
+                0
+            ) {
+              throw new Error(
+                "Empty option visual crop."
+              );
+            }
+
+            const label =
+              String.fromCharCode(
+                65 + optionIndex
+              );
+
+            const upload =
+              await uploadQuestionImage({
+                buffer:
+                  cropped.buffer,
+
+                fileName:
+                  `${safeFileName}-page-${question.sourcePage}-${questionNumber}-option-${label}`,
+
+                folder:
+                  "navta/ai-imports/pending",
+              });
+
+            if (!upload?.url) {
+              throw new Error(
+                "Option visual upload failed."
+              );
+            }
+
+            optionImages[
+              optionIndex
+            ] = {
+              optionIndex,
+
+              label,
+
+              url:
+                upload.url,
+
+              publicId:
+                upload.publicId ||
+                "",
+
+              altText:
+                `Option ${label} visual`,
+
+              sourcePage:
+                question.sourcePage,
+
+              visualType:
+                question.visualType ||
+                "other",
+
+              width:
+                upload.width ||
+                cropped.width,
+
+              height:
+                upload.height ||
+                cropped.height,
+
+              bbox:
+                cropBox,
+
+              originalBbox:
+                originalBox,
+            };
+          } catch (error) {
+            optionVisualWarnings.push(
+              `Option ${String.fromCharCode(
+                65 + optionIndex
+              )}: ${
+                error?.message ||
+                "visual could not be processed"
+              }`
+            );
+          }
+        }
+      )
+    );
+
+    return {
+      optionImages,
+      optionVisualWarnings,
+    };
+  };
+
+// =====================================================
 // BUILD ADMIN REVIEW QUESTION
 // =====================================================
 
 const buildImportQuestion = ({
   question,
   questionImage = null,
+  optionImages = [null, null, null, null],
   sourceFileName,
   fileType,
   visualWarning = null,
+  optionVisualWarnings = [],
 }) => {
   const result = {
     questionNumber:
@@ -1590,6 +1826,26 @@ const buildImportQuestion = ({
     visualBoundingBox:
       question.visualBoundingBox ||
       null,
+
+    optionVisualBoundingBoxes:
+      normalizeOptionVisualBoundingBoxes(
+        question.optionVisualBoundingBoxes
+      ),
+
+    hasOptionVisuals:
+      normalizeOptionVisualBoundingBoxes(
+        question.optionVisualBoundingBoxes
+      ).some(Boolean),
+
+    optionImages:
+      safeArray(optionImages)
+        .slice(0, 4)
+        .map(
+          (image) =>
+            image?.url
+              ? image
+              : null
+        ),
 
     sourceDocument: {
       fileName:
@@ -1704,6 +1960,20 @@ const buildImportQuestion = ({
   ) {
     result.visualWarning =
       visualWarning;
+
+    result.needsReview =
+      true;
+  }
+
+  if (
+    safeArray(
+      optionVisualWarnings
+    ).length > 0
+  ) {
+    result.optionVisualWarnings =
+      safeArray(
+        optionVisualWarnings
+      );
 
     result.needsReview =
       true;
@@ -2164,38 +2434,33 @@ const processPdfImport =
             );
 
           // =============================================
-          // NO REAL VISUAL
-          // =============================================
-
-          if (
-            !question.hasVisual
-          ) {
-            return {
-              accepted:
-                true,
-
-              question:
-                buildImportQuestion({
-                  question,
-
-                  questionImage:
-                    null,
-
-                  sourceFileName:
-                    file.originalname,
-
-                  fileType:
-                    "pdf",
-                }),
-            };
-          }
-
-          // =============================================
-          // REAL VISUAL
+          // QUESTION-STEM VISUAL
           // =============================================
 
           const visual =
-            await processQuestionVisual({
+            question.hasVisual
+              ? await processQuestionVisual({
+                  question,
+
+                  renderedPage,
+
+                  sourceFileName:
+                    file.originalname,
+                })
+              : {
+                  questionImage:
+                    null,
+
+                  screenshotWarning:
+                    null,
+                };
+
+          // =============================================
+          // OPTION-LEVEL VISUALS
+          // =============================================
+
+          const optionVisuals =
+            await processOptionVisuals({
               question,
 
               renderedPage,
@@ -2215,6 +2480,9 @@ const processPdfImport =
                 questionImage:
                   visual.questionImage,
 
+                optionImages:
+                  optionVisuals.optionImages,
+
                 sourceFileName:
                   file.originalname,
 
@@ -2223,6 +2491,9 @@ const processPdfImport =
 
                 visualWarning:
                   visual.screenshotWarning,
+
+                optionVisualWarnings:
+                  optionVisuals.optionVisualWarnings,
               }),
           };
         }
