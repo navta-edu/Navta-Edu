@@ -22,6 +22,79 @@ const {
 } = require("./navtaImageService");
 
 // =====================================================
+// NAVTA AI V2 LOCAL INTELLIGENCE PIPELINE
+// =====================================================
+// These services run before/alongside Gemini. Every call is
+// guarded below so an optional local-cleaning failure never
+// takes down the existing production importer.
+
+const navtaOCRCleaner = require("./navtaOCRCleaner");
+const navtaAIRouter = require("./navtaAIRouter");
+const navtaDuplicateDetector = require("./navtaDuplicateDetector");
+
+const NAVTA_AI_V2_ENABLED =
+  String(process.env.NAVTA_AI_V2_ENABLED ?? "true").toLowerCase() !== "false";
+
+const NAVTA_AI_V2_CLEAN_TEXT =
+  String(process.env.NAVTA_AI_V2_CLEAN_TEXT ?? "true").toLowerCase() !== "false";
+
+const safeV2CleanText = (value = "", subject = "") => {
+  const original = String(value || "");
+
+  if (!NAVTA_AI_V2_ENABLED || !NAVTA_AI_V2_CLEAN_TEXT || !original.trim()) {
+    return original;
+  }
+
+  try {
+    const cleaned = navtaOCRCleaner.clean(original, subject);
+    return typeof cleaned === "string" && cleaned.trim() ? cleaned : original;
+  } catch (error) {
+    console.warn("NAVTA AI V2 OCR cleaner skipped:", error?.message || error);
+    return original;
+  }
+};
+
+const getV2QuestionMetadata = (question = {}) => {
+  if (!NAVTA_AI_V2_ENABLED) {
+    return {};
+  }
+
+  try {
+    const confidence = Number(navtaAIRouter.calculateConfidence(question));
+    const questionText = String(question?.question || "");
+    const equationType = navtaOCRCleaner.hasEquation(questionText)
+      ? navtaOCRCleaner.detectEquationType(questionText)
+      : null;
+
+    return {
+      confidence: Number.isFinite(confidence) ? confidence : null,
+      needsAI: Number.isFinite(confidence)
+        ? navtaAIRouter.shouldUseAI({ ...question, confidence })
+        : false,
+      equationType,
+      navtaAIVersion: 2,
+    };
+  } catch (error) {
+    console.warn("NAVTA AI V2 metadata skipped:", error?.message || error);
+    return { navtaAIVersion: 2 };
+  }
+};
+
+const logV2RouterStatistics = (text = "", subject = "") => {
+  if (!NAVTA_AI_V2_ENABLED || !String(text || "").trim()) {
+    return;
+  }
+
+  try {
+    const localResult = navtaAIRouter.process(text, subject);
+    const stats = navtaAIRouter.getStatistics(localResult);
+    console.log("NAVTA AI V2 local router statistics:", stats);
+  } catch (error) {
+    console.warn("NAVTA AI V2 router diagnostics skipped:", error?.message || error);
+  }
+};
+
+// =====================================================
 // VALID VALUES
 // =====================================================
 
@@ -1465,6 +1538,10 @@ const buildImportQuestion = ({
       importedByAI:
         true,
     },
+
+    ...getV2QuestionMetadata(
+      question
+    ),
   };
 
   // ===================================================
@@ -2377,6 +2454,27 @@ const analyseNavtaImport =
     }
 
     // =================================================
+    // NAVTA AI V2 OCR PRE-CLEAN
+    // =================================================
+
+    const cleanedDocumentResult = {
+      ...documentResult,
+      text: safeV2CleanText(
+        documentResult?.text || "",
+        hints.subject
+      ),
+    };
+
+    // Local routing is diagnostic at this stage. Gemini remains the
+    // authoritative extractor/classifier, preserving the existing
+    // visual-page and confidence workflow while we reduce quota use
+    // incrementally.
+    logV2RouterStatistics(
+      cleanedDocumentResult.text,
+      hints.subject
+    );
+
+    // =================================================
     // PROCESS DOCUMENT
     // =================================================
 
@@ -2386,14 +2484,16 @@ const analyseNavtaImport =
         ? await processPdfImport({
             file,
 
-            documentResult,
+            documentResult:
+              cleanedDocumentResult,
 
             hints,
           })
         : await processTextImport({
             file,
 
-            documentResult,
+            documentResult:
+              cleanedDocumentResult,
 
             hints,
 
