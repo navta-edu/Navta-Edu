@@ -1,1 +1,19 @@
+{
+  "Units and Measurements": [
+    "percentage error = (absolute error / measured value) × 100"
+  ],
 
+  "Motion in a Straight Line": [
+    "v = u + at",
+    "s = ut + 1/2 at²",
+    "v² = u² + 2as",
+    "s = ((u+v)/2)t"
+  ],
+
+  "Work, Energy and Power": [
+    "W = Fs cosθ",
+    "P = W/t",
+    "KE = 1/2 mv²",
+    "PE = mgh"
+  ]
+}
