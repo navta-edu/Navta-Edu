@@ -1,15 +1,19 @@
-const sharp = require("sharp");
+const {
+  createCanvas,
+  loadImage,
+} = require("@napi-rs/canvas");
 
 // =====================================================
-// NAVTA DIAGRAM CROP SERVICE
-// Exact visual-only cropping for:
-// - diagrams
-// - graphs
-// - circuits
-// - geometry
-// - biology figures
-// - chemistry structures/reaction schemes
-// - visual MCQ options
+// NAVTA DIAGRAM CROP SERVICE - 503 SAFE
+// =====================================================
+//
+// IMPORTANT:
+// This service deliberately uses @napi-rs/canvas instead of sharp.
+// NAVTA already uses the canvas stack for PDF rendering, so this avoids
+// adding a new native dependency that can crash Hostinger at startup.
+//
+// It NEVER falls back to questionBoundingBox.
+// Only the supplied visualBoundingBox is cropped.
 // =====================================================
 
 const DEFAULT_PADDING = Math.max(
@@ -23,27 +27,22 @@ const DEFAULT_PADDING = Math.max(
   )
 );
 
-// =====================================================
-// HELPERS
-// =====================================================
-
-function clamp(
+const clamp = (
   value,
   min,
   max
-) {
-  return Math.max(
+) =>
+  Math.max(
     min,
     Math.min(
       max,
       value
     )
   );
-}
 
-function toFiniteNumber(
+const toFiniteNumber = (
   value
-) {
+) => {
   const number =
     Number(value);
 
@@ -52,30 +51,11 @@ function toFiniteNumber(
   )
     ? number
     : null;
-}
+};
 
-// =====================================================
-// NORMALIZE BOUNDING BOX
-// =====================================================
-//
-// Expected format:
-//
-// {
-//   x: 0.10,
-//   y: 0.20,
-//   width: 0.50,
-//   height: 0.30
-// }
-//
-// Coordinates are normalized from 0 -> 1.
-//
-// Gemini may occasionally return 0 -> 100 percentages.
-// We safely support that too.
-// =====================================================
-
-function normalizeBox(
+const normalizeBox = (
   box
-) {
+) => {
   if (
     !box ||
     typeof box !== "object"
@@ -112,17 +92,14 @@ function normalizeBox(
     return null;
   }
 
-  // ---------------------------------------------
-  // Support Gemini percentage coordinates
-  // ---------------------------------------------
-
+  // Support normalized 0..1 coordinates and Gemini-style percentages.
   if (
     x > 1 ||
     y > 1 ||
     width > 1 ||
     height > 1
   ) {
-    const looksLikePercentage =
+    const percentage =
       x >= 0 &&
       y >= 0 &&
       x <= 100 &&
@@ -132,9 +109,7 @@ function normalizeBox(
       width <= 100 &&
       height <= 100;
 
-    if (
-      !looksLikePercentage
-    ) {
+    if (!percentage) {
       return null;
     }
 
@@ -201,81 +176,45 @@ function normalizeBox(
     height:
       bottom - top,
   };
-}
+};
 
-// =====================================================
-// VALIDATE VISUAL BOX
-// =====================================================
-
-function isUsableVisualBox(
+const isUsableVisualBox = (
   box
-) {
+) => {
   const normalized =
     normalizeBox(
       box
     );
 
-  if (
-    !normalized
-  ) {
+  if (!normalized) {
     return false;
   }
 
-  // Prevent microscopic / accidental crops.
+  return (
+    normalized.width >=
+      0.003 &&
+    normalized.height >=
+      0.003 &&
+    !(
+      normalized.width >=
+        0.985 &&
+      normalized.height >=
+        0.985
+    )
+  );
+};
 
-  if (
-    normalized.width <
-      0.003 ||
-    normalized.height <
-      0.003
-  ) {
-    return false;
-  }
-
-  // A genuine visual should not normally occupy
-  // virtually the complete page.
-  //
-  // This helps protect NAVTA against Gemini returning
-  // the whole page as a diagram crop.
-
-  if (
-    normalized.width >
-      0.98 &&
-    normalized.height >
-      0.98
-  ) {
-    return false;
-  }
-
-  return true;
-}
-
-// =====================================================
-// APPLY VERY SMALL VISUAL PADDING
-// =====================================================
-//
-// IMPORTANT:
-//
-// Padding is relative to the VISUAL dimensions,
-// not the complete page.
-//
-// This prevents a small diagram from receiving
-// a huge page-level margin.
-// =====================================================
-
-function addVisualPadding(
+const addVisualPadding = (
   box,
   padding =
     DEFAULT_PADDING
-) {
+) => {
   const normalized =
     normalizeBox(
       box
     );
 
-  if (
-    !normalized
-  ) {
+  if (!normalized) {
     return null;
   }
 
@@ -288,6 +227,7 @@ function addVisualPadding(
       0.03
     );
 
+  // Padding is relative to the visual size, not the whole page.
   const padX =
     normalized.width *
     safePadding;
@@ -330,13 +270,6 @@ function addVisualPadding(
       1
     );
 
-  if (
-    right <= left ||
-    bottom <= top
-  ) {
-    return normalized;
-  }
-
   return {
     x:
       left,
@@ -350,164 +283,24 @@ function addVisualPadding(
     height:
       bottom - top,
   };
-}
+};
 
-// =====================================================
-// CONVERT NORMALIZED BOX -> PIXELS
-// =====================================================
-
-function boxToPixels(
-  box,
-  pageWidth,
-  pageHeight
-) {
-  const normalized =
-    normalizeBox(
-      box
-    );
-
-  if (
-    !normalized
-  ) {
-    return null;
-  }
-
-  const width =
-    Number(
-      pageWidth
-    );
-
-  const height =
-    Number(
-      pageHeight
-    );
-
-  if (
-    !Number.isFinite(
-      width
-    ) ||
-    !Number.isFinite(
-      height
-    ) ||
-    width <= 0 ||
-    height <= 0
-  ) {
-    return null;
-  }
-
-  let left =
-    Math.floor(
-      normalized.x *
-      width
-    );
-
-  let top =
-    Math.floor(
-      normalized.y *
-      height
-    );
-
-  let right =
-    Math.ceil(
-      (
-        normalized.x +
-        normalized.width
-      ) *
-      width
-    );
-
-  let bottom =
-    Math.ceil(
-      (
-        normalized.y +
-        normalized.height
-      ) *
-      height
-    );
-
-  left =
-    clamp(
-      left,
-      0,
-      width - 1
-    );
-
-  top =
-    clamp(
-      top,
-      0,
-      height - 1
-    );
-
-  right =
-    clamp(
-      right,
-      left + 1,
-      width
-    );
-
-  bottom =
-    clamp(
-      bottom,
-      top + 1,
-      height
-    );
-
-  const cropWidth =
-    right - left;
-
-  const cropHeight =
-    bottom - top;
-
-  if (
-    cropWidth <= 0 ||
-    cropHeight <= 0
-  ) {
-    return null;
-  }
-
-  return {
-    left,
-    top,
-
-    width:
-      cropWidth,
-
-    height:
-      cropHeight,
-  };
-}
-
-// =====================================================
-// CROP EXACT VISUAL FROM PAGE
-// =====================================================
-
-async function cropVisualFromPage({
-  pageBuffer,
+const boundingBoxToPixels = ({
   boundingBox,
+  imageWidth,
+  imageHeight,
   padding =
     DEFAULT_PADDING,
-}) {
-  if (
-    !Buffer.isBuffer(
-      pageBuffer
-    ) ||
-    pageBuffer.length === 0
-  ) {
-    throw new Error(
-      "A rendered PDF page buffer is required."
-    );
-  }
-
-  const originalBox =
+}) => {
+  const normalized =
     normalizeBox(
       boundingBox
     );
 
   if (
-    !originalBox ||
+    !normalized ||
     !isUsableVisualBox(
-      originalBox
+      normalized
     )
   ) {
     throw new Error(
@@ -515,268 +308,331 @@ async function cropVisualFromPage({
     );
   }
 
-  // ---------------------------------------------
-  // Decode page once
-  // ---------------------------------------------
-
-  const pageImage =
-    sharp(
-      pageBuffer,
-      {
-        failOn:
-          "error",
-      }
-    );
-
-  const metadata =
-    await pageImage.metadata();
-
-  const pageWidth =
-    Number(
-      metadata.width
-    );
-
-  const pageHeight =
-    Number(
-      metadata.height
-    );
-
-  if (
-    !Number.isFinite(
-      pageWidth
-    ) ||
-    !Number.isFinite(
-      pageHeight
-    ) ||
-    pageWidth <= 0 ||
-    pageHeight <= 0
-  ) {
-    throw new Error(
-      "Could not determine rendered PDF page dimensions."
-    );
-  }
-
-  // ---------------------------------------------
-  // Add only tiny visual-relative padding
-  // ---------------------------------------------
-
-  const paddedBox =
+  const padded =
     addVisualPadding(
-      originalBox,
+      normalized,
       padding
     );
 
-  if (
-    !paddedBox
-  ) {
-    throw new Error(
-      "Could not calculate visual crop area."
+  const sourceWidth =
+    Number(
+      imageWidth
     );
-  }
 
-  // ---------------------------------------------
-  // Convert exact coordinates to pixels
-  // ---------------------------------------------
-
-  const pixelBox =
-    boxToPixels(
-      paddedBox,
-      pageWidth,
-      pageHeight
+  const sourceHeight =
+    Number(
+      imageHeight
     );
 
   if (
-    !pixelBox
-  ) {
-    throw new Error(
-      "Could not convert visual bounding box to pixels."
-    );
-  }
-
-  // ---------------------------------------------
-  // IMPORTANT:
-  //
-  // No auto-trim is used here.
-  //
-  // Sharp trim() can accidentally remove important
-  // white space inside:
-  // - reaction arrows
-  // - circuits
-  // - graphs
-  // - geometry
-  //
-  // Gemini's exact visualBoundingBox remains the
-  // source of truth.
-  // ---------------------------------------------
-
-  const buffer =
-    await sharp(
-      pageBuffer
-    )
-      .extract({
-        left:
-          pixelBox.left,
-
-        top:
-          pixelBox.top,
-
-        width:
-          pixelBox.width,
-
-        height:
-          pixelBox.height,
-      })
-      .png({
-        compressionLevel:
-          9,
-
-        adaptiveFiltering:
-          true,
-      })
-      .toBuffer();
-
-  if (
-    !Buffer.isBuffer(
-      buffer
+    !Number.isFinite(
+      sourceWidth
     ) ||
-    buffer.length === 0
+    !Number.isFinite(
+      sourceHeight
+    ) ||
+    sourceWidth <= 0 ||
+    sourceHeight <= 0
   ) {
     throw new Error(
-      "Visual crop produced an empty image."
+      "Invalid rendered page dimensions."
     );
   }
+
+  let left =
+    Math.floor(
+      padded.x *
+      sourceWidth
+    );
+
+  let top =
+    Math.floor(
+      padded.y *
+      sourceHeight
+    );
+
+  let right =
+    Math.ceil(
+      (
+        padded.x +
+        padded.width
+      ) *
+      sourceWidth
+    );
+
+  let bottom =
+    Math.ceil(
+      (
+        padded.y +
+        padded.height
+      ) *
+      sourceHeight
+    );
+
+  left =
+    clamp(
+      left,
+      0,
+      sourceWidth - 1
+    );
+
+  top =
+    clamp(
+      top,
+      0,
+      sourceHeight - 1
+    );
+
+  right =
+    clamp(
+      right,
+      left + 1,
+      sourceWidth
+    );
+
+  bottom =
+    clamp(
+      bottom,
+      top + 1,
+      sourceHeight
+    );
 
   return {
-    buffer,
+    x:
+      left,
+
+    y:
+      top,
 
     width:
-      pixelBox.width,
+      right - left,
 
     height:
-      pixelBox.height,
+      bottom - top,
 
-    boundingBox:
-      paddedBox,
+    normalizedBoundingBox:
+      padded,
 
     originalBoundingBox:
-      originalBox,
+      normalized,
   };
-}
+};
 
-// =====================================================
-// CREATE QUESTION DIAGRAM
-// =====================================================
-//
-// Used by navtaAIImportService.js.
-//
-// CRITICAL:
-// ONLY question.visualBoundingBox is accepted.
-//
-// questionBoundingBox is NEVER used as a fallback.
-// =====================================================
-
-async function createQuestionDiagram({
-  question,
-  pageBuffer,
-}) {
-  if (
-    !question ||
-    typeof question !==
-      "object"
-  ) {
-    throw new Error(
-      "Question data is required for visual cropping."
-    );
-  }
-
-  if (
-    !question.hasVisual
-  ) {
-    throw new Error(
-      "Question does not contain a genuine visual."
-    );
-  }
-
-  const visualBoundingBox =
-    normalizeBox(
-      question.visualBoundingBox
-    );
-
-  if (
-    !visualBoundingBox
-  ) {
-    throw new Error(
-      "Question visualBoundingBox is missing or invalid. Whole-question fallback is disabled."
-    );
-  }
-
-  // NEVER:
-  //
-  // question.visualBoundingBox ||
-  // question.questionBoundingBox
-  //
-  // Only the actual visual box is allowed.
-
-  return cropVisualFromPage({
+const cropVisualFromPage =
+  async ({
     pageBuffer,
-
-    boundingBox:
-      visualBoundingBox,
-
-    padding:
+    boundingBox,
+    padding =
       DEFAULT_PADDING,
-  });
-}
+  }) => {
+    if (
+      !Buffer.isBuffer(
+        pageBuffer
+      ) ||
+      pageBuffer.length === 0
+    ) {
+      throw new Error(
+        "A valid rendered PDF page buffer is required."
+      );
+    }
 
-// =====================================================
-// CREATE OPTION DIAGRAM
-// =====================================================
-//
-// Used for visual answer choices.
-//
-// The importer can pass an individual option box here.
-// The cropper has no knowledge of neighbouring options,
-// so it cannot accidentally fall back to another region.
-// =====================================================
+    const sourceImage =
+      await loadImage(
+        pageBuffer
+      );
 
-async function createOptionDiagram({
-  pageBuffer,
-  boundingBox,
-}) {
-  const optionBox =
-    normalizeBox(
-      boundingBox
+    const imageWidth =
+      Number(
+        sourceImage.width
+      );
+
+    const imageHeight =
+      Number(
+        sourceImage.height
+      );
+
+    if (
+      !imageWidth ||
+      !imageHeight
+    ) {
+      throw new Error(
+        "Unable to determine rendered page dimensions."
+      );
+    }
+
+    const crop =
+      boundingBoxToPixels({
+        boundingBox,
+        imageWidth,
+        imageHeight,
+        padding,
+      });
+
+    const canvas =
+      createCanvas(
+        crop.width,
+        crop.height
+      );
+
+    const context =
+      canvas.getContext(
+        "2d"
+      );
+
+    // White PDF-style background.
+    context.fillStyle =
+      "#ffffff";
+
+    context.fillRect(
+      0,
+      0,
+      crop.width,
+      crop.height
     );
 
-  if (
-    !optionBox
-  ) {
-    throw new Error(
-      "Option visual bounding box is missing or invalid."
-    );
-  }
+    context.drawImage(
+      sourceImage,
 
-  return cropVisualFromPage({
+      crop.x,
+      crop.y,
+      crop.width,
+      crop.height,
+
+      0,
+      0,
+      crop.width,
+      crop.height
+    );
+
+    const buffer =
+      await canvas.encode(
+        "png"
+      );
+
+    if (
+      !Buffer.isBuffer(
+        buffer
+      ) ||
+      buffer.length === 0
+    ) {
+      throw new Error(
+        "NAVTA could not encode the cropped visual."
+      );
+    }
+
+    return {
+      buffer,
+
+      mimeType:
+        "image/png",
+
+      width:
+        crop.width,
+
+      height:
+        crop.height,
+
+      crop,
+
+      boundingBox:
+        crop.normalizedBoundingBox,
+
+      originalBoundingBox:
+        crop.originalBoundingBox,
+    };
+  };
+
+// =====================================================
+// IMPORTER-COMPATIBLE QUESTION VISUAL API
+// =====================================================
+
+const createQuestionDiagram =
+  async ({
+    question,
     pageBuffer,
-
-    boundingBox:
-      optionBox,
-
-    padding:
+    padding =
       DEFAULT_PADDING,
-  });
-}
+  }) => {
+    if (
+      !question ||
+      typeof question !==
+        "object"
+    ) {
+      return null;
+    }
 
-// =====================================================
-// EXPORTS
-// =====================================================
+    // IMPORTANT:
+    // No questionBoundingBox fallback is allowed.
+    if (
+      !question.hasVisual ||
+      !question.visualBoundingBox
+    ) {
+      return null;
+    }
+
+    const visualBoundingBox =
+      normalizeBox(
+        question.visualBoundingBox
+      );
+
+    if (
+      !visualBoundingBox ||
+      !isUsableVisualBox(
+        visualBoundingBox
+      )
+    ) {
+      return null;
+    }
+
+    return cropVisualFromPage({
+      pageBuffer,
+
+      boundingBox:
+        visualBoundingBox,
+
+      padding,
+    });
+  };
+
+// Optional reusable API for a future option-level visual pipeline.
+const createOptionDiagram =
+  async ({
+    pageBuffer,
+    boundingBox,
+    padding =
+      DEFAULT_PADDING,
+  }) => {
+    const optionBox =
+      normalizeBox(
+        boundingBox
+      );
+
+    if (
+      !optionBox ||
+      !isUsableVisualBox(
+        optionBox
+      )
+    ) {
+      return null;
+    }
+
+    return cropVisualFromPage({
+      pageBuffer,
+
+      boundingBox:
+        optionBox,
+
+      padding,
+    });
+  };
 
 module.exports = {
-  createQuestionDiagram,
-  createOptionDiagram,
-  cropVisualFromPage,
+  DEFAULT_PADDING,
   normalizeBox,
   isUsableVisualBox,
   addVisualPadding,
-  boxToPixels,
+  boundingBoxToPixels,
+  cropVisualFromPage,
+  createQuestionDiagram,
+  createOptionDiagram,
 };
