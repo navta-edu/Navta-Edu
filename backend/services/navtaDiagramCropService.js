@@ -1,232 +1,221 @@
-const {
-  createCanvas,
-  loadImage,
-} = require("@napi-rs/canvas");
+const sharp = require("sharp");
 
-// =====================================================
-// SETTINGS
-// =====================================================
+const DEFAULT_PADDING = Math.max(
+  0,
+  Math.min(
+    0.04,
+    Number(
+      process.env.NAVTA_AI_VISUAL_CROP_PADDING ||
+      0.012
+    )
+  )
+);
 
-const DEFAULT_PADDING = 18;
-const MIN_CROP_SIZE = 20;
+function clamp(value, min, max) {
+  return Math.max(
+    min,
+    Math.min(max, value)
+  );
+}
 
-// =====================================================
-// HELPERS
-// =====================================================
-
-const clamp = (value, minimum, maximum) => {
-  const number = Number(value);
-
-  if (!Number.isFinite(number)) {
-    return minimum;
+function normalizeBox(box) {
+  if (
+    !box ||
+    typeof box !== "object"
+  ) {
+    return null;
   }
 
-  return Math.min(maximum, Math.max(minimum, number));
-};
-
-// =====================================================
-// NORMALIZE BOUNDING BOX
-// =====================================================
-
-const normalizeBoundingBox = (boundingBox) => {
-  if (!boundingBox || typeof boundingBox !== "object") {
-    throw new Error("A question bounding box is required.");
-  }
-
-  let x = Number(boundingBox.x);
-  let y = Number(boundingBox.y);
-  let width = Number(boundingBox.width);
-  let height = Number(boundingBox.height);
-
-  if (![x, y, width, height].every(Number.isFinite)) {
-    throw new Error("Question bounding box contains invalid numbers.");
-  }
-
-  // Accept either normalized 0..1 values or percentages 0..100.
-  if (x > 1 || y > 1 || width > 1 || height > 1) {
-    if (
-      x >= 0 &&
-      y >= 0 &&
-      x <= 100 &&
-      y <= 100 &&
-      width <= 100 &&
-      height <= 100
-    ) {
-      x /= 100;
-      y /= 100;
-      width /= 100;
-      height /= 100;
-    }
-  }
-
-  x = clamp(x, 0, 1);
-  y = clamp(y, 0, 1);
-  width = clamp(width, 0, 1);
-  height = clamp(height, 0, 1);
-
-  width = Math.min(width, 1 - x);
-  height = Math.min(height, 1 - y);
-
-  if (width <= 0 || height <= 0) {
-    throw new Error("Invalid question bounding box.");
-  }
-
-  return {
-    x,
-    y,
-    width,
-    height,
-  };
-};
-
-// =====================================================
-// CONVERT NORMALIZED BOX TO PIXELS
-// =====================================================
-
-const boundingBoxToPixels = ({
-  boundingBox,
-  imageWidth,
-  imageHeight,
-  padding = DEFAULT_PADDING,
-}) => {
-  const safeImageWidth = Number(imageWidth);
-  const safeImageHeight = Number(imageHeight);
+  const x = Number(box.x);
+  const y = Number(box.y);
+  const width = Number(box.width);
+  const height = Number(box.height);
 
   if (
-    !Number.isFinite(safeImageWidth) ||
-    !Number.isFinite(safeImageHeight) ||
-    safeImageWidth <= 0 ||
-    safeImageHeight <= 0
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
   ) {
-    throw new Error("Invalid source image dimensions.");
+    return null;
   }
 
-  const box = normalizeBoundingBox(boundingBox);
+  const left = clamp(x, 0, 1);
+  const top = clamp(y, 0, 1);
 
-  const rawX = Math.round(box.x * safeImageWidth);
-  const rawY = Math.round(box.y * safeImageHeight);
-  const rawWidth = Math.round(box.width * safeImageWidth);
-  const rawHeight = Math.round(box.height * safeImageHeight);
-
-  const safePadding = Math.max(0, Number(padding) || 0);
-
-  const x = Math.max(0, rawX - safePadding);
-  const y = Math.max(0, rawY - safePadding);
-
-  const right = Math.min(
-    safeImageWidth,
-    rawX + rawWidth + safePadding
+  const right = clamp(
+    x + width,
+    0,
+    1
   );
 
-  const bottom = Math.min(
-    safeImageHeight,
-    rawY + rawHeight + safePadding
+  const bottom = clamp(
+    y + height,
+    0,
+    1
   );
 
-  const width = Math.round(right - x);
-  const height = Math.round(bottom - y);
-
-  if (width < MIN_CROP_SIZE || height < MIN_CROP_SIZE) {
-    throw new Error("The detected question area is too small.");
+  if (
+    right <= left ||
+    bottom <= top
+  ) {
+    return null;
   }
 
   return {
-    x: Math.round(x),
-    y: Math.round(y),
-    width,
-    height,
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
   };
-};
+}
 
-// =====================================================
-// CROP QUESTION / DIAGRAM
-// =====================================================
-
-const cropQuestionDiagram = async ({
+async function cropVisualFromPage({
   pageBuffer,
   boundingBox,
   padding = DEFAULT_PADDING,
-}) => {
-  if (!Buffer.isBuffer(pageBuffer) || pageBuffer.length === 0) {
-    throw new Error("A valid rendered page buffer is required.");
+}) {
+  if (!Buffer.isBuffer(pageBuffer)) {
+    throw new Error(
+      "A rendered PDF page buffer is required."
+    );
   }
 
-  const sourceImage = await loadImage(pageBuffer);
+  const box =
+    normalizeBox(boundingBox);
 
-  const imageWidth = Number(sourceImage.width);
-  const imageHeight = Number(sourceImage.height);
-
-  if (!imageWidth || !imageHeight) {
-    throw new Error("Unable to determine rendered page dimensions.");
+  if (!box) {
+    throw new Error(
+      "A valid visualBoundingBox is required."
+    );
   }
 
-  const crop = boundingBoxToPixels({
-    boundingBox,
-    imageWidth,
-    imageHeight,
-    padding,
-  });
+  const metadata =
+    await sharp(pageBuffer)
+      .metadata();
 
-  const canvas = createCanvas(crop.width, crop.height);
-  const context = canvas.getContext("2d");
+  const pageWidth =
+    Number(metadata.width);
 
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, crop.width, crop.height);
+  const pageHeight =
+    Number(metadata.height);
 
-  context.drawImage(
-    sourceImage,
-    crop.x,
-    crop.y,
-    crop.width,
-    crop.height,
+  if (
+    !pageWidth ||
+    !pageHeight
+  ) {
+    throw new Error(
+      "Could not determine rendered page dimensions."
+    );
+  }
+
+  // Padding is deliberately very small.
+  // We want the actual diagram, not nearby
+  // question text or another option.
+  const padX =
+    box.width * padding;
+
+  const padY =
+    box.height * padding;
+
+  const leftNorm =
+    clamp(
+      box.x - padX,
+      0,
+      1
+    );
+
+  const topNorm =
+    clamp(
+      box.y - padY,
+      0,
+      1
+    );
+
+  const rightNorm =
+    clamp(
+      box.x +
+      box.width +
+      padX,
+      0,
+      1
+    );
+
+  const bottomNorm =
+    clamp(
+      box.y +
+      box.height +
+      padY,
+      0,
+      1
+    );
+
+  let left =
+    Math.floor(
+      leftNorm * pageWidth
+    );
+
+  let top =
+    Math.floor(
+      topNorm * pageHeight
+    );
+
+  let right =
+    Math.ceil(
+      rightNorm * pageWidth
+    );
+
+  let bottom =
+    Math.ceil(
+      bottomNorm * pageHeight
+    );
+
+  left = clamp(
+    left,
     0,
-    0,
-    crop.width,
-    crop.height
+    pageWidth - 1
   );
 
-  const buffer = await canvas.encode("png");
+  top = clamp(
+    top,
+    0,
+    pageHeight - 1
+  );
 
-  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
-    throw new Error("NAVTA could not encode the cropped question image.");
-  }
+  right = clamp(
+    right,
+    left + 1,
+    pageWidth
+  );
 
-  return {
-    buffer,
-    mimeType: "image/png",
-    width: crop.width,
-    height: crop.height,
-    crop,
-  };
-};
+  bottom = clamp(
+    bottom,
+    top + 1,
+    pageHeight
+  );
 
-// =====================================================
-// PROCESS QUESTION VISUAL
-// =====================================================
+  const width =
+    right - left;
 
-const createQuestionDiagram = async ({
-  question,
-  pageBuffer,
-  padding = DEFAULT_PADDING,
-}) => {
-  if (!question || typeof question !== "object") {
-    return null;
-  }
+  const height =
+    bottom - top;
 
-  if (!question.hasVisual || !question.visualBoundingBox) {
-    return null;
-  }
-
-  return cropQuestionDiagram({
-    pageBuffer,
-    boundingBox: question.visualBoundingBox,
-    padding,
-  });
-};
+  return sharp(pageBuffer)
+    .extract({
+      left,
+      top,
+      width,
+      height,
+    })
+    .png({
+      compressionLevel: 9,
+    })
+    .toBuffer();
+}
 
 module.exports = {
-  normalizeBoundingBox,
-  boundingBoxToPixels,
-  cropQuestionDiagram,
-  createQuestionDiagram,
+  cropVisualFromPage,
+  normalizeBox,
 };
