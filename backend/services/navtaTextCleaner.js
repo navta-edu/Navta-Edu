@@ -1,68 +1,123 @@
 /**
- * ==========================================
+ * ==========================================================
  * NAVTA AI v2
  * Text Cleaner
- * ==========================================
+ * ==========================================================
  */
 
-function removeMarkdown(text) {
-  return text
-    .replace(/```json/gi, "")
-    .replace(/```/g, "")
-    .replace(/`/g, "");
+class NavtaTextCleaner {
+
+    clean(input = "") {
+
+        let text = String(input);
+
+        text = this.removeInvisibleCharacters(text);
+
+        text = this.removeMarkdown(text);
+
+        text = this.removeNavtaVisual(text);
+
+        text = this.normalizeQuotes(text);
+
+        text = this.normalizeDashes(text);
+
+        text = this.normalizeWhitespace(text);
+
+        text = this.normalizeLineBreaks(text);
+
+        text = this.removeDuplicateBlankLines(text);
+
+        text = this.normalizeBullets(text);
+
+        text = this.removeExtraTabs(text);
+
+        return text.trim();
+
+    }
+
+    removeMarkdown(text) {
+
+        return text
+            .replace(/```json/gi, "")
+            .replace(/```javascript/gi, "")
+            .replace(/```js/gi, "")
+            .replace(/```/g, "")
+            .replace(/`/g, "");
+
+    }
+
+    removeNavtaVisual(text) {
+
+        return text
+            .replace(/\[\[NAVTA_VISUAL\]\]/gi, "")
+            .replace(/\[NAVTA_VISUAL\]/gi, "")
+            .replace(/NAVTA_VISUAL/gi, "");
+
+    }
+
+    removeInvisibleCharacters(text) {
+
+        return text
+            .replace(/\u200B/g, "")
+            .replace(/\u200C/g, "")
+            .replace(/\u200D/g, "")
+            .replace(/\uFEFF/g, "")
+            .replace(/\u2060/g, "");
+
+    }
+
+    normalizeQuotes(text) {
+
+        return text
+            .replace(/[“”]/g, "\"")
+            .replace(/[‘’]/g, "'");
+
+    }
+
+    normalizeDashes(text) {
+
+        return text
+            .replace(/[–—]/g, "-");
+
+    }
+
+    normalizeWhitespace(text) {
+
+        return text
+            .replace(/[ \t]+/g, " ")
+            .replace(/\u00A0/g, " ");
+
+    }
+
+    normalizeLineBreaks(text) {
+
+        return text
+            .replace(/\r\n/g, "\n")
+            .replace(/\r/g, "\n");
+
+    }
+
+    removeDuplicateBlankLines(text) {
+
+        return text
+            .replace(/\n{3,}/g, "\n\n");
+
+    }
+
+    normalizeBullets(text) {
+
+        return text
+            .replace(/[•▪◦●]/g, "-");
+
+    }
+
+    removeExtraTabs(text) {
+
+        return text
+            .replace(/\t+/g, " ");
+
+    }
+
 }
 
-function removeNavtaVisual(text) {
-  return text
-    .replace(/\[\[NAVTA_VISUAL\]\]/gi, "")
-    .replace(/\[NAVTA_VISUAL\]/gi, "")
-    .replace(/NAVTA_VISUAL/gi, "");
-}
-
-function normalizeQuotes(text) {
-  return text
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'");
-}
-
-function normalizeDashes(text) {
-  return text
-    .replace(/[–—]/g, "-");
-}
-
-function removeExtraSpaces(text) {
-  return text
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function removeInvisibleCharacters(text) {
-  return text
-    .replace(/\u200B/g, "")
-    .replace(/\u200C/g, "")
-    .replace(/\u200D/g, "")
-    .replace(/\uFEFF/g, "");
-}
-
-function cleanText(input = "") {
-  let text = String(input);
-
-  text = removeInvisibleCharacters(text);
-
-  text = removeMarkdown(text);
-
-  text = removeNavtaVisual(text);
-
-  text = normalizeQuotes(text);
-
-  text = normalizeDashes(text);
-
-  text = removeExtraSpaces(text);
-
-  return text.trim();
-}
-
-module.exports = {
-  cleanText,
-};
+module.exports = new NavtaTextCleaner();
