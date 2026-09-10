@@ -1,1 +1,16 @@
-
+[
+  {
+    "id": "phy_11_01",
+    "name": "Units and Measurements",
+    "class": 11,
+    "keywords": ["units", "measurement", "dimensional analysis", "errors", "significant figures"],
+    "exams": ["JEE", "NEET", "Boards"]
+  },
+  {
+    "id": "phy_11_02",
+    "name": "Motion in a Straight Line",
+    "class": 11,
+    "keywords": ["velocity", "acceleration", "distance", "displacement"],
+    "exams": ["JEE", "NEET", "Boards"]
+  }
+]
