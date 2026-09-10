@@ -461,6 +461,33 @@ const normalizeCorrectAnswer = (
   return null;
 };
 
+
+// =====================================================
+// ESSENTIAL VISUAL LANGUAGE DETECTOR
+// =====================================================
+// This never invents a crop box and never uses questionBoundingBox.
+const questionTextStronglyImpliesVisual = (value = "") => {
+  const text = cleanString(value).toLowerCase();
+  if (!text) return false;
+
+  return [
+    /\bfollowing\s+reaction\b/i,
+    /\bfollowing\s+reaction\s+scheme\b/i,
+    /\bfollowing\s+scheme\b/i,
+    /\bfollowing\s+structure\b/i,
+    /\bfollowing\s+diagram\b/i,
+    /\bfollowing\s+figure\b/i,
+    /\bfollowing\s+graph\b/i,
+    /\bfollowing\s+circuit\b/i,
+    /\bfollowing\s+ray\s+diagram\b/i,
+    /\bfollowing\s+apparatus\b/i,
+    /\bshown\s+below\b/i,
+    /\bshown\s+in\s+the\s+(?:figure|diagram|graph|circuit)\b/i,
+    /\bgiven\s+(?:below|above)\b/i,
+    /\bfrom\s+the\s+(?:figure|diagram|graph|circuit)\b/i,
+  ].some((pattern) => pattern.test(text));
+};
+
 // =====================================================
 // VISUAL TYPE
 // =====================================================
@@ -1227,6 +1254,50 @@ biology
 image
 other
 
+
+=======================================================
+ESSENTIAL VISUAL DETECTION — MANDATORY
+=======================================================
+
+Before returning hasVisual=false, inspect the rendered page around the
+question carefully.
+
+If the wording depends on something drawn on the page, the visual is
+REQUIRED and must not be omitted.
+
+Strong examples:
+- "following reaction"
+- "following reaction scheme"
+- "following structure"
+- "following diagram"
+- "following figure"
+- "following graph"
+- "following circuit"
+- "shown below"
+- "given below"
+
+CHEMISTRY SPECIAL RULE:
+When the stem says "following reaction", inspect immediately below/after
+the stem for the substrate, organic/skeletal structure, reagent arrows,
+conditions, intermediates, ring structures, and reaction scheme.
+
+If that question-stem reaction exists:
+hasVisual = true
+visualType = "chemical-structure"
+visualBoundingBox = a TIGHT box around ONLY that question-stem reaction
+and insert [[NAVTA_VISUAL]] in the question string.
+
+Do NOT return hasVisual=false merely because the answer choices are
+ordinary text or numbers.
+
+Do NOT include answer choices or nearby unrelated structures in the
+question visualBoundingBox.
+
+If a required visual is visible but a tight visualBoundingBox cannot be
+located confidently, set needsReview=true. NEVER use questionBoundingBox
+as visualBoundingBox.
+
+
 =======================================================
 VISUAL MARKER RULE
 =======================================================
@@ -1457,15 +1528,25 @@ const normalizeDetectedQuestion = ({
       item.visualType
     );
 
-  let hasVisual =
-    Boolean(
-      item.hasVisual
+  const visualIsStronglyImplied =
+    questionTextStronglyImpliesVisual(
+      item.question
     );
 
-  if (
-    !hasVisual ||
-    !visualBoundingBox
-  ) {
+  // Safe recovery for inconsistent model output:
+  // a supplied tight visualBoundingBox may be trusted when the stem
+  // clearly requires a visual. We never fabricate a box.
+  let hasVisual =
+    Boolean(
+      visualBoundingBox &&
+      (
+        item.hasVisual ||
+        visualIsStronglyImplied ||
+        visualType !== "none"
+      )
+    );
+
+  if (!hasVisual) {
     hasVisual = false;
     visualType = "none";
     visualBoundingBox = null;
@@ -1581,6 +1662,13 @@ const normalizeDetectedQuestion = ({
     Boolean(
       item.needsReview
     );
+
+  if (
+    visualIsStronglyImplied &&
+    !hasVisual
+  ) {
+    needsReview = true;
+  }
 
   if (
     chapterConfidence !== null &&
