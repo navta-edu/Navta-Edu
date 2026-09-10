@@ -604,45 +604,6 @@ const normalizeBoundingBox = (
 };
 
 // =====================================================
-// OPTION VISUAL BOUNDING BOXES
-// =====================================================
-
-const normalizeOptionVisualBoundingBoxes = (
-  value
-) => {
-  const source =
-    safeArray(value);
-
-  const result =
-    [null, null, null, null];
-
-  for (
-    let index = 0;
-    index < 4;
-    index += 1
-  ) {
-    result[index] =
-      normalizeBoundingBox(
-        source[index]
-      );
-  }
-
-  return result;
-};
-
-const hasAnyOptionVisual = (
-  boxes = []
-) =>
-  safeArray(boxes).some(
-    (box) =>
-      Boolean(
-        normalizeBoundingBox(
-          box
-        )
-      )
-  );
-
-// =====================================================
 // PAGE IMAGE HELPERS
 // =====================================================
 
@@ -1102,13 +1063,13 @@ CRITICAL QUESTION TEXT RULES
 5. For MCQs, return exactly four options only when four options are visible.
 
 5A. The "question" field must contain ONLY the question stem.
-Do NOT copy the four answer options into the question field.
+Do NOT duplicate answer choices inside the question field.
 
-5B. If an answer option is itself a diagram, graph, organic structure,
-circuit, geometry figure, biological figure, or other spatial visual:
-- put EXACTLY ${NAVTA_VISUAL_MARKER} in that option string
-- return that option's own tight bounding box in optionVisualBoundingBoxes
-- do NOT include that option visual inside visualBoundingBox
+5B. IMPORTANT VISUAL OPTION RULE:
+If answer choices are diagrams, organic structures, graphs, circuits,
+geometry figures, biology figures, or other spatial visuals, keep the
+complete set of answer-choice visuals together with the question visual.
+Do NOT crop through an option. Do NOT include only part of an option.
 
 6. correctAnswer is zero-based:
 A = 0
@@ -1298,7 +1259,8 @@ If the question has no genuine visual, do not insert the marker.
 VISUAL BOUNDING BOX RULE
 =======================================================
 
-visualBoundingBox must contain ONLY the genuine visual.
+visualBoundingBox must tightly contain ONLY the genuine visual required
+to understand the question stem.
 
 It must NOT contain:
 
@@ -1307,6 +1269,18 @@ It must NOT contain:
 - answer options
 - question number
 - unrelated nearby content
+
+For chemistry reaction schemes, tightly include the complete substrate,
+reaction arrows, reagents, conditions, and structures that form the
+question-stem reaction scheme.
+
+Do NOT extend the box downward into answer choices.
+Do NOT include a nearby structure merely because it is close to the
+reaction scheme.
+Do NOT use questionBoundingBox as visualBoundingBox.
+
+If a tight question-only visual box cannot be determined confidently,
+set needsReview=true instead of returning a large approximate box.
 
 Use normalized coordinates from 0 to 1:
 
@@ -1326,55 +1300,6 @@ visualBoundingBox = null
 If hasVisual=true:
 
 visualBoundingBox MUST be provided.
-
-CRITICAL TIGHT-CROP RULE:
-
-visualBoundingBox MUST tightly enclose ONLY the exact visual object
-that belongs to the QUESTION STEM.
-
-For a chemistry reaction question, include only the required substrate,
-reaction arrows, reagents, conditions and structures that form the
-question's reaction scheme.
-
-DO NOT include:
-- question number
-- question prose
-- answer labels
-- answer option text
-- answer option diagrams
-- a diagram belonging to the next question
-- blank page area merely because it is nearby
-
-Make the box as tight as possible while keeping the complete visual.
-
-OPTION VISUAL RULE:
-
-For MCQ answer choices that are themselves visual objects, return:
-
-"optionVisualBoundingBoxes": [
-  null,
-  null,
-  null,
-  null
-]
-
-Index 0 = Option A
-Index 1 = Option B
-Index 2 = Option C
-Index 3 = Option D
-
-For every visual option:
-- the option text must contain exactly ${NAVTA_VISUAL_MARKER}
-- its corresponding optionVisualBoundingBoxes entry MUST tightly
-  enclose ONLY that option's diagram/structure
-- do not include the A/B/C/D label unless it is inseparable
-- do not include neighbouring options
-- do not include the question-stem visual
-- do not merge multiple option diagrams into one box
-
-If an option is normal text/LaTeX, its box must be null.
-
-question visualBoundingBox and optionVisualBoundingBoxes are independent.
 
 =======================================================
 QUESTION BOUNDING BOX
@@ -1472,7 +1397,6 @@ Return exactly:
       "visualType": "none",
       "visualDescription": "",
       "visualBoundingBox": null,
-      "optionVisualBoundingBoxes": [null, null, null, null],
       "sourcePage": null,
       "chapterConfidence": 0.0,
       "answerConfidence": 0.0,
@@ -1508,51 +1432,12 @@ const normalizeDetectedQuestion = ({
       )
       .filter(Boolean);
 
-  const optionVisualBoundingBoxesRaw =
-    normalizeOptionVisualBoundingBoxes(
-      item.optionVisualBoundingBoxes
-    );
-
-  const normalizedOptions =
-    options.map(
-      (option, index) => {
-        const hasOptionVisual =
-          Boolean(
-            optionVisualBoundingBoxesRaw[
-              index
-            ]
-          );
-
-        if (
-          hasOptionVisual &&
-          !option.includes(
-            NAVTA_VISUAL_MARKER
-          )
-        ) {
-          return `${option}\n${NAVTA_VISUAL_MARKER}`.trim();
-        }
-
-        if (
-          !hasOptionVisual
-        ) {
-          return option
-            .replaceAll(
-              NAVTA_VISUAL_MARKER,
-              ""
-            )
-            .trim();
-        }
-
-        return option;
-      }
-    );
-
   const questionType =
     normalizeQuestionType(
       item.questionType
     ) ||
     (
-      normalizedOptions.length === 4
+      options.length === 4
         ? "mcq"
         : ""
     );
@@ -1566,9 +1451,6 @@ const normalizeDetectedQuestion = ({
     normalizeBoundingBox(
       item.visualBoundingBox
     );
-
-  const optionVisualBoundingBoxes =
-    optionVisualBoundingBoxesRaw;
 
   let visualType =
     normalizeVisualType(
@@ -1780,8 +1662,7 @@ const normalizeDetectedQuestion = ({
 
     questionType,
 
-    options:
-      normalizedOptions,
+    options,
 
     correctAnswer:
       normalizeCorrectAnswer(
@@ -1835,13 +1716,6 @@ const normalizeDetectedQuestion = ({
         : "",
 
     visualBoundingBox,
-
-    optionVisualBoundingBoxes,
-
-    hasOptionVisuals:
-      hasAnyOptionVisual(
-        optionVisualBoundingBoxes
-      ),
 
     sourcePage,
 
@@ -1973,12 +1847,6 @@ const mergeVerifiedQuestion = (
 
     visualBoundingBox:
       original.visualBoundingBox,
-
-    optionVisualBoundingBoxes:
-      original.optionVisualBoundingBoxes,
-
-    hasOptionVisuals:
-      original.hasOptionVisuals,
   };
 };
 
