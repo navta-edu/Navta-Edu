@@ -16,6 +16,12 @@ const {
   completeNavtaTest,
   importQuestionsWithAI,
   confirmAIImport,
+
+  // ============================================
+  // ADMIN - MANUAL QUESTION IMAGE CROP
+  // ============================================
+  cropAIQuestionImage,
+  resetAIQuestionImage,
 } = require("../controllers/navtaTestController");
 
 const {
@@ -224,6 +230,54 @@ router.delete(
       });
     }
   }
+);
+
+// ============================================
+// ADMIN - MANUAL AI IMAGE CROP
+// ============================================
+//
+// Crop the CURRENT AI-cropped image.
+//
+// Request:
+// POST /questions/:id/crop-ai-image
+//
+// Body:
+// {
+//   "crop": {
+//     "x": 0.1,
+//     "y": 0.1,
+//     "width": 0.8,
+//     "height": 0.7
+//   }
+// }
+//
+// All crop coordinates are normalized 0..1.
+// Admin authentication is required.
+// ============================================
+
+router.post(
+  "/questions/:id/crop-ai-image",
+  protect,
+  authorizeRoles("admin"),
+  cropAIQuestionImage
+);
+
+// ============================================
+// ADMIN - RESET MANUAL CROP
+// ============================================
+//
+// Restores the stored original AI crop when
+// originalAIQuestionImage is available.
+//
+// Request:
+// POST /questions/:id/reset-ai-image
+// ============================================
+
+router.post(
+  "/questions/:id/reset-ai-image",
+  protect,
+  authorizeRoles("admin"),
+  resetAIQuestionImage
 );
 
 // ============================================
