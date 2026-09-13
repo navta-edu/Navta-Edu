@@ -463,6 +463,37 @@ const normalizeCorrectAnswer = (
 
 
 // =====================================================
+// MCQ OPTION QUALITY
+// =====================================================
+const normalizeOptionLabelOnlyValue = (value = "") => {
+  return cleanString(value)
+    .replace(/^[\s([{]+|[\s)\]}]+$/g, "")
+    .replace(/[.:]/g, "")
+    .trim()
+    .toUpperCase();
+};
+
+const hasPlaceholderOnlyMcqOptions = (options = []) => {
+  const values = safeArray(options)
+    .map(normalizeOptionLabelOnlyValue)
+    .filter(Boolean);
+
+  if (values.length !== 4) {
+    return false;
+  }
+
+  return [
+    ["A", "B", "C", "D"],
+    ["1", "2", "3", "4"],
+  ].some((set) =>
+    set.every(
+      (value, index) =>
+        values[index] === value
+    )
+  );
+};
+
+// =====================================================
 // ESSENTIAL VISUAL LANGUAGE DETECTOR
 // =====================================================
 // This never invents a crop box and never uses questionBoundingBox.
@@ -1092,6 +1123,42 @@ CRITICAL QUESTION TEXT RULES
 5A. The "question" field must contain ONLY the question stem.
 Do NOT duplicate answer choices inside the question field.
 
+5AA. MCQ OPTION EXTRACTION — MANDATORY:
+For every readable MCQ, read the COMPLETE CONTENT of each answer choice from
+the original rendered page image.
+
+The "options" array must contain the actual answer-choice values/text, NOT
+merely the printed labels.
+
+WRONG:
+"options": ["A", "B", "C", "D"]
+"options": ["1", "2", "3", "4"]
+
+CORRECT examples:
+"options": ["12", "10", "6", "15"]
+"options": ["A-R, B-P, C-Q", "A-Q, B-R, C-P", "A-P, B-Q, C-R", "A-Q, B-P, C-R"]
+
+For match-the-columns / matrix-match questions:
+- preserve List-I / Column-I and List-II / Column-II in the question stem;
+- extract each mapping/code combination printed after option labels (1)-(4)
+  or A-D into the corresponding options[] entry;
+- NEVER return only A/B/C/D or 1/2/3/4 as option values;
+- preserve mathematical symbols, subscripts, superscripts and LaTeX;
+- if an option is itself a genuine spatial visual, follow the visual-option
+  rule below instead of inventing text.
+
+If four option labels are visible but their actual option contents cannot be
+read confidently, do NOT invent them. Set:
+needsReview = true
+drop = true
+dropReason = "MCQ option contents could not be extracted completely."
+
+5AB. Before returning an MCQ, perform this check:
+If options[] normalizes to exactly ["A","B","C","D"] or ["1","2","3","4"],
+the extraction is incomplete. Re-read the original page image and recover the
+actual text/value following each label. If recovery is impossible, apply the
+drop rule above.
+
 5B. IMPORTANT VISUAL OPTION RULE:
 If answer choices are diagrams, organic structures, graphs, circuits,
 geometry figures, biology figures, or other spatial visuals, keep the
@@ -1513,6 +1580,12 @@ const normalizeDetectedQuestion = ({
         : ""
     );
 
+  const placeholderOnlyMcqOptions =
+    questionType === "mcq" &&
+    hasPlaceholderOnlyMcqOptions(
+      options
+    );
+
   const questionBoundingBox =
     normalizeBoundingBox(
       item.questionBoundingBox
@@ -1590,6 +1663,15 @@ const normalizeDetectedQuestion = ({
       item.dropReason
     );
 
+  if (
+    placeholderOnlyMcqOptions
+  ) {
+    drop = true;
+
+    dropReason =
+      "MCQ option contents could not be extracted completely.";
+  }
+
   let question =
     formatNavtaQuestionContent(
       item.question
@@ -1662,6 +1744,12 @@ const normalizeDetectedQuestion = ({
     Boolean(
       item.needsReview
     );
+
+  if (
+    placeholderOnlyMcqOptions
+  ) {
+    needsReview = true;
+  }
 
   if (
     visualIsStronglyImplied &&
@@ -1843,6 +1931,15 @@ const shouldVerifyQuestion = (
 
   if (
     question.questionType === "mcq" &&
+    hasPlaceholderOnlyMcqOptions(
+      question.options
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    question.questionType === "mcq" &&
     !Number.isInteger(
       question.correctAnswer
     )
@@ -1904,9 +2001,118 @@ const mergeVerifiedQuestion = (
     return original;
   }
 
+  const originalOptions =
+    safeArray(
+      original.options
+    );
+
+  const verifiedOptions =
+    safeArray(
+      verified.options
+    );
+
+  const shouldUseVerifiedOptions =
+    verifiedOptions.length === 4 &&
+    !hasPlaceholderOnlyMcqOptions(
+      verifiedOptions
+    ) &&
+    (
+      originalOptions.length !== 4 ||
+      hasPlaceholderOnlyMcqOptions(
+        originalOptions
+      )
+    );
+
   return {
     ...original,
-    ...verified,
+
+    subject:
+      verified.subject ||
+      original.subject,
+
+    exam:
+      verified.exam ||
+      original.exam,
+
+    classLevel:
+      verified.classLevel ||
+      original.classLevel,
+
+    chapter:
+      verified.chapter ||
+      original.chapter,
+
+    difficulty:
+      verified.difficulty ||
+      original.difficulty,
+
+    questionType:
+      verified.questionType ||
+      original.questionType,
+
+    options:
+      shouldUseVerifiedOptions
+        ? verifiedOptions
+        : originalOptions,
+
+    correctAnswer:
+      Number.isInteger(
+        verified.correctAnswer
+      )
+        ? verified.correctAnswer
+        : original.correctAnswer,
+
+    modelAnswer:
+      verified.modelAnswer ||
+      original.modelAnswer,
+
+    keyPoints:
+      safeArray(
+        verified.keyPoints
+      ).length > 0
+        ? verified.keyPoints
+        : original.keyPoints,
+
+    explanation:
+      verified.explanation ||
+      original.explanation,
+
+    chapterConfidence:
+      verified.chapterConfidence ??
+      original.chapterConfidence,
+
+    answerConfidence:
+      verified.answerConfidence ??
+      original.answerConfidence,
+
+    classificationConfidence:
+      verified.classificationConfidence ??
+      original.classificationConfidence,
+
+    difficultyConfidence:
+      verified.difficultyConfidence ??
+      original.difficultyConfidence,
+
+    needsReview:
+      Boolean(
+        verified.needsReview
+      ),
+
+    drop:
+      Boolean(
+        verified.drop
+      ),
+
+    dropReason:
+      cleanString(
+        verified.dropReason
+      ),
+
+    // Preserve the original stem and original visual placement/crop.
+    // Verification must never move/remove NAVTA_VISUAL or substitute
+    // questionBoundingBox for visualBoundingBox.
+    question:
+      original.question,
 
     questionNumber:
       cleanString(
@@ -1937,6 +2143,7 @@ const mergeVerifiedQuestion = (
       original.visualBoundingBox,
   };
 };
+
 
 const verifyLowConfidenceQuestions =
   async ({
@@ -1994,6 +2201,19 @@ Do not remove a readable question merely because the answer is uncertain.
 
 Do not invent missing options or text.
 
+MCQ OPTION REPAIR — IMPORTANT:
+Inspect the original rendered PDF page and verify the COMPLETE answer-choice
+content. If the supplied options are only ["A","B","C","D"] or
+["1","2","3","4"], those are placeholder labels, not valid option values.
+Recover the actual text/value after each printed option label from the page.
+
+For match-the-columns / matrix-match questions, return the complete mapping/code
+for each choice, for example "A-R, B-P, C-Q", not just "A", "B", "C", "D".
+
+If the actual option contents cannot be read confidently, do not invent them:
+set needsReview=true, drop=true, and explain that the MCQ option contents could
+not be extracted completely.
+
 Preserve the original question wording unless an obvious OCR/vision error must be corrected.
 
 ADMIN HINTS:
@@ -2029,6 +2249,7 @@ Return the same questions only, with corrected:
 - classLevel
 - chapter
 - difficulty
+- options
 - correctAnswer
 - explanation
 - chapterConfidence
