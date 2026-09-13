@@ -1183,6 +1183,14 @@ export default function AdminNavtaTest() {
     setDeletingFilteredQuestions
   ] = useState(false);
 
+  // ===================================================
+  // ADMIN IMAGE CROP EDITOR
+  // ===================================================
+
+  const [imageCropEditor, setImageCropEditor] = useState(null);
+  const [imageCropSaving, setImageCropSaving] = useState(false);
+  const [imageCropMessage, setImageCropMessage] = useState("");
+
   const [
     questionFilters,
     setQuestionFilters
@@ -2712,6 +2720,75 @@ export default function AdminNavtaTest() {
   };
 
   // ===================================================
+  // SAVED QUESTION IMAGE CROP HELPERS
+  // ===================================================
+
+  const openImageCropEditor = (question) => {
+    const questionId = question?._id || question?.id;
+    const image = getNavtaQuestionImage(question);
+    if (!questionId || !image?.url) {
+      setQuestionBankMessage("This question does not have an editable saved image.");
+      return;
+    }
+    setImageCropMessage("");
+    setImageCropEditor({ questionId: String(questionId), imageUrl: image.url, altText: image.altText || "NAVTA question visual", crop: { x: 0.05, y: 0.05, width: 0.9, height: 0.9 }, dragStart: null });
+  };
+
+  const closeImageCropEditor = () => {
+    if (imageCropSaving) return;
+    setImageCropEditor(null);
+    setImageCropMessage("");
+  };
+
+  const getCropPoint = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) };
+  };
+
+  const beginCropSelection = (event) => {
+    if (!imageCropEditor || imageCropSaving) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const point = getCropPoint(event);
+    setImageCropEditor((previous) => ({ ...previous, dragStart: point, crop: { x: point.x, y: point.y, width: 0.001, height: 0.001 } }));
+  };
+
+  const moveCropSelection = (event) => {
+    if (!imageCropEditor?.dragStart || imageCropSaving) return;
+    const point = getCropPoint(event);
+    const start = imageCropEditor.dragStart;
+    setImageCropEditor((previous) => ({ ...previous, crop: { x: Math.min(start.x, point.x), y: Math.min(start.y, point.y), width: Math.max(0.001, Math.abs(point.x - start.x)), height: Math.max(0.001, Math.abs(point.y - start.y)) } }));
+  };
+
+  const endCropSelection = () => setImageCropEditor((previous) => previous ? { ...previous, dragStart: null } : previous);
+  const resetCropSelection = () => setImageCropEditor((previous) => previous ? { ...previous, crop: { x: 0.05, y: 0.05, width: 0.9, height: 0.9 }, dragStart: null } : previous);
+
+  const applyImageCrop = async () => {
+    if (!imageCropEditor?.questionId) return;
+    const { crop } = imageCropEditor;
+    if (!crop || crop.width < 0.01 || crop.height < 0.01) { setImageCropMessage("Draw a larger crop area first."); return; }
+    setImageCropSaving(true); setImageCropMessage("");
+    try {
+      const response = await fetch(`/api/navta-test/questions/${imageCropEditor.questionId}/crop-ai-image`, { method: "POST", credentials: "include", headers: buildAdminHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ crop }) });
+      let data = {}; try { data = await response.json(); } catch { data = {}; }
+      if (!response.ok) throw new Error(data.message || "Unable to crop this image.");
+      await fetchSavedQuestions(questionFilters);
+      setQuestionBankMessage("Question image cropped successfully.");
+      setImageCropEditor(null);
+    } catch (error) { console.error("NAVTA admin image crop error:", error); setImageCropMessage(error.message || "Unable to crop this image."); }
+    finally { setImageCropSaving(false); }
+  };
+
+  const resetSavedQuestionImage = async (question) => {
+    const questionId = question?._id || question?.id; if (!questionId) return;
+    try {
+      const response = await fetch(`/api/navta-test/questions/${questionId}/reset-ai-image`, { method: "POST", credentials: "include", headers: buildAdminHeaders({ "Content-Type": "application/json" }) });
+      let data = {}; try { data = await response.json(); } catch { data = {}; }
+      if (!response.ok) throw new Error(data.message || "Unable to reset this image.");
+      await fetchSavedQuestions(questionFilters); setQuestionBankMessage("Question image reset to the original AI crop.");
+    } catch (error) { console.error("NAVTA admin image reset error:", error); setQuestionBankMessage(error.message || "Unable to reset this image."); }
+  };
+
+  // ===================================================
   // IMPORT REVIEW AVAILABLE?
   // ===================================================
 
@@ -3383,6 +3460,19 @@ export default function AdminNavtaTest() {
           opacity: 0.55;
           cursor: not-allowed;
         }
+
+        .admin-navta-image-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 16px; }
+        .admin-navta-image-edit-button, .admin-navta-image-reset-button { border: 1px solid #475569; border-radius: 10px; padding: 9px 13px; color: #f8fafc; background: #172033; font-weight: 800; cursor: pointer; }
+        .admin-navta-image-edit-button:hover, .admin-navta-image-reset-button:hover { border-color: #38bdf8; }
+        .admin-navta-crop-backdrop { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(2, 6, 23, 0.86); }
+        .admin-navta-crop-modal { width: min(920px, 100%); max-height: 94vh; overflow: auto; border: 1px solid #334155; border-radius: 16px; padding: 18px; background: #0f172a; box-shadow: 0 24px 70px rgba(0,0,0,.45); }
+        .admin-navta-crop-title { margin: 0 0 6px; font-size: 20px; }
+        .admin-navta-crop-help { margin: 0 0 14px; color: #94a3b8; font-size: 13px; }
+        .admin-navta-crop-stage { position: relative; width: fit-content; max-width: 100%; margin: 0 auto; overflow: hidden; border: 1px solid #475569; border-radius: 12px; background: #fff; cursor: crosshair; touch-action: none; user-select: none; }
+        .admin-navta-crop-stage img { display: block; max-width: 100%; max-height: 65vh; width: auto; height: auto; pointer-events: none; }
+        .admin-navta-crop-selection { position: absolute; border: 3px solid #38bdf8; background: rgba(56,189,248,.12); box-shadow: 0 0 0 9999px rgba(2,6,23,.55); pointer-events: none; }
+        .admin-navta-crop-footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+        .admin-navta-crop-message { margin-top: 12px; color: #fca5a5; font-weight: 700; }
 
         @media (max-width: 800px) {
           .admin-navta-bank-toolbar {
@@ -4930,6 +5020,16 @@ export default function AdminNavtaTest() {
                             )}
                           </div>
 
+                          {getNavtaQuestionImage(question)?.url && (
+                            <>
+                              <NavtaVisual question={question} className="admin-navta-question-preview-image" shellClassName="admin-navta-question-preview-image-shell" />
+                              <div className="admin-navta-image-actions">
+                                <button type="button" className="admin-navta-image-edit-button" onClick={() => openImageCropEditor(question)}>✂ Edit / Crop Image</button>
+                                <button type="button" className="admin-navta-image-reset-button" onClick={() => resetSavedQuestionImage(question)}>↺ Reset to AI Crop</button>
+                              </div>
+                            </>
+                          )}
+
                           {Array.isArray(
                             question.options
                           ) &&
@@ -5549,6 +5649,25 @@ export default function AdminNavtaTest() {
 
         </div>
       </div>
+
+      {imageCropEditor && (
+        <div className="admin-navta-crop-backdrop" role="dialog" aria-modal="true" aria-label="Crop question image">
+          <div className="admin-navta-crop-modal">
+            <h2 className="admin-navta-crop-title">Edit / Crop Question Image</h2>
+            <p className="admin-navta-crop-help">Drag across the image to select exactly what should remain, then press Apply Crop.</p>
+            <div className="admin-navta-crop-stage" onPointerDown={beginCropSelection} onPointerMove={moveCropSelection} onPointerUp={endCropSelection} onPointerCancel={endCropSelection}>
+              <img src={imageCropEditor.imageUrl} alt={imageCropEditor.altText} draggable="false" />
+              <div className="admin-navta-crop-selection" style={{ left: `${imageCropEditor.crop.x * 100}%`, top: `${imageCropEditor.crop.y * 100}%`, width: `${imageCropEditor.crop.width * 100}%`, height: `${imageCropEditor.crop.height * 100}%` }} />
+            </div>
+            {imageCropMessage && <div className="admin-navta-crop-message">{imageCropMessage}</div>}
+            <div className="admin-navta-crop-footer">
+              <button type="button" className="admin-navta-image-reset-button" onClick={resetCropSelection} disabled={imageCropSaving}>Reset Selection</button>
+              <button type="button" className="admin-navta-image-reset-button" onClick={closeImageCropEditor} disabled={imageCropSaving}>Cancel</button>
+              <button type="button" className="admin-navta-approve" onClick={applyImageCrop} disabled={imageCropSaving}>{imageCropSaving ? "Applying Crop..." : "Apply Crop"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
