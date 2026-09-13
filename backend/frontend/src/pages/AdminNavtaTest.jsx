@@ -2720,72 +2720,663 @@ export default function AdminNavtaTest() {
   };
 
   // ===================================================
-  // SAVED QUESTION IMAGE CROP HELPERS
+  // ADMIN QUESTION IMAGE CROP HELPERS
+  // Supports both:
+  // 1. AI Review questions BEFORE import
+  // 2. Saved MongoDB questions AFTER import
   // ===================================================
 
+  const getEditableQuestionImage = (question = {}) => {
+    const primary =
+      question?.questionImage;
+
+    if (
+      typeof primary === "string" &&
+      primary.trim()
+    ) {
+      return {
+        url: primary.trim(),
+        altText:
+          String(
+            question?.visualDescription ||
+              question?.questionNumber ||
+              "NAVTA question visual"
+          ).trim() ||
+          "NAVTA question visual",
+      };
+    }
+
+    if (
+      primary &&
+      typeof primary === "object" &&
+      String(primary.url || "").trim()
+    ) {
+      return {
+        ...primary,
+        url: String(primary.url).trim(),
+        altText:
+          String(
+            primary.altText ||
+              question?.visualDescription ||
+              question?.questionNumber ||
+              "NAVTA question visual"
+          ).trim() ||
+          "NAVTA question visual",
+      };
+    }
+
+    const extra =
+      Array.isArray(question?.questionImages)
+        ? question.questionImages.find(
+            (image) =>
+              (typeof image === "string" &&
+                image.trim()) ||
+              (image &&
+                typeof image === "object" &&
+                String(image.url || "").trim())
+          )
+        : null;
+
+    if (typeof extra === "string") {
+      return {
+        url: extra.trim(),
+        altText:
+          String(
+            question?.visualDescription ||
+              question?.questionNumber ||
+              "NAVTA question visual"
+          ).trim() ||
+          "NAVTA question visual",
+      };
+    }
+
+    if (extra?.url) {
+      return {
+        ...extra,
+        url: String(extra.url).trim(),
+        altText:
+          String(
+            extra.altText ||
+              question?.visualDescription ||
+              question?.questionNumber ||
+              "NAVTA question visual"
+          ).trim() ||
+          "NAVTA question visual",
+      };
+    }
+
+    return null;
+  };
+
   const openImageCropEditor = (question) => {
-    const questionId = question?._id || question?.id;
-    const image = getNavtaQuestionImage(question);
+    const questionId =
+      question?._id ||
+      question?.id;
+
+    const image =
+      getEditableQuestionImage(
+        question
+      );
+
     if (!questionId || !image?.url) {
-      setQuestionBankMessage("This question does not have an editable saved image.");
+      setQuestionBankMessage(
+        "This question does not have an editable saved image."
+      );
       return;
     }
+
     setImageCropMessage("");
-    setImageCropEditor({ questionId: String(questionId), imageUrl: image.url, altText: image.altText || "NAVTA question visual", crop: { x: 0.05, y: 0.05, width: 0.9, height: 0.9 }, dragStart: null });
+
+    setImageCropEditor({
+      mode: "saved",
+      questionId:
+        String(questionId),
+      imageUrl: image.url,
+      altText:
+        image.altText ||
+        "NAVTA question visual",
+      crop: {
+        x: 0.05,
+        y: 0.05,
+        width: 0.9,
+        height: 0.9,
+      },
+      dragStart: null,
+    });
+  };
+
+  const openReviewImageCropEditor = (
+    question,
+    index
+  ) => {
+    const image =
+      getEditableQuestionImage(
+        question
+      );
+
+    if (!image?.url) {
+      setImportMessage(
+        "This AI review question does not have an editable image."
+      );
+      setImportMessageType(
+        "error"
+      );
+      return;
+    }
+
+    setImageCropMessage("");
+
+    setImageCropEditor({
+      mode: "review",
+      reviewIndex: index,
+      imageUrl: image.url,
+      image,
+      altText:
+        image.altText ||
+        "NAVTA question visual",
+      crop: {
+        x: 0.05,
+        y: 0.05,
+        width: 0.9,
+        height: 0.9,
+      },
+      dragStart: null,
+    });
   };
 
   const closeImageCropEditor = () => {
     if (imageCropSaving) return;
+
     setImageCropEditor(null);
     setImageCropMessage("");
   };
 
   const getCropPoint = (event) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    return { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) };
+    const rect =
+      event.currentTarget.getBoundingClientRect();
+
+    return {
+      x: Math.max(
+        0,
+        Math.min(
+          1,
+          (event.clientX - rect.left) /
+            rect.width
+        )
+      ),
+      y: Math.max(
+        0,
+        Math.min(
+          1,
+          (event.clientY - rect.top) /
+            rect.height
+        )
+      ),
+    };
   };
 
-  const beginCropSelection = (event) => {
-    if (!imageCropEditor || imageCropSaving) return;
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    const point = getCropPoint(event);
-    setImageCropEditor((previous) => ({ ...previous, dragStart: point, crop: { x: point.x, y: point.y, width: 0.001, height: 0.001 } }));
+  const beginCropSelection = (
+    event
+  ) => {
+    if (
+      !imageCropEditor ||
+      imageCropSaving
+    ) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture?.(
+      event.pointerId
+    );
+
+    const point =
+      getCropPoint(event);
+
+    setImageCropEditor(
+      (previous) => ({
+        ...previous,
+        dragStart: point,
+        crop: {
+          x: point.x,
+          y: point.y,
+          width: 0.001,
+          height: 0.001,
+        },
+      })
+    );
   };
 
-  const moveCropSelection = (event) => {
-    if (!imageCropEditor?.dragStart || imageCropSaving) return;
-    const point = getCropPoint(event);
-    const start = imageCropEditor.dragStart;
-    setImageCropEditor((previous) => ({ ...previous, crop: { x: Math.min(start.x, point.x), y: Math.min(start.y, point.y), width: Math.max(0.001, Math.abs(point.x - start.x)), height: Math.max(0.001, Math.abs(point.y - start.y)) } }));
+  const moveCropSelection = (
+    event
+  ) => {
+    if (
+      !imageCropEditor?.dragStart ||
+      imageCropSaving
+    ) {
+      return;
+    }
+
+    const point =
+      getCropPoint(event);
+
+    const start =
+      imageCropEditor.dragStart;
+
+    setImageCropEditor(
+      (previous) => ({
+        ...previous,
+        crop: {
+          x: Math.min(
+            start.x,
+            point.x
+          ),
+          y: Math.min(
+            start.y,
+            point.y
+          ),
+          width: Math.max(
+            0.001,
+            Math.abs(
+              point.x - start.x
+            )
+          ),
+          height: Math.max(
+            0.001,
+            Math.abs(
+              point.y - start.y
+            )
+          ),
+        },
+      })
+    );
   };
 
-  const endCropSelection = () => setImageCropEditor((previous) => previous ? { ...previous, dragStart: null } : previous);
-  const resetCropSelection = () => setImageCropEditor((previous) => previous ? { ...previous, crop: { x: 0.05, y: 0.05, width: 0.9, height: 0.9 }, dragStart: null } : previous);
+  const endCropSelection = () =>
+    setImageCropEditor(
+      (previous) =>
+        previous
+          ? {
+              ...previous,
+              dragStart: null,
+            }
+          : previous
+    );
+
+  const resetCropSelection = () =>
+    setImageCropEditor(
+      (previous) =>
+        previous
+          ? {
+              ...previous,
+              crop: {
+                x: 0.05,
+                y: 0.05,
+                width: 0.9,
+                height: 0.9,
+              },
+              dragStart: null,
+            }
+          : previous
+    );
 
   const applyImageCrop = async () => {
-    if (!imageCropEditor?.questionId) return;
-    const { crop } = imageCropEditor;
-    if (!crop || crop.width < 0.01 || crop.height < 0.01) { setImageCropMessage("Draw a larger crop area first."); return; }
-    setImageCropSaving(true); setImageCropMessage("");
+    if (!imageCropEditor) {
+      return;
+    }
+
+    const { crop } =
+      imageCropEditor;
+
+    if (
+      !crop ||
+      crop.width < 0.01 ||
+      crop.height < 0.01
+    ) {
+      setImageCropMessage(
+        "Draw a larger crop area first."
+      );
+      return;
+    }
+
+    setImageCropSaving(true);
+    setImageCropMessage("");
+
     try {
-      const response = await fetch(`/api/navta-test/questions/${imageCropEditor.questionId}/crop-ai-image`, { method: "POST", credentials: "include", headers: buildAdminHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ crop }) });
-      let data = {}; try { data = await response.json(); } catch { data = {}; }
-      if (!response.ok) throw new Error(data.message || "Unable to crop this image.");
-      await fetchSavedQuestions(questionFilters);
-      setQuestionBankMessage("Question image cropped successfully.");
+      // =============================================
+      // PRE-IMPORT AI REVIEW CROP
+      // =============================================
+      if (
+        imageCropEditor.mode ===
+        "review"
+      ) {
+        const reviewIndex =
+          Number(
+            imageCropEditor.reviewIndex
+          );
+
+        const currentQuestion =
+          acceptedQuestions[
+            reviewIndex
+          ];
+
+        const currentImage =
+          getEditableQuestionImage(
+            currentQuestion
+          );
+
+        if (
+          !currentQuestion ||
+          !currentImage?.url
+        ) {
+          throw new Error(
+            "The AI review image is no longer available."
+          );
+        }
+
+        const response =
+          await fetch(
+            "/api/navta-test/import/crop-image",
+            {
+              method: "POST",
+              credentials:
+                "include",
+              headers:
+                buildAdminHeaders({
+                  "Content-Type":
+                    "application/json",
+                }),
+              body:
+                JSON.stringify({
+                  image:
+                    currentImage,
+                  sourcePage:
+                    currentImage.sourcePage ||
+                    currentQuestion.sourcePage ||
+                    currentQuestion
+                      ?.sourceDocument
+                      ?.pageNumber ||
+                    null,
+                  crop,
+                }),
+            }
+          );
+
+        let data = {};
+
+        try {
+          data =
+            await response.json();
+        } catch {
+          data = {};
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Unable to crop this AI review image."
+          );
+        }
+
+        const nextImage =
+          data.questionImage;
+
+        if (!nextImage?.url) {
+          throw new Error(
+            "The crop service did not return a valid image."
+          );
+        }
+
+        setAcceptedQuestions(
+          (previous) =>
+            previous.map(
+              (item, itemIndex) => {
+                if (
+                  itemIndex !==
+                  reviewIndex
+                ) {
+                  return item;
+                }
+
+                const originalImage =
+                  getEditableQuestionImage(
+                    item.originalAIQuestionImage
+                      ? {
+                          questionImage:
+                            item.originalAIQuestionImage,
+                        }
+                      : item
+                  ) || currentImage;
+
+                return {
+                  ...item,
+                  questionImage:
+                    nextImage,
+                  questionImages: [
+                    nextImage,
+                  ],
+                  originalAIQuestionImage:
+                    item.originalAIQuestionImage ||
+                    originalImage,
+                  imageCropSource:
+                    data.imageCropSource ||
+                    "admin-ai-crop",
+                  adminImageCrop:
+                    data.crop ||
+                    crop,
+                  hasVisual: true,
+                  visualType:
+                    String(
+                      item.visualType ||
+                        "other"
+                    ).trim() ||
+                    "other",
+                };
+              }
+            )
+        );
+
+        setImportMessage(
+          "Question image cropped successfully. Review it, then use Approve & Import."
+        );
+        setImportMessageType(
+          "success"
+        );
+        setImageCropEditor(null);
+        return;
+      }
+
+      // =============================================
+      // SAVED QUESTION CROP
+      // =============================================
+      if (
+        !imageCropEditor.questionId
+      ) {
+        throw new Error(
+          "Saved question ID is missing."
+        );
+      }
+
+      const response =
+        await fetch(
+          `/api/navta-test/questions/${imageCropEditor.questionId}/crop-ai-image`,
+          {
+            method: "POST",
+            credentials:
+              "include",
+            headers:
+              buildAdminHeaders({
+                "Content-Type":
+                  "application/json",
+              }),
+            body:
+              JSON.stringify({
+                crop,
+              }),
+          }
+        );
+
+      let data = {};
+
+      try {
+        data =
+          await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "Unable to crop this image."
+        );
+      }
+
+      await fetchSavedQuestions(
+        questionFilters
+      );
+
+      setQuestionBankMessage(
+        "Question image cropped successfully."
+      );
+
       setImageCropEditor(null);
-    } catch (error) { console.error("NAVTA admin image crop error:", error); setImageCropMessage(error.message || "Unable to crop this image."); }
-    finally { setImageCropSaving(false); }
+    } catch (error) {
+      console.error(
+        "NAVTA admin image crop error:",
+        error
+      );
+
+      setImageCropMessage(
+        error.message ||
+          "Unable to crop this image."
+      );
+    } finally {
+      setImageCropSaving(false);
+    }
   };
 
-  const resetSavedQuestionImage = async (question) => {
-    const questionId = question?._id || question?.id; if (!questionId) return;
+  const resetReviewQuestionImage = (
+    question,
+    index
+  ) => {
+    const original =
+      question?.originalAIQuestionImage;
+
+    const originalUrl =
+      typeof original === "string"
+        ? original.trim()
+        : String(
+            original?.url || ""
+          ).trim();
+
+    if (!originalUrl) {
+      setImportMessage(
+        "This question is already using its original AI crop."
+      );
+      setImportMessageType(
+        "success"
+      );
+      return;
+    }
+
+    const restored =
+      typeof original === "string"
+        ? {
+            url: originalUrl,
+            altText:
+              question?.visualDescription ||
+              "NAVTA question visual",
+          }
+        : original;
+
+    setAcceptedQuestions(
+      (previous) =>
+        previous.map(
+          (item, itemIndex) =>
+            itemIndex === index
+              ? {
+                  ...item,
+                  questionImage:
+                    restored,
+                  questionImages: [
+                    restored,
+                  ],
+                  imageCropSource:
+                    "ai",
+                  adminImageCrop:
+                    undefined,
+                }
+              : item
+        )
+    );
+
+    setImportMessage(
+      "Question image reset to the original AI crop."
+    );
+    setImportMessageType(
+      "success"
+    );
+  };
+
+  const resetSavedQuestionImage = async (
+    question
+  ) => {
+    const questionId =
+      question?._id ||
+      question?.id;
+
+    if (!questionId) return;
+
     try {
-      const response = await fetch(`/api/navta-test/questions/${questionId}/reset-ai-image`, { method: "POST", credentials: "include", headers: buildAdminHeaders({ "Content-Type": "application/json" }) });
-      let data = {}; try { data = await response.json(); } catch { data = {}; }
-      if (!response.ok) throw new Error(data.message || "Unable to reset this image.");
-      await fetchSavedQuestions(questionFilters); setQuestionBankMessage("Question image reset to the original AI crop.");
-    } catch (error) { console.error("NAVTA admin image reset error:", error); setQuestionBankMessage(error.message || "Unable to reset this image."); }
+      const response =
+        await fetch(
+          `/api/navta-test/questions/${questionId}/reset-ai-image`,
+          {
+            method: "POST",
+            credentials:
+              "include",
+            headers:
+              buildAdminHeaders({
+                "Content-Type":
+                  "application/json",
+              }),
+          }
+        );
+
+      let data = {};
+
+      try {
+        data =
+          await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "Unable to reset this image."
+        );
+      }
+
+      await fetchSavedQuestions(
+        questionFilters
+      );
+
+      setQuestionBankMessage(
+        "Question image reset to the original AI crop."
+      );
+    } catch (error) {
+      console.error(
+        "NAVTA admin image reset error:",
+        error
+      );
+
+      setQuestionBankMessage(
+        error.message ||
+          "Unable to reset this image."
+      );
+    }
   };
 
   // ===================================================
@@ -3963,6 +4554,38 @@ export default function AdminNavtaTest() {
                                   </button>
 
                                 </div>
+
+                                {getEditableQuestionImage(question)?.url && (
+                                  <div className="admin-navta-image-actions">
+                                    <button
+                                      type="button"
+                                      className="admin-navta-image-edit-button"
+                                      onClick={() =>
+                                        openReviewImageCropEditor(
+                                          question,
+                                          index
+                                        )
+                                      }
+                                    >
+                                      ✂ Edit / Crop Image
+                                    </button>
+
+                                    {question.originalAIQuestionImage?.url && (
+                                      <button
+                                        type="button"
+                                        className="admin-navta-image-reset-button"
+                                        onClick={() =>
+                                          resetReviewQuestionImage(
+                                            question,
+                                            index
+                                          )
+                                        }
+                                      >
+                                        ↺ Reset to AI Crop
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
 
                                 <div className="admin-navta-grid three">
 
