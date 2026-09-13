@@ -1,6 +1,8 @@
 const NavtaQuestion = require("../models/NavtaQuestion");
 const Result = require("../models/Result");
 const Student = require("../models/Student");
+const cloudinary = require("../config/cloudinary");
+const { loadImage, createCanvas } = require("@napi-rs/canvas");
 const {
   applyNavtaStreakActivity,
   getNavtaStreakSnapshot,
@@ -1060,6 +1062,485 @@ function areLikelySameQuestion(
     )
   );
 }
+
+// ============================================
+// ADMIN MANUAL IMAGE CROP
+// ============================================
+//
+// Supports cropping the CURRENT AI-CROPPED image.
+// This does not alter Gemini extraction or the automatic crop pipeline.
+//
+// crop values are normalized 0..1 coordinates relative to the current image.
+//
+function normalizeAdminCropBox(value = {}) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const x = Number(value.x);
+  const y = Number(value.y);
+  const width = Number(value.width);
+  const height = Number(value.height);
+
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    x < 0 ||
+    y < 0 ||
+    width <= 0 ||
+    height <= 0 ||
+    x > 1 ||
+    y > 1 ||
+    x + width > 1.0001 ||
+    y + height > 1.0001
+  ) {
+    return null;
+  }
+
+  return { x, y, width, height };
+}
+
+async function downloadImageBuffer(url) {
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(
+      `Could not download current question image (${response.status}).`
+    );
+  }
+
+  return Buffer.from(
+    await response.arrayBuffer()
+  );
+}
+
+async function cropCurrentQuestionImage({
+  imageUrl,
+  cropBox,
+}) {
+  const normalizedBox =
+    normalizeAdminCropBox(cropBox);
+
+  if (!normalizedBox) {
+    throw new Error(
+      "Invalid crop area. Crop coordinates must be normalized values between 0 and 1."
+    );
+  }
+
+  const sourceBuffer =
+    await downloadImageBuffer(imageUrl);
+
+  const sourceImage =
+    await loadImage(sourceBuffer);
+
+  const sourceWidth =
+    Number(sourceImage.width);
+
+  const sourceHeight =
+    Number(sourceImage.height);
+
+  if (
+    !sourceWidth ||
+    !sourceHeight
+  ) {
+    throw new Error(
+      "Could not read the current question image dimensions."
+    );
+  }
+
+  const sx = Math.max(
+    0,
+    Math.floor(
+      normalizedBox.x *
+      sourceWidth
+    )
+  );
+
+  const sy = Math.max(
+    0,
+    Math.floor(
+      normalizedBox.y *
+      sourceHeight
+    )
+  );
+
+  const sw = Math.max(
+    1,
+    Math.min(
+      sourceWidth - sx,
+      Math.ceil(
+        normalizedBox.width *
+        sourceWidth
+      )
+    )
+  );
+
+  const sh = Math.max(
+    1,
+    Math.min(
+      sourceHeight - sy,
+      Math.ceil(
+        normalizedBox.height *
+        sourceHeight
+      )
+    )
+  );
+
+  const canvas =
+    createCanvas(sw, sh);
+
+  const context =
+    canvas.getContext("2d");
+
+  context.drawImage(
+    sourceImage,
+    sx,
+    sy,
+    sw,
+    sh,
+    0,
+    0,
+    sw,
+    sh
+  );
+
+  return {
+    buffer:
+      canvas.toBuffer("image/png"),
+
+    width: sw,
+    height: sh,
+
+    cropBox:
+      normalizedBox,
+  };
+}
+
+function uploadAdminCropBuffer(
+  buffer,
+  {
+    folder = "navta/admin-crops",
+  } = {}
+) {
+  return new Promise(
+    (resolve, reject) => {
+      const stream =
+        cloudinary.uploader.upload_stream(
+          {
+            folder,
+            resource_type: "image",
+            format: "png",
+          },
+          (error, result) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+
+            resolve(result);
+          }
+        );
+
+      stream.end(buffer);
+    }
+  );
+}
+
+// POST /.../:id/crop-ai-image
+//
+// Expected body:
+// {
+//   crop: { x, y, width, height }
+// }
+//
+// Coordinates are percentages expressed as 0..1.
+// Example: { x: 0.1, y: 0.15, width: 0.75, height: 0.6 }
+//
+// The endpoint intentionally crops the EXISTING AI image.
+// It does not need the original PDF page.
+exports.cropAIQuestionImage = async (
+  req,
+  res
+) => {
+  try {
+    const { id } =
+      req.params;
+
+    const cropBox =
+      normalizeAdminCropBox(
+        req.body?.crop
+      );
+
+    if (!cropBox) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please select a valid crop area.",
+      });
+    }
+
+    const question =
+      await NavtaQuestion.findById(
+        id
+      );
+
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Question not found.",
+      });
+    }
+
+    const currentImage =
+      normalizeQuestionImage(
+        question.questionImage,
+        {
+          altText:
+            question.visualDescription ||
+            "Question diagram",
+
+          sourcePage:
+            question.sourceDocument
+              ?.pageNumber,
+        }
+      );
+
+    if (!currentImage?.url) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This question does not have an image to crop.",
+      });
+    }
+
+    const cropped =
+      await cropCurrentQuestionImage({
+        imageUrl:
+          currentImage.url,
+
+        cropBox,
+      });
+
+    const uploaded =
+      await uploadAdminCropBuffer(
+        cropped.buffer
+      );
+
+    const nextImage = {
+      url:
+        uploaded.secure_url ||
+        uploaded.url,
+
+      publicId:
+        uploaded.public_id ||
+        "",
+
+      altText:
+        currentImage.altText ||
+        "Question diagram",
+
+      sourcePage:
+        currentImage.sourcePage ||
+        question.sourceDocument
+          ?.pageNumber ||
+        null,
+
+      width:
+        Number(
+          uploaded.width
+        ) ||
+        cropped.width,
+
+      height:
+        Number(
+          uploaded.height
+        ) ||
+        cropped.height,
+    };
+
+    // Preserve the first automatic AI image so the admin can reset later.
+    const existingOriginalAIImage =
+      normalizeQuestionImage(
+        question.originalAIQuestionImage
+      );
+
+    const originalAIImage =
+      existingOriginalAIImage?.url
+        ? existingOriginalAIImage
+        : currentImage;
+
+    question.questionImage =
+      nextImage;
+
+    question.questionImages =
+      [nextImage];
+
+    question.hasVisual =
+      true;
+
+    // These extra fields are written only when the schema supports them.
+    // If your schema uses strict mode and does not contain them, the main
+    // questionImage update still works.
+    if (
+      question.schema?.path(
+        "originalAIQuestionImage"
+      )
+    ) {
+      question.originalAIQuestionImage =
+        originalAIImage;
+    }
+
+    if (
+      question.schema?.path(
+        "imageCropSource"
+      )
+    ) {
+      question.imageCropSource =
+        "admin-ai-crop";
+    }
+
+    if (
+      question.schema?.path(
+        "adminImageCrop"
+      )
+    ) {
+      question.adminImageCrop =
+        cropBox;
+    }
+
+    await question.save();
+
+    return res.json({
+      success: true,
+      message:
+        "Question image cropped successfully.",
+
+      questionImage:
+        nextImage,
+
+      questionImages:
+        [nextImage],
+
+      crop:
+        cropBox,
+
+      imageCropSource:
+        "admin-ai-crop",
+    });
+  } catch (error) {
+    console.error(
+      "CROP NAVTA AI QUESTION IMAGE ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error?.message ||
+        "Failed to crop question image.",
+    });
+  }
+};
+
+// POST /.../:id/reset-ai-image
+//
+// Restores the first AI crop when originalAIQuestionImage is stored
+// in the NavtaQuestion schema.
+exports.resetAIQuestionImage = async (
+  req,
+  res
+) => {
+  try {
+    const { id } =
+      req.params;
+
+    const question =
+      await NavtaQuestion.findById(
+        id
+      );
+
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Question not found.",
+      });
+    }
+
+    const original =
+      normalizeQuestionImage(
+        question.originalAIQuestionImage
+      );
+
+    if (!original?.url) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "The original AI crop is not stored for this question.",
+      });
+    }
+
+    question.questionImage =
+      original;
+
+    question.questionImages =
+      [original];
+
+    question.hasVisual =
+      true;
+
+    if (
+      question.schema?.path(
+        "imageCropSource"
+      )
+    ) {
+      question.imageCropSource =
+        "ai";
+    }
+
+    if (
+      question.schema?.path(
+        "adminImageCrop"
+      )
+    ) {
+      question.adminImageCrop =
+        null;
+    }
+
+    await question.save();
+
+    return res.json({
+      success: true,
+      message:
+        "Original AI crop restored.",
+
+      questionImage:
+        original,
+
+      questionImages:
+        [original],
+
+      imageCropSource:
+        "ai",
+    });
+  } catch (error) {
+    console.error(
+      "RESET NAVTA AI QUESTION IMAGE ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error?.message ||
+        "Failed to restore the original AI crop.",
+    });
+  }
+};
+
 
 // ============================================
 // CREATE QUESTION
