@@ -133,6 +133,101 @@ const navtaQuestionSchema = new mongoose.Schema(
     },
 
     // =====================================================
+    // ADMIN IMAGE CROP HISTORY / SOURCE
+    // =====================================================
+    //
+    // originalAIQuestionImage stores the FIRST automatic AI crop.
+    // It is preserved when an admin crops the current AI image,
+    // allowing "Reset to AI Crop" later.
+    //
+    // imageCropSource tells NAVTA which image is currently active:
+    // - "ai"             = original automatic AI crop
+    // - "admin-ai-crop"  = admin cropped the existing AI image
+    // - "admin-original-page" = reserved for future original-page crop
+    //
+    // adminImageCrop stores the most recent normalized 0..1 crop box
+    // used by the admin on the AI-cropped image.
+    // =====================================================
+
+    originalAIQuestionImage: {
+      url: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+
+      publicId: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+
+      altText: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+
+      sourcePage: {
+        type: Number,
+        min: 1,
+        default: undefined,
+      },
+
+      width: {
+        type: Number,
+        min: 1,
+        default: undefined,
+      },
+
+      height: {
+        type: Number,
+        min: 1,
+        default: undefined,
+      },
+    },
+
+    imageCropSource: {
+      type: String,
+      enum: [
+        "ai",
+        "admin-ai-crop",
+        "admin-original-page",
+      ],
+      default: "ai",
+    },
+
+    adminImageCrop: {
+      x: {
+        type: Number,
+        min: 0,
+        max: 1,
+        default: undefined,
+      },
+
+      y: {
+        type: Number,
+        min: 0,
+        max: 1,
+        default: undefined,
+      },
+
+      width: {
+        type: Number,
+        min: 0,
+        max: 1,
+        default: undefined,
+      },
+
+      height: {
+        type: Number,
+        min: 0,
+        max: 1,
+        default: undefined,
+      },
+    },
+
+    // =====================================================
     // MULTIPLE QUESTION IMAGES
     // =====================================================
     //
@@ -401,6 +496,69 @@ navtaQuestionSchema.pre(
         publicId: "",
         altText: "",
       };
+    }
+
+    // ---------------------------------------------
+    // CLEAN ORIGINAL AI QUESTION IMAGE
+    // ---------------------------------------------
+
+    if (
+      this.originalAIQuestionImage &&
+      !this.originalAIQuestionImage.url
+    ) {
+      this.originalAIQuestionImage = {
+        url: "",
+        publicId: "",
+        altText: "",
+      };
+    }
+
+    // ---------------------------------------------
+    // VALIDATE ADMIN CROP BOX
+    // ---------------------------------------------
+
+    if (
+      this.adminImageCrop &&
+      (
+        this.adminImageCrop.x !== undefined ||
+        this.adminImageCrop.y !== undefined ||
+        this.adminImageCrop.width !== undefined ||
+        this.adminImageCrop.height !== undefined
+      )
+    ) {
+      const x =
+        Number(this.adminImageCrop.x);
+
+      const y =
+        Number(this.adminImageCrop.y);
+
+      const width =
+        Number(this.adminImageCrop.width);
+
+      const height =
+        Number(this.adminImageCrop.height);
+
+      const validCrop =
+        Number.isFinite(x) &&
+        Number.isFinite(y) &&
+        Number.isFinite(width) &&
+        Number.isFinite(height) &&
+        x >= 0 &&
+        y >= 0 &&
+        width > 0 &&
+        height > 0 &&
+        x <= 1 &&
+        y <= 1 &&
+        x + width <= 1.0001 &&
+        y + height <= 1.0001;
+
+      if (!validCrop) {
+        return next(
+          new Error(
+            "Admin image crop must be a valid normalized 0..1 crop area."
+          )
+        );
+      }
     }
 
     // ---------------------------------------------
