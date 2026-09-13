@@ -903,6 +903,29 @@ const stripDuplicatedOptionsFromQuestion = (
 };
 
 // =====================================================
+// INVALID / PLACEHOLDER-ONLY MCQ OPTIONS
+// =====================================================
+// Keeps all image/crop behavior unchanged.
+const hasPlaceholderOnlyOptions = (options = []) => {
+  const values = safeArray(options).map((option) =>
+    cleanString(option)
+      .replace(/^[\s([{]+|[\s)\]}]+$/g, "")
+      .replace(/[.:]/g, "")
+      .trim()
+      .toUpperCase()
+  );
+
+  if (values.length !== 4) return false;
+
+  return [
+    ["A", "B", "C", "D"],
+    ["1", "2", "3", "4"],
+  ].some((set) =>
+    set.every((value, index) => values[index] === value)
+  );
+};
+
+// =====================================================
 // VALIDATE QUESTION
 // =====================================================
 
@@ -1249,6 +1272,21 @@ const validateDetectedQuestion = (
       reasons.push(
         "MCQ must contain exactly 4 options."
       );
+    }
+
+    if (
+      hasPlaceholderOnlyOptions(
+        question.options
+      )
+    ) {
+      reasons.push(
+        "MCQ options were not extracted completely. NAVTA AI returned only option labels instead of the actual answer choices."
+      );
+
+      question.needsReview = true;
+
+      question.optionReviewReason =
+        "Complete option text is missing. Match-the-columns mappings and other option content must be extracted instead of only A/B/C/D or 1/2/3/4.";
     }
 
     const hasCorrectAnswer =
@@ -1616,6 +1654,10 @@ const buildImportQuestion = ({
 
     visualReviewReason:
       question.visualReviewReason ||
+      "",
+
+    optionReviewReason:
+      question.optionReviewReason ||
       "",
 
     needsReview:
