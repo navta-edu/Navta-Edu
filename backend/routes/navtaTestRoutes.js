@@ -22,6 +22,11 @@ const {
   // ============================================
   cropAIQuestionImage,
   resetAIQuestionImage,
+
+  // ============================================
+  // ADMIN - AI REVIEW IMAGE CROP
+  // ============================================
+  cropAIReviewImage,
 } = require("../controllers/navtaTestController");
 
 const {
@@ -113,33 +118,16 @@ router.delete(
           filter
         );
 
-      // ========================================
-      // SAFETY CHECK
-      // ========================================
-      //
-      // Never allow:
-      //
-      // NavtaQuestion.deleteMany({})
-      //
-      // This prevents accidental deletion of
-      // the complete NAVTA TEST question bank.
-      // ========================================
-
       if (
         filterKeys.length ===
         0
       ) {
         return res.status(400).json({
           success: false,
-
           message:
             "Select at least one filter before deleting questions.",
         });
       }
-
-      // ========================================
-      // COUNT MATCHING QUESTIONS
-      // ========================================
 
       const matchedCount =
         await NavtaQuestion.countDocuments(
@@ -152,18 +140,12 @@ router.delete(
       ) {
         return res.status(404).json({
           success: false,
-
           message:
             "No NAVTA TEST questions matched the selected filters.",
-
           deletedCount:
             0,
         });
       }
-
-      // ========================================
-      // DELETE MATCHING QUESTIONS
-      // ========================================
 
       const result =
         await NavtaQuestion.deleteMany(
@@ -175,19 +157,12 @@ router.delete(
           result?.deletedCount
         ) || 0;
 
-      // ========================================
-      // SERVER LOG
-      // ========================================
-
       console.log(
         "NAVTA BULK QUESTION DELETE:",
         {
           filter,
-
           matchedCount,
-
           deletedCount,
-
           adminUserId:
             req.user?._id ||
             req.user?.id ||
@@ -195,22 +170,15 @@ router.delete(
         }
       );
 
-      // ========================================
-      // SUCCESS
-      // ========================================
-
       return res.status(200).json({
         success: true,
-
         message:
           `${deletedCount} question${
             deletedCount === 1
               ? ""
               : "s"
           } deleted successfully.`,
-
         deletedCount,
-
         filter,
       });
     } catch (error) {
@@ -221,10 +189,8 @@ router.delete(
 
       return res.status(500).json({
         success: false,
-
         message:
           "Failed to delete filtered NAVTA TEST questions.",
-
         error:
           error.message,
       });
@@ -235,25 +201,6 @@ router.delete(
 // ============================================
 // ADMIN - MANUAL AI IMAGE CROP
 // ============================================
-//
-// Crop the CURRENT AI-cropped image.
-//
-// Request:
-// POST /questions/:id/crop-ai-image
-//
-// Body:
-// {
-//   "crop": {
-//     "x": 0.1,
-//     "y": 0.1,
-//     "width": 0.8,
-//     "height": 0.7
-//   }
-// }
-//
-// All crop coordinates are normalized 0..1.
-// Admin authentication is required.
-// ============================================
 
 router.post(
   "/questions/:id/crop-ai-image",
@@ -261,17 +208,6 @@ router.post(
   authorizeRoles("admin"),
   cropAIQuestionImage
 );
-
-// ============================================
-// ADMIN - RESET MANUAL CROP
-// ============================================
-//
-// Restores the stored original AI crop when
-// originalAIQuestionImage is available.
-//
-// Request:
-// POST /questions/:id/reset-ai-image
-// ============================================
 
 router.post(
   "/questions/:id/reset-ai-image",
@@ -319,17 +255,29 @@ router.post(
 
       return res.status(500).json({
         success: false,
-
         message:
           "NAVTA AI upload service could not be loaded.",
-
         error:
           error.message,
       });
     }
   },
-
   importQuestionsWithAI
+);
+
+// ============================================
+// ADMIN - CROP IMAGE DURING AI REVIEW
+// ============================================
+//
+// This route works before the question is saved,
+// so no MongoDB question ID is required.
+// ============================================
+
+router.post(
+  "/import/crop-image",
+  protect,
+  authorizeRoles("admin"),
+  cropAIReviewImage
 );
 
 router.post(
