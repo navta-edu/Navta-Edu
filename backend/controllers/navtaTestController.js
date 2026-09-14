@@ -2091,6 +2091,207 @@ exports.importQuestionsWithAI = async (req, res) => {
   }
 };
 
+
+// ============================================
+// NAVTA AI - CROP IMAGE DURING ADMIN REVIEW
+// ============================================
+//
+// POST /api/navta-test/import/crop-image
+//
+// This endpoint is intentionally STATELESS.
+// The AI-review question has not been saved to MongoDB yet,
+// so no question ID is required.
+//
+// Expected body:
+// {
+//   image: {
+//     url: "...",
+//     publicId: "...",
+//     altText: "...",
+//     sourcePage: 1,
+//     width: 1000,
+//     height: 500
+//   },
+//   crop: {
+//     x: 0.1,
+//     y: 0.1,
+//     width: 0.8,
+//     height: 0.7
+//   },
+//   sourcePage: 1
+// }
+//
+// The current AI image is cropped, uploaded to Cloudinary,
+// and returned to the Admin AI Review screen.
+// Gemini is NOT called.
+// ============================================
+
+exports.cropAIReviewImage = async (
+  req,
+  res
+) => {
+  try {
+    const cropBox =
+      normalizeAdminCropBox(
+        req.body?.crop
+      );
+
+    if (!cropBox) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please select a valid crop area.",
+      });
+    }
+
+    const currentImage =
+      normalizeQuestionImage(
+        req.body?.image,
+        {
+          altText:
+            String(
+              req.body?.image?.altText ||
+                "Question diagram"
+            ).trim(),
+
+          sourcePage:
+            Number(
+              req.body?.sourcePage ||
+                req.body?.image
+                  ?.sourcePage
+            ) || null,
+        }
+      );
+
+    if (!currentImage?.url) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "The AI review question does not have an image to crop.",
+      });
+    }
+
+    // The NAVTA AI visual pipeline stores question images on Cloudinary.
+    // Restrict this stateless endpoint to Cloudinary HTTPS URLs so an
+    // administrator request cannot make the server fetch arbitrary hosts.
+    let parsedImageUrl;
+
+    try {
+      parsedImageUrl =
+        new URL(
+          currentImage.url
+        );
+    } catch {
+      return res.status(400).json({
+        success: false,
+        message:
+          "The AI review image URL is invalid.",
+      });
+    }
+
+    if (
+      parsedImageUrl.protocol !==
+        "https:" ||
+      parsedImageUrl.hostname !==
+        "res.cloudinary.com"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Only NAVTA Cloudinary question images can be cropped during AI review.",
+      });
+    }
+
+    const cropped =
+      await cropCurrentQuestionImage({
+        imageUrl:
+          currentImage.url,
+        cropBox,
+      });
+
+    const uploaded =
+      await uploadAdminCropBuffer(
+        cropped.buffer,
+        {
+          folder:
+            "navta/admin-review-crops",
+        }
+      );
+
+    const nextImage = {
+      url:
+        uploaded.secure_url ||
+        uploaded.url ||
+        "",
+
+      publicId:
+        uploaded.public_id ||
+        "",
+
+      altText:
+        currentImage.altText ||
+        "Question diagram",
+
+      sourcePage:
+        Number(
+          req.body?.sourcePage ||
+            currentImage.sourcePage
+        ) || null,
+
+      width:
+        Number(
+          uploaded.width
+        ) ||
+        cropped.width,
+
+      height:
+        Number(
+          uploaded.height
+        ) ||
+        cropped.height,
+    };
+
+    if (!nextImage.url) {
+      throw new Error(
+        "Cloudinary did not return the cropped image URL."
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+
+      message:
+        "AI review image cropped successfully.",
+
+      questionImage:
+        nextImage,
+
+      questionImages:
+        [nextImage],
+
+      crop:
+        cropBox,
+
+      imageCropSource:
+        "admin-ai-crop",
+    });
+  } catch (error) {
+    console.error(
+      "CROP NAVTA AI REVIEW IMAGE ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+
+      message:
+        error?.message ||
+        "Failed to crop the AI review image.",
+    });
+  }
+};
+
+
 // ============================================
 // NAVTA AI - CONFIRM IMPORT
 // ============================================
@@ -2702,6 +2903,57 @@ exports.confirmAIImport = async (req, res) => {
 
         payload.questionImages =
           [];
+      }
+
+      // ======================================
+      // PRESERVE ADMIN REVIEW IMAGE CROP METADATA
+      // ======================================
+
+      const originalAIQuestionImage =
+        normalizeQuestionImage(
+          rawQuestion
+            .originalAIQuestionImage
+        );
+
+      if (
+        originalAIQuestionImage?.url
+      ) {
+        payload.originalAIQuestionImage =
+          originalAIQuestionImage;
+      }
+
+      const imageCropSource =
+        String(
+          rawQuestion.imageCropSource ||
+            ""
+        ).trim();
+
+      if (
+        [
+          "ai",
+          "admin-ai-crop",
+          "admin-original-page",
+        ].includes(
+          imageCropSource
+        )
+      ) {
+        payload.imageCropSource =
+          imageCropSource;
+      } else if (
+        payload.questionImage?.url
+      ) {
+        payload.imageCropSource =
+          "ai";
+      }
+
+      const adminImageCrop =
+        normalizeAdminCropBox(
+          rawQuestion.adminImageCrop
+        );
+
+      if (adminImageCrop) {
+        payload.adminImageCrop =
+          adminImageCrop;
       }
 
       // ======================================
