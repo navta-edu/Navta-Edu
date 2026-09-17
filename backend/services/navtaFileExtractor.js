@@ -1,132 +1,123 @@
-const cloudinary = require("../config/cloudinary");
+const path = require('path');
+const mammoth = require('mammoth');
 
 // =====================================================
-// HELPERS
+// NAVTA FILE TEXT EXTRACTOR
+// Supports:
+// PDF
+// DOCX
+// TXT
 // =====================================================
 
-const cleanFileName = (value = "question-image") =>
-  String(value || "question-image")
-    .trim()
-    .replace(/[^a-zA-Z0-9._-]/g, "-")
-    .replace(/-+/g, "-")
-    .slice(0, 100) || "question-image";
-
-const cleanFolder = (value = "navta/question-diagrams") =>
-  String(value || "navta/question-diagrams")
-    .trim()
-    .replace(/[^a-zA-Z0-9/_-]/g, "")
-    .replace(/\/+/g, "/")
-    .replace(/^\/|\/$/g, "") || "navta/question-diagrams";
-
-// =====================================================
-// UPLOAD QUESTION IMAGE
-// =====================================================
-
-const uploadQuestionImage = async ({
-  buffer,
-  fileName = "question-image",
-  folder = "navta/question-diagrams",
-}) => {
-  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
-    throw new Error("A valid non-empty image buffer is required.");
+async function extractTextFromNavtaFile(file) {
+  if (!file) {
+    throw new Error('No file was uploaded.');
   }
 
-  if (!cloudinary?.uploader?.upload_stream) {
-    throw new Error("Cloudinary is not configured correctly.");
+  if (!file.buffer) {
+    throw new Error('Uploaded file does not contain a readable buffer.');
   }
 
-  const safeFileName = cleanFileName(fileName);
-  const safeFolder = cleanFolder(folder);
+  const extension = path
+    .extname(file.originalname || '')
+    .toLowerCase();
 
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: safeFolder,
-        resource_type: "image",
-        use_filename: true,
-        unique_filename: true,
-        overwrite: false,
-        filename_override: safeFileName,
-        context: {
-          originalFileName: safeFileName,
-        },
-      },
-      (error, result) => {
-        if (error) {
-          console.error("CLOUDINARY UPLOAD ERROR:", error);
+  // ===================================================
+  // TXT
+  // ===================================================
 
-          return reject(
-            new Error(
-              error?.message ||
-                "Cloudinary failed to upload the NAVTA question image."
-            )
-          );
-        }
+  if (extension === '.txt') {
+    const text = file.buffer.toString('utf8');
 
-        if (!result?.secure_url) {
-          return reject(
-            new Error("Cloudinary upload completed without a secure image URL.")
-          );
-        }
+    if (!text.trim()) {
+      throw new Error('The uploaded TXT file is empty.');
+    }
 
-        return resolve({
-          url: result.secure_url,
-          publicId: result.public_id || "",
-          width: Number(result.width) || null,
-          height: Number(result.height) || null,
-          format: result.format || "",
-          bytes: Number(result.bytes) || null,
-        });
-      }
-    );
+    return cleanExtractedText(text);
+  }
 
-    stream.on("error", (error) => {
-      reject(
-        new Error(
-          error?.message || "Cloudinary upload stream failed."
-        )
-      );
+  // ===================================================
+  // DOCX
+  // ===================================================
+
+  if (extension === '.docx') {
+    const result = await mammoth.extractRawText({
+      buffer: file.buffer,
     });
 
-    stream.end(buffer);
-  });
-};
+    const text = result.value || '';
 
-// =====================================================
-// DELETE QUESTION IMAGE
-// =====================================================
+    if (!text.trim()) {
+      throw new Error(
+        'No readable text was found in the uploaded DOCX file.'
+      );
+    }
 
-const deleteQuestionImage = async (publicId) => {
-  const safePublicId = String(publicId || "").trim();
-
-  if (!safePublicId) {
-    return null;
+    return cleanExtractedText(text);
   }
 
-  if (!cloudinary?.uploader?.destroy) {
-    throw new Error("Cloudinary is not configured correctly.");
+  // ===================================================
+  // PDF
+  // ===================================================
+
+  if (extension === '.pdf') {
+    /*
+     * pdf-parse has had different export/API shapes across versions.
+     * Keep the import here so we can adjust it to the exact installed
+     * version when we test the backend.
+     */
+    const pdfParseModule = require('pdf-parse');
+
+    let pdfParse =
+      typeof pdfParseModule === 'function'
+        ? pdfParseModule
+        : pdfParseModule.default;
+
+    if (typeof pdfParse !== 'function') {
+      throw new Error(
+        'The installed pdf-parse version uses a different API. Check the installed version before enabling PDF imports.'
+      );
+    }
+
+    const result = await pdfParse(file.buffer);
+
+    const text = result.text || '';
+
+    if (!text.trim()) {
+      throw new Error(
+        'No readable text was found in the uploaded PDF. The PDF may contain scanned images instead of selectable text.'
+      );
+    }
+
+    return cleanExtractedText(text);
   }
 
-  return cloudinary.uploader.destroy(safePublicId, {
-    resource_type: "image",
-    invalidate: true,
-  });
-};
+  // ===================================================
+  // UNSUPPORTED FILE
+  // ===================================================
+
+  throw new Error(
+    'Unsupported file type. Please upload a PDF, DOCX, or TXT file.'
+  );
+}
 
 // =====================================================
-// CHECK CLOUDINARY CONNECTION
+// CLEAN EXTRACTED TEXT
 // =====================================================
 
-const verifyCloudinaryConnection = async () => {
-  if (!cloudinary?.api?.ping) {
-    throw new Error("Cloudinary is not configured correctly.");
-  }
+function cleanExtractedText(text) {
+  return String(text)
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{4,}/g, '\n\n\n')
+    .trim();
+}
 
-  return cloudinary.api.ping();
-};
+// =====================================================
+// EXPORT
+// =====================================================
 
 module.exports = {
-  uploadQuestionImage,
-  deleteQuestionImage,
-  verifyCloudinaryConnection,
+  extractTextFromNavtaFile,
 };
