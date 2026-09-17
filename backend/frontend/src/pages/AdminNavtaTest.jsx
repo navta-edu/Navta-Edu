@@ -4065,6 +4065,254 @@ export default function AdminNavtaTest() {
         .admin-navta-crop-footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
         .admin-navta-crop-message { margin-top: 12px; color: #fca5a5; font-weight: 700; }
 
+
+        /* =================================================
+           LIGHT MODE
+           Keep the existing dark design unchanged.
+           These overrides make this page follow NAVTA's
+           light theme instead of remaining permanently dark.
+        ================================================= */
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-test-page,
+        html.light .admin-navta-test-page,
+        html[data-theme="light"] .admin-navta-test-page,
+        body.light .admin-navta-test-page,
+        body.light-mode .admin-navta-test-page,
+        body[data-theme="light"] .admin-navta-test-page {
+          background: #f6f8fc;
+          color: #0f172a;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-test-title,
+        html.light .admin-navta-test-title,
+        html[data-theme="light"] .admin-navta-test-title,
+        body.light .admin-navta-test-title,
+        body.light-mode .admin-navta-test-title,
+        body[data-theme="light"] .admin-navta-test-title {
+          color: #0f172a;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-test-subtitle,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-upload-file-status,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-crop-help,
+        html.light .admin-navta-test-subtitle,
+        html[data-theme="light"] .admin-navta-test-subtitle,
+        body.light .admin-navta-test-subtitle,
+        body.light-mode .admin-navta-test-subtitle,
+        body[data-theme="light"] .admin-navta-test-subtitle {
+          color: #64748b;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-test-card,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-review-card,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-bank-card,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-crop-modal,
+        html.light .admin-navta-test-card,
+        html[data-theme="light"] .admin-navta-test-card,
+        body.light .admin-navta-test-card,
+        body.light-mode .admin-navta-test-card,
+        body[data-theme="light"] .admin-navta-test-card {
+          background: #ffffff;
+          border-color: #dbe3ef;
+          color: #0f172a;
+          box-shadow: 0 8px 28px rgba(15, 23, 42, 0.05);
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-ai-card,
+        html.light .admin-navta-ai-card,
+        html[data-theme="light"] .admin-navta-ai-card,
+        body.light .admin-navta-ai-card,
+        body.light-mode .admin-navta-ai-card,
+        body[data-theme="light"] .admin-navta-ai-card {
+          background:
+            radial-gradient(
+              circle at top right,
+              rgba(14, 165, 233, 0.09),
+              transparent 38%
+            ),
+            #ffffff;
+          border-color: rgba(14, 165, 233, 0.28);
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-section-title,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-label,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-crop-title,
+        html.light .admin-navta-section-title,
+        html[data-theme="light"] .admin-navta-section-title,
+        body.light .admin-navta-section-title,
+        body.light-mode .admin-navta-section-title,
+        body[data-theme="light"] .admin-navta-section-title {
+          color: #1e293b;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-input,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-select,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-textarea,
+        html.light .admin-navta-input,
+        html.light .admin-navta-select,
+        html.light .admin-navta-textarea,
+        html[data-theme="light"] .admin-navta-input,
+        html[data-theme="light"] .admin-navta-select,
+        html[data-theme="light"] .admin-navta-textarea,
+        body.light .admin-navta-input,
+        body.light .admin-navta-select,
+        body.light .admin-navta-textarea,
+        body.light-mode .admin-navta-input,
+        body.light-mode .admin-navta-select,
+        body.light-mode .admin-navta-textarea,
+        body[data-theme="light"] .admin-navta-input,
+        body[data-theme="light"] .admin-navta-select,
+        body[data-theme="light"] .admin-navta-textarea {
+          background: #ffffff;
+          border-color: #cbd5e1;
+          color: #0f172a;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-input::placeholder,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-textarea::placeholder {
+          color: #94a3b8;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-input:disabled,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-select:disabled {
+          background: #f1f5f9;
+          color: #64748b;
+          opacity: 1;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-info,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-file-box,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-summary-box,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-review-confidence,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-bank-toolbar,
+        html.light .admin-navta-info,
+        html.light .admin-navta-file-box,
+        html.light .admin-navta-summary-box,
+        html[data-theme="light"] .admin-navta-info,
+        html[data-theme="light"] .admin-navta-file-box,
+        html[data-theme="light"] .admin-navta-summary-box,
+        body.light .admin-navta-info,
+        body.light .admin-navta-file-box,
+        body.light .admin-navta-summary-box,
+        body.light-mode .admin-navta-info,
+        body.light-mode .admin-navta-file-box,
+        body.light-mode .admin-navta-summary-box,
+        body[data-theme="light"] .admin-navta-info,
+        body[data-theme="light"] .admin-navta-file-box,
+        body[data-theme="light"] .admin-navta-summary-box {
+          background: #f8fafc;
+          border-color: #dbe3ef;
+          color: #64748b;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-secondary-button,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-image-edit-button,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-image-reset-button,
+        html.light .admin-navta-secondary-button,
+        html[data-theme="light"] .admin-navta-secondary-button,
+        body.light .admin-navta-secondary-button,
+        body.light-mode .admin-navta-secondary-button,
+        body[data-theme="light"] .admin-navta-secondary-button {
+          background: #ffffff;
+          border-color: #cbd5e1;
+          color: #334155;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-secondary-button:hover,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-image-edit-button:hover,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-image-reset-button:hover {
+          background: #f0f9ff;
+          border-color: #38bdf8;
+          color: #0369a1;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-ai-badge {
+          background: #e0f2fe;
+          color: #0369a1;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-file-name {
+          color: #0284c7;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-message.success {
+          background: #ecfdf5;
+          border-color: #86efac;
+          color: #166534;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-message.error,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-crop-message {
+          background: #fef2f2;
+          border-color: #fecaca;
+          color: #b91c1c;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-danger-button,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-delete-question {
+          background: #fff1f2;
+          border-color: #fecdd3;
+          color: #be123c;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-crop-backdrop {
+          background: rgba(15, 23, 42, 0.58);
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-crop-modal {
+          background: #ffffff;
+          border-color: #dbe3ef;
+          color: #0f172a;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-crop-help {
+          color: #64748b;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-crop-stage {
+          border-color: #cbd5e1;
+          background: #ffffff;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-review-tabs {
+          border-color: #dbe3ef;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-review-tab {
+          color: #64748b;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-review-tab.active {
+          color: #0284c7;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-review-card,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-bank-card {
+          background: #ffffff;
+          border-color: #dbe3ef;
+          color: #0f172a;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-review-question,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-bank-question,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-review-option,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-bank-option {
+          color: #0f172a;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-review-meta,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-bank-meta,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-summary-label {
+          color: #64748b;
+        }
+
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-review-image,
+        html:not(.dark):not([data-theme="dark"]) .admin-navta-bank-image {
+          background: #ffffff;
+          border-color: #e2e8f0;
+        }
+
+
         @media (max-width: 800px) {
           .admin-navta-bank-toolbar {
             grid-template-columns: 1fr;
