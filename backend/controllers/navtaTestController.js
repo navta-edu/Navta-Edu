@@ -2,7 +2,6 @@ const NavtaQuestion = require("../models/NavtaQuestion");
 const Result = require("../models/Result");
 const Student = require("../models/Student");
 const cloudinary = require("../config/cloudinary");
-const { loadImage, createCanvas } = require("@napi-rs/canvas");
 const {
   applyNavtaStreakActivity,
   getNavtaStreakSnapshot,
@@ -1120,6 +1119,12 @@ async function cropCurrentQuestionImage({
   imageUrl,
   cropBox,
 }) {
+  // Lazy-load the native crop dependency so an image-crop runtime issue
+  // cannot prevent unrelated NAVTA TEST routes from starting.
+  const {
+    loadImage,
+    createCanvas,
+  } = require("@napi-rs/canvas");
   const normalizedBox =
     normalizeAdminCropBox(cropBox);
 
