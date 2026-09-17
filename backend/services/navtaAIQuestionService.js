@@ -30,7 +30,7 @@ const NAVTA_AI_PAGES_PER_REQUEST = Math.max(
   Math.min(
     3,
     Number(
-      process.env.NAVTA_AI_PAGES_PER_REQUEST || 1
+      process.env.NAVTA_AI_PAGES_PER_REQUEST || 2
     ) || 1
   )
 );
@@ -52,6 +52,16 @@ const NAVTA_AI_VERIFY_LOW_CONFIDENCE =
   String(
     process.env.NAVTA_AI_VERIFY_LOW_CONFIDENCE ?? "true"
   ).toLowerCase() !== "false";
+
+// structural = one repair pass only when extraction is actually incomplete.
+// full       = also re-check low-confidence classification/answers.
+// off        = never make the optional second Gemini request.
+// Default structural keeps Gemini load low while still repairing broken MCQs.
+const NAVTA_AI_VERIFICATION_MODE = String(
+  process.env.NAVTA_AI_VERIFICATION_MODE || "structural"
+)
+  .trim()
+  .toLowerCase();
 
 // =====================================================
 // HELPERS
@@ -1103,6 +1113,27 @@ mcq
 short
 long
 
+QUESTION LAYOUTS YOU MUST RECOGNIZE WITHOUT CONFUSION:
+- standard single-correct MCQ
+- assertion-reason MCQ
+- statement I / statement II MCQ
+- multiple-statement MCQ
+- match-the-columns / matrix-match MCQ
+- passage / case / comprehension followed by MCQs
+- diagram / graph / circuit / reaction / structure based MCQ
+- formula, matrix, determinant and equation-heavy MCQ
+- Boards short-answer and long-answer questions
+
+For assertion-reason, statement, matching, passage and case-based questions,
+preserve the complete stem/context needed to answer the individual question.
+Do not turn labels, statement numbers, column labels or passage numbering into
+answer choices. The options[] array contains only the real answer choices.
+
+If a layout is readable but unusual, preserve it faithfully and mark
+needsReview=true rather than inventing content or dropping the entire batch.
+One malformed question must NEVER prevent other readable questions on the same
+page from being returned.
+
 YOUR JOB:
 Detect every COMPLETE and READABLE academic question on the supplied page images.
 
@@ -1924,11 +1955,13 @@ const shouldVerifyQuestion = (
   }
 
   if (
-    question.needsReview
+    NAVTA_AI_VERIFICATION_MODE === "off"
   ) {
-    return true;
+    return false;
   }
 
+  // Structural defects justify the optional repair request because the
+  // question cannot be safely imported without fixing them.
   if (
     question.questionType === "mcq" &&
     hasPlaceholderOnlyMcqOptions(
@@ -1944,6 +1977,29 @@ const shouldVerifyQuestion = (
       question.correctAnswer
     )
   ) {
+    return true;
+  }
+
+  if (
+    question.needsReview &&
+    (
+      !cleanString(question.question) ||
+      (question.hasVisual && !question.visualBoundingBox)
+    )
+  ) {
+    return true;
+  }
+
+  // In the default structural mode, confidence alone never spends another
+  // Gemini request. The admin review UI remains the authority for uncertain
+  // but structurally complete questions.
+  if (
+    NAVTA_AI_VERIFICATION_MODE !== "full"
+  ) {
+    return false;
+  }
+
+  if (question.needsReview) {
     return true;
   }
 
