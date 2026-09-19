@@ -1175,11 +1175,37 @@ CORRECT examples:
 "options": ["A-R, B-P, C-Q", "A-Q, B-R, C-P", "A-P, B-Q, C-R", "A-Q, B-P, C-R"]
 
 For match-the-columns / matrix-match questions:
-- preserve List-I / Column-I and List-II / Column-II in the question stem;
+- The question MUST remain questionType = "mcq".
+- DO NOT convert a readable text/LaTeX matching table into a screenshot.
+- Put only the instruction/stem in question, for example:
+  "Match Column I with Column II."
+- Extract the complete two-column content into matchColumns:
+  "matchColumns": {
+    "leftTitle": "Column I",
+    "rightTitle": "Column II",
+    "left": [
+      { "label": "P", "text": "..." },
+      { "label": "Q", "text": "..." }
+    ],
+    "right": [
+      { "label": "1", "text": "..." },
+      { "label": "2", "text": "..." }
+    ]
+  }
+- Preserve EVERY readable row and preserve labels exactly.
+- Preserve mathematics as valid LaTeX.
+- Do NOT duplicate the column/table content inside question when matchColumns is populated.
 - extract each mapping/code combination printed after option labels (1)-(4)
   or A-D into the corresponding options[] entry;
 - NEVER return only A/B/C/D or 1/2/3/4 as option values;
-- preserve mathematical symbols, subscripts, superscripts and LaTeX;
+- P/Q/R/S and 1/2/3/4 row labels inside matchColumns are NOT MCQ options.
+- For a readable text/LaTeX match table set:
+  hasVisual = false
+  visualType = "none"
+  visualBoundingBox = null
+- Only use a visual when a cell contains genuine graphical information that cannot
+  be represented faithfully as text/LaTeX (graph, geometry figure, circuit, etc.).
+- Never screenshot the entire matching table merely because it is printed in two columns.
 - if an option is itself a genuine spatial visual, follow the visual-option
   rule below instead of inventing text.
 
@@ -1570,6 +1596,12 @@ Return exactly:
       "chapter": "",
       "difficulty": "",
       "questionType": "",
+      "matchColumns": {
+        "leftTitle": "",
+        "rightTitle": "",
+        "left": [],
+        "right": []
+      },
       "options": [],
       "correctAnswer": null,
       "modelAnswer": "",
@@ -1595,6 +1627,52 @@ Return exactly:
 `;
 
 // =====================================================
+// MATCH COLUMN NORMALIZER
+// =====================================================
+
+const normalizeMatchColumns = (value = null) => {
+  if (!value || typeof value !== "object") {
+    return {
+      leftTitle: "",
+      rightTitle: "",
+      left: [],
+      right: [],
+    };
+  }
+
+  const normalizeRows = (rows) =>
+    safeArray(rows)
+      .map((row) => ({
+        label: cleanString(row?.label),
+        text: formatNavtaQuestionContent(row?.text),
+      }))
+      .filter((row) => Boolean(row.label || row.text));
+
+  const left = normalizeRows(value.left);
+  const right = normalizeRows(value.right);
+
+  return {
+    leftTitle:
+      cleanString(value.leftTitle) ||
+      (left.length ? "Column I" : ""),
+    rightTitle:
+      cleanString(value.rightTitle) ||
+      (right.length ? "Column II" : ""),
+    left,
+    right,
+  };
+};
+
+const hasMatchColumnData = (value) =>
+  Boolean(
+    value &&
+      Array.isArray(value.left) &&
+      Array.isArray(value.right) &&
+      value.left.length > 0 &&
+      value.right.length > 0
+  );
+
+// =====================================================
 // NORMALIZE DETECTED QUESTION
 // =====================================================
 
@@ -1615,6 +1693,16 @@ const normalizeDetectedQuestion = ({
           )
       )
       .filter(Boolean);
+
+  const matchColumns =
+    normalizeMatchColumns(
+      item.matchColumns
+    );
+
+  const isMatchColumnQuestion =
+    hasMatchColumnData(
+      matchColumns
+    );
 
   const questionType =
     normalizeQuestionType(
@@ -1676,6 +1764,17 @@ const normalizeDetectedQuestion = ({
     visualType === "none"
   ) {
     visualType = "other";
+  }
+
+  // A normal text/LaTeX match-the-column table is structured content,
+  // not a screenshot. Genuine graphical cell visuals remain untouched.
+  if (
+    isMatchColumnQuestion &&
+    (visualType === "table" || visualType === "matrix")
+  ) {
+    hasVisual = false;
+    visualType = "none";
+    visualBoundingBox = null;
   }
 
   let sourcePage =
@@ -1883,6 +1982,9 @@ const normalizeDetectedQuestion = ({
       "Medium",
 
     questionType,
+
+    matchColumns,
+    isMatchColumnQuestion,
 
     options,
 
