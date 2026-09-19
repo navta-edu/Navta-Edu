@@ -30,7 +30,7 @@ const NAVTA_AI_PAGES_PER_REQUEST = Math.max(
   Math.min(
     3,
     Number(
-      process.env.NAVTA_AI_PAGES_PER_REQUEST || 2
+      process.env.NAVTA_AI_PAGES_PER_REQUEST || 1
     ) || 1
   )
 );
@@ -52,16 +52,6 @@ const NAVTA_AI_VERIFY_LOW_CONFIDENCE =
   String(
     process.env.NAVTA_AI_VERIFY_LOW_CONFIDENCE ?? "true"
   ).toLowerCase() !== "false";
-
-// structural = one repair pass only when extraction is actually incomplete.
-// full       = also re-check low-confidence classification/answers.
-// off        = never make the optional second Gemini request.
-// Default structural keeps Gemini load low while still repairing broken MCQs.
-const NAVTA_AI_VERIFICATION_MODE = String(
-  process.env.NAVTA_AI_VERIFICATION_MODE || "structural"
-)
-  .trim()
-  .toLowerCase();
 
 // =====================================================
 // HELPERS
@@ -1113,44 +1103,8 @@ mcq
 short
 long
 
-QUESTION LAYOUTS YOU MUST RECOGNIZE WITHOUT CONFUSION:
-- standard single-correct MCQ
-- assertion-reason MCQ
-- statement I / statement II MCQ
-- multiple-statement MCQ
-- match-the-columns / matrix-match MCQ
-- passage / case / comprehension followed by MCQs
-- diagram / graph / circuit / reaction / structure based MCQ
-- formula, matrix, determinant and equation-heavy MCQ
-- Boards short-answer and long-answer questions
-
-For assertion-reason, statement, matching, passage and case-based questions,
-preserve the complete stem/context needed to answer the individual question.
-Do not turn labels, statement numbers, column labels or passage numbering into
-answer choices. The options[] array contains only the real answer choices.
-
-If a layout is readable but unusual, preserve it faithfully and mark
-needsReview=true rather than inventing content or dropping the entire batch.
-One malformed question must NEVER prevent other readable questions on the same
-page from being returned.
-
 YOUR JOB:
-Detect EVERY academic question visible on the supplied page images.
-
-COMPLETENESS IS A TOP PRIORITY:
-- First scan the complete page from top to bottom and identify every printed question number.
-- Then return one questions[] object for every readable question you identified.
-- Do not stop after the first few questions.
-- Do not skip a question because its answer is uncertain.
-- Do not skip a question because classification/difficulty is uncertain.
-- Do not skip a readable question because a diagram, table, option, or answer needs admin review.
-- A question that is readable but needs correction must be returned with needsReview=true.
-- Only genuinely unreadable/severely incomplete material should use drop=true.
-- Before returning JSON, silently compare the question numbers you saw with the objects you created and recover any accidentally omitted readable question.
-- Continue extracting all other questions even if one question is malformed.
-
-This completeness check happens inside the SAME Gemini request. Do not create
-extra analysis passes for normal readable questions.
+Detect every COMPLETE and READABLE academic question on the supplied page images.
 
 =======================================================
 CRITICAL QUESTION TEXT RULES
@@ -1194,17 +1148,16 @@ For match-the-columns / matrix-match questions:
   rule below instead of inventing text.
 
 If four option labels are visible but their actual option contents cannot be
-read confidently, do NOT invent them. Re-read the page once inside this SAME
-request. If recovery is still impossible, KEEP the question and set:
+read confidently, do NOT invent them. Set:
 needsReview = true
-drop = false
-dropReason = ""
+drop = true
+dropReason = "MCQ option contents could not be extracted completely."
 
 5AB. Before returning an MCQ, perform this check:
 If options[] normalizes to exactly ["A","B","C","D"] or ["1","2","3","4"],
 the extraction is incomplete. Re-read the original page image and recover the
-actual text/value following each label. If recovery is impossible, keep the
-question for Admin Review instead of deleting it.
+actual text/value following each label. If recovery is impossible, apply the
+drop rule above.
 
 5B. IMPORTANT VISUAL OPTION RULE:
 If answer choices are diagrams, organic structures, graphs, circuits,
@@ -1352,17 +1305,8 @@ Use a REAL VISUAL for:
 - biological diagram
 - map
 - figure
-- image-based table whose cells cannot be faithfully represented as text
+- image-based table
 - scientific diagram whose layout carries meaning
-
-TABLE / MATCHING SPECIAL RULE:
-If a table, List-I/List-II, Column-I/Column-II, or match-the-columns block is
-made primarily of readable TEXT, transcribe its complete content into the
-question stem in a clear text form and use hasVisual=false. Do not create a
-screenshot merely because borders/rows are present.
-
-Use a visual table only when images, structures, graphs, spatial geometry, or
-other non-text content inside the table is essential.
 
 Allowed visualType values:
 
@@ -1453,10 +1397,8 @@ If the question has no genuine visual, do not insert the marker.
 VISUAL BOUNDING BOX RULE
 =======================================================
 
-visualBoundingBox must contain the COMPLETE genuine visual required to
-understand the question stem, with a small clean margin around its outer
-border/labels so arrows, table borders, axis labels, structures, subscripts,
-and edge text are not clipped.
+visualBoundingBox must tightly contain ONLY the genuine visual required
+to understand the question stem.
 
 It must NOT contain:
 
@@ -1526,10 +1468,8 @@ Do not invent a chapter outside the supplied chapter whitelist.
 
 If a Selected Chapter is supplied by the admin, treat it as the intended destination.
 
-If the admin supplied a Selected Chapter, use that selected chapter as the
-destination and do NOT drop an otherwise readable question only because your
-own chapter guess differs. Mark needsReview=true when the classification looks
-inconsistent.
+If the question clearly belongs to a different chapter:
+drop = true
 
 If chapter classification is uncertain:
 needsReview = true
@@ -1553,17 +1493,13 @@ DROP RULES
 
 drop=true only when:
 
-- the actual question stem is unreadable
-- the material is so incomplete that the question itself cannot be identified
-- the content cannot safely be separated into a question at all
+- question is unreadable
+- question is materially incomplete
+- required MCQ options are missing
+- question cannot safely be separated
+- question clearly conflicts with the selected chapter
 
-Do NOT drop an otherwise readable question only because:
-- correctAnswer is uncertain
-- some option text needs admin repair
-- chapter/difficulty classification is uncertain
-- a required visual needs admin review
-
-Return those questions with needsReview=true so the admin can repair them.
+Do not drop a readable question only because correctAnswer is uncertain.
 
 =======================================================
 OUTPUT
@@ -1730,10 +1666,10 @@ const normalizeDetectedQuestion = ({
   if (
     placeholderOnlyMcqOptions
   ) {
-    // Keep the readable question in Admin Review. The targeted structural
-    // verifier may repair the options; otherwise the admin can edit them.
-    drop = false;
-    dropReason = "";
+    drop = true;
+
+    dropReason =
+      "MCQ option contents could not be extracted completely.";
   }
 
   let question =
@@ -1988,13 +1924,11 @@ const shouldVerifyQuestion = (
   }
 
   if (
-    NAVTA_AI_VERIFICATION_MODE === "off"
+    question.needsReview
   ) {
-    return false;
+    return true;
   }
 
-  // Structural defects justify the optional repair request because the
-  // question cannot be safely imported without fixing them.
   if (
     question.questionType === "mcq" &&
     hasPlaceholderOnlyMcqOptions(
@@ -2010,29 +1944,6 @@ const shouldVerifyQuestion = (
       question.correctAnswer
     )
   ) {
-    return true;
-  }
-
-  if (
-    question.needsReview &&
-    (
-      !cleanString(question.question) ||
-      (question.hasVisual && !question.visualBoundingBox)
-    )
-  ) {
-    return true;
-  }
-
-  // In the default structural mode, confidence alone never spends another
-  // Gemini request. The admin review UI remains the authority for uncertain
-  // but structurally complete questions.
-  if (
-    NAVTA_AI_VERIFICATION_MODE !== "full"
-  ) {
-    return false;
-  }
-
-  if (question.needsReview) {
     return true;
   }
 
@@ -2597,12 +2508,11 @@ ${
     : "No whitelist supplied"
 }
 
-If Selected Chapter is not "Auto detect", treat it as the authoritative
-destination chapter.
+If Selected Chapter is not "Auto detect", treat it as the intended destination.
 
-Do not silently assign a different chapter and do not discard a readable
-question only because your own chapter guess differs. Mark needsReview=true
-when necessary.
+Do not silently assign a different chapter.
+
+If the question clearly belongs elsewhere, set drop=true and explain why.
 
 PAGES INCLUDED:
 
