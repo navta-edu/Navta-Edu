@@ -1,25 +1,4 @@
 const { createCanvas } = require("@napi-rs/canvas");
-const path = require("path");
-
-// PDF.js needs access to its bundled CMaps and standard fonts in Node.
-// Without these assets, some exam PDFs render letters/symbols as empty
-// square boxes even though the original PDF looks correct in a browser.
-const PDFJS_PACKAGE_DIR = path.dirname(
-  require.resolve("pdfjs-dist/package.json")
-);
-
-const ensureTrailingSeparator = (value) =>
-  String(value).endsWith(path.sep)
-    ? String(value)
-    : `${value}${path.sep}`;
-
-const PDFJS_CMAP_URL = ensureTrailingSeparator(
-  path.join(PDFJS_PACKAGE_DIR, "cmaps")
-);
-
-const PDFJS_STANDARD_FONT_DATA_URL = ensureTrailingSeparator(
-  path.join(PDFJS_PACKAGE_DIR, "standard_fonts")
-);
 
 // =====================================================
 // LOAD PDF.JS
@@ -119,18 +98,8 @@ const openPdf = async (buffer) => {
 
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(buffer),
-
-    // Preserve embedded fonts first, but allow system fonts when a PDF
-    // references a font without embedding it.
     useSystemFonts: true,
     disableFontFace: false,
-
-    // Critical for many coaching/competitive-exam PDFs that use custom
-    // encodings, CID fonts, symbols, or non-Latin glyph maps.
-    cMapUrl: PDFJS_CMAP_URL,
-    cMapPacked: true,
-    standardFontDataUrl: PDFJS_STANDARD_FONT_DATA_URL,
-
     isEvalSupported: false,
   });
 
