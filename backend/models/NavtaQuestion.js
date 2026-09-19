@@ -78,6 +78,65 @@ const navtaQuestionSchema = new mongoose.Schema(
     },
 
     // =====================================================
+    // MATCH THE COLUMN / MATRIX MATCH
+    // =====================================================
+    //
+    // The question still uses questionType = "mcq".
+    // Readable List-I/List-II and Column-I/Column-II content is
+    // stored as structured text/LaTeX instead of a screenshot.
+    // =====================================================
+
+    matchColumns: {
+      leftTitle: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+
+      rightTitle: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+
+      left: {
+        type: [
+          {
+            label: {
+              type: String,
+              trim: true,
+              default: "",
+            },
+            text: {
+              type: String,
+              trim: true,
+              default: "",
+            },
+          },
+        ],
+        default: [],
+      },
+
+      right: {
+        type: [
+          {
+            label: {
+              type: String,
+              trim: true,
+              default: "",
+            },
+            text: {
+              type: String,
+              trim: true,
+              default: "",
+            },
+          },
+        ],
+        default: [],
+      },
+    },
+
+    // =====================================================
     // QUESTION DIAGRAM / IMAGE
     // =====================================================
     //
