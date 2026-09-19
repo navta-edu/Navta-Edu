@@ -1269,9 +1269,22 @@ const validateDetectedQuestion = (
       question.options.length !==
       4
     ) {
-      reasons.push(
-        "MCQ must contain exactly 4 options."
-      );
+      // Preserve the question for Admin Review instead of dropping it.
+      // Four editable slots make the existing review UI usable immediately.
+      question.options = [
+        ...question.options.slice(0, 4),
+        ...Array(
+          Math.max(
+            0,
+            4 - question.options.length
+          )
+        ).fill("")
+      ];
+
+      question.needsReview = true;
+
+      question.optionReviewReason =
+        "One or more MCQ options could not be extracted completely. Please review the four option fields before approving.";
     }
 
     if (
@@ -1279,10 +1292,6 @@ const validateDetectedQuestion = (
         question.options
       )
     ) {
-      reasons.push(
-        "MCQ options were not extracted completely. NAVTA AI returned only option labels instead of the actual answer choices."
-      );
-
       question.needsReview = true;
 
       question.optionReviewReason =
