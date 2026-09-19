@@ -311,8 +311,66 @@ function repairAccidentalSingleLetterLatexCommands(input = "") {
   );
 }
 
+function repairBrokenMatrixRowSeparators(input = "") {
+  const matrixEnvironmentPattern =
+    /\\begin\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix|array|cases|aligned|gathered)\}([\s\S]*?)\\end\{\1\}/g;
+
+  return String(input ?? "").replace(
+    matrixEnvironmentPattern,
+    (fullMatch, environment, body) => {
+      let repairedBody = "";
+      let rowStart = 0;
+      let cursor = 0;
+
+      while (cursor < body.length) {
+        // Preserve a correct LaTeX row separator exactly as-is.
+        if (body[cursor] === "\\" && body[cursor + 1] === "\\") {
+          repairedBody += "\\\\";
+          cursor += 2;
+          rowStart = repairedBody.length;
+          continue;
+        }
+
+        // Gemini/JSON sometimes collapses a matrix row separator from "\\\\"
+        // to a single slash before the first variable of the next row:
+        //
+        //   p+a & q+b & r+c \q+c & r+a & p+b
+        //
+        // If the current row already contains column separators (&), an
+        // otherwise-invalid one-letter command is treated as the missing row
+        // separator plus that variable. This fixes \q, \r, \p, etc. without
+        // touching valid commands such as \frac, \sqrt, \alpha or \Gamma.
+        if (body[cursor] === "\\") {
+          const rest = body.slice(cursor);
+          const oneLetterMatch = rest.match(
+            /^\\([A-Za-z])(?=[_^+\-=(),.;:{}\[\]\s&]|$)/
+          );
+
+          if (oneLetterMatch) {
+            const currentRow = repairedBody.slice(rowStart);
+            const ampersandCount = (currentRow.match(/&/g) || []).length;
+
+            if (ampersandCount > 0) {
+              repairedBody += `\\\\ ${oneLetterMatch[1]}`;
+              cursor += oneLetterMatch[0].length;
+              rowStart = repairedBody.length;
+              continue;
+            }
+          }
+        }
+
+        repairedBody += body[cursor];
+        cursor += 1;
+      }
+
+      return `\\begin{${environment}}${repairedBody}\\end{${environment}}`;
+    }
+  );
+}
+
 function repairNavtaMathSegment(input = "") {
   let value = repairUnicodeScriptsInsideMath(input);
+  value = repairBrokenMatrixRowSeparators(value);
   value = repairAccidentalSingleLetterLatexCommands(value);
   return value;
 }
