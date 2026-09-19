@@ -926,6 +926,52 @@ const hasPlaceholderOnlyOptions = (options = []) => {
 };
 
 // =====================================================
+// MATCH COLUMN NORMALIZER
+// =====================================================
+
+const normalizeMatchColumns = (value = null) => {
+  if (!value || typeof value !== "object") {
+    return {
+      leftTitle: "",
+      rightTitle: "",
+      left: [],
+      right: [],
+    };
+  }
+
+  const normalizeRows = (rows) =>
+    safeArray(rows)
+      .map((row) => ({
+        label: cleanString(row?.label),
+        text: cleanString(row?.text),
+      }))
+      .filter((row) => Boolean(row.label || row.text));
+
+  const left = normalizeRows(value.left);
+  const right = normalizeRows(value.right);
+
+  return {
+    leftTitle:
+      cleanString(value.leftTitle) ||
+      (left.length ? "Column I" : ""),
+    rightTitle:
+      cleanString(value.rightTitle) ||
+      (right.length ? "Column II" : ""),
+    left,
+    right,
+  };
+};
+
+const hasMatchColumnData = (value) =>
+  Boolean(
+    value &&
+      Array.isArray(value.left) &&
+      Array.isArray(value.right) &&
+      value.left.length > 0 &&
+      value.right.length > 0
+  );
+
+// =====================================================
 // VALIDATE QUESTION
 // =====================================================
 
@@ -1035,6 +1081,11 @@ const validateDetectedQuestion = (
         rawQuestion?.questionType
       ).toLowerCase(),
 
+    matchColumns:
+      normalizeMatchColumns(
+        rawQuestion?.matchColumns
+      ),
+
     options:
       safeArray(
         rawQuestion?.options
@@ -1121,6 +1172,25 @@ const validateDetectedQuestion = (
         rawQuestion?.needsReview
       ),
   };
+
+  question.isMatchColumnQuestion =
+    hasMatchColumnData(
+      question.matchColumns
+    );
+
+  // Text/LaTeX match tables must stay structured instead of becoming
+  // full-table screenshots. Genuine graph/circuit/geometry visuals
+  // are not removed by this rule.
+  if (
+    question.isMatchColumnQuestion &&
+    (question.visualType === "table" ||
+      question.visualType === "matrix")
+  ) {
+    question.hasVisual = false;
+    question.visualType = "none";
+    question.visualBoundingBox = null;
+  }
+
 
   if (
     question.questionType ===
@@ -1626,6 +1696,16 @@ const buildImportQuestion = ({
 
     questionType:
       question.questionType,
+
+    matchColumns:
+      normalizeMatchColumns(
+        question.matchColumns
+      ),
+
+    isMatchColumnQuestion:
+      Boolean(
+        question.isMatchColumnQuestion
+      ),
 
     explanation:
       question.explanation ||
