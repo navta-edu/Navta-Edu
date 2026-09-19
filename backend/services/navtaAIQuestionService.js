@@ -733,6 +733,38 @@ const validateRenderedPage = (
 // JSON HELPERS
 // =====================================================
 
+// Gemini JSON must escape LaTeX backslashes as "\\\\". If a model response
+// contains a JSON-valid escape such as "\\right", JSON.parse can turn the
+// leading sequence into a control character (for example \r + "ight").
+// Repair only these unmistakable LaTeX command fragments. This is deliberately
+// conservative so ordinary prose is never rewritten.
+const repairNavtaJsonLatexString = (input = "") => {
+  return String(input ?? "")
+    .replace(/\r(?=ight\b)/g, "\\\\r")
+    .replace(/\f(?=rac\b)/g, "\\\\f")
+    .replace(/\b(?=egin\b)/g, "\\\\b")
+    .replace(/\t(?=(?:heta|imes)\b)/g, "\\\\t")
+    .replace(/\n(?=(?:abla|eq|u)\b)/g, "\\\\n");
+};
+
+const repairNavtaJsonLatexDeep = (value) => {
+  if (typeof value === "string") {
+    return repairNavtaJsonLatexString(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(repairNavtaJsonLatexDeep);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        repairNavtaJsonLatexDeep(item),
+      ])
+    );
+  }
+  return value;
+};
+
 const stripJsonFences = (
   value
 ) => {
@@ -765,8 +797,10 @@ const parseJsonObject = (
   }
 
   try {
-    return JSON.parse(
-      text
+    return repairNavtaJsonLatexDeep(
+      JSON.parse(
+        text
+      )
     );
   } catch {
     // Continue to recovery.
@@ -794,8 +828,10 @@ const parseJsonObject = (
         );
 
     try {
-      return JSON.parse(
-        sliced
+      return repairNavtaJsonLatexDeep(
+        JSON.parse(
+          sliced
+        )
       );
     } catch {
       // Continue to debug output.
@@ -1214,6 +1250,16 @@ $...$
 
 Block:
 $$...$$
+
+JSON + LATEX SAFETY — MANDATORY:
+
+- You are returning JSON. Every LaTeX backslash inside a JSON string must be JSON-escaped.
+- The decoded question string must contain commands such as \frac, \sqrt, \left, \right, \cos, \log and \begin exactly.
+- Never return a form-feed, carriage-return, tab or backspace escape in place of a LaTeX command.
+- Every \left must have a matching \right.
+- Keep ordinary English outside $...$ and only mathematical expressions inside math delimiters.
+- Before returning JSON, verify all $ delimiters, braces and \left...\right pairs are balanced.
+- Do not simplify or rewrite the mathematics; preserve the printed meaning.
 
 Examples:
 
