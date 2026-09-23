@@ -1,4 +1,5 @@
 const NavtaQuestion = require("../models/NavtaQuestion");
+const NavtaAIImportJob = require("../models/NavtaAIImportJob");
 const Result = require("../models/Result");
 const Student = require("../models/Student");
 const cloudinary = require("../config/cloudinary");
@@ -1955,15 +1956,10 @@ exports.deleteQuestion = async (req, res) => {
 
 exports.importQuestionsWithAI = async (req, res) => {
   try {
-    const {
-      analyseNavtaImport,
-    } = require("../services/navtaAIImportService");
-
     if (!req.file) {
       return res.status(400).json({
         success: false,
-        message:
-          "Please upload a PDF, DOCX or TXT file.",
+        message: "Please upload a PDF, DOCX or TXT file.",
       });
     }
 
@@ -1974,123 +1970,279 @@ exports.importQuestionsWithAI = async (req, res) => {
       chapter = "",
     } = req.body || {};
 
-    console.log(
-      `NAVTA AI import started: ${req.file.originalname}`
+    const adminUserId =
+      req.user?._id ||
+      req.user?.id ||
+      null;
+
+    const job = await NavtaAIImportJob.create({
+      status: "queued",
+      fileName: req.file.originalname || "",
+      fileType: String(req.file.originalname || "")
+        .split(".")
+        .pop()
+        .toLowerCase(),
+      createdBy: adminUserId || undefined,
+      progress: {
+        stage: "queued",
+        message: "Upload received. NAVTA AI analysis is starting.",
+      },
+    });
+
+    const jobId = String(job._id);
+
+    // IMPORTANT:
+    // Return immediately so Hostinger/nginx never waits for the
+    // full PDF + Gemini pipeline and therefore cannot turn this
+    // request into a 504 Gateway Time-out.
+    res.status(202).json({
+      success: true,
+      async: true,
+      jobId,
+      status: "queued",
+      message: "NAVTA AI analysis started.",
+    });
+
+    const uploadedFile = {
+      ...req.file,
+      buffer: Buffer.from(req.file.buffer),
+    };
+
+    const hints = {
+      subject,
+      exam,
+      classLevel,
+      chapter,
+    };
+
+    setImmediate(async () => {
+      try {
+        const {
+          analyseNavtaImport,
+        } = require("../services/navtaAIImportService");
+
+        await NavtaAIImportJob.findByIdAndUpdate(jobId, {
+          $set: {
+            status: "processing",
+            startedAt: new Date(),
+            progress: {
+              stage: "analysing",
+              message:
+                "NAVTA AI is reading the document, rendering pages and analysing questions.",
+            },
+          },
+        });
+
+        console.log(
+          `NAVTA AI async import started: ${uploadedFile.originalname} job=${jobId}`
+        );
+
+        const result = await analyseNavtaImport({
+          file: uploadedFile,
+          ...hints,
+        });
+
+        const acceptedQuestions =
+          Array.isArray(result?.acceptedQuestions)
+            ? result.acceptedQuestions
+            : [];
+
+        const droppedQuestions =
+          Array.isArray(result?.droppedQuestions)
+            ? result.droppedQuestions
+            : [];
+
+        const summary =
+          result?.summary || {
+            detected:
+              acceptedQuestions.length +
+              droppedQuestions.length,
+            accepted: acceptedQuestions.length,
+            dropped: droppedQuestions.length,
+            needsReview: 0,
+          };
+
+        const message =
+          acceptedQuestions.length > 0
+            ? `NAVTA AI found ${acceptedQuestions.length} question(s) ready for review.`
+            : "NAVTA AI analysed the document, but no questions were accepted.";
+
+        await NavtaAIImportJob.findByIdAndUpdate(jobId, {
+          $set: {
+            status: "completed",
+            completedAt: new Date(),
+            progress: {
+              stage: "completed",
+              message,
+            },
+            result: {
+              acceptedQuestions,
+              droppedQuestions,
+              summary,
+              documentInfo: result?.documentInfo || null,
+            },
+            error: null,
+          },
+        });
+
+        console.log(
+          `NAVTA AI async import completed: ${uploadedFile.originalname} job=${jobId}`,
+          summary
+        );
+      } catch (error) {
+        console.error(
+          `NAVTA AI ASYNC IMPORT ERROR job=${jobId}:`,
+          error
+        );
+
+        const message =
+          error?.message ||
+          "NAVTA AI could not analyse this file.";
+
+        try {
+          await NavtaAIImportJob.findByIdAndUpdate(jobId, {
+            $set: {
+              status: "failed",
+              completedAt: new Date(),
+              progress: {
+                stage: "failed",
+                message,
+              },
+              error: {
+                message,
+                statusCode:
+                  Number(error?.statusCode) || 500,
+              },
+            },
+          });
+        } catch (jobUpdateError) {
+          console.error(
+            `NAVTA AI JOB FAILURE UPDATE ERROR job=${jobId}:`,
+            jobUpdateError
+          );
+        }
+      }
+    });
+
+    return;
+  } catch (error) {
+    console.error(
+      "NAVTA AI IMPORT JOB CREATION ERROR:",
+      error
     );
 
-    const result =
-      await analyseNavtaImport({
-        file: req.file,
-        subject,
-        exam,
-        classLevel,
-        chapter,
+    return res.status(500).json({
+      success: false,
+      message:
+        error?.message ||
+        "NAVTA AI import job could not be created.",
+    });
+  }
+};
+
+// ============================================
+// NAVTA AI - GET ASYNC IMPORT JOB STATUS
+// ============================================
+
+exports.getAIImportJob = async (req, res) => {
+  try {
+    const jobId = String(req.params?.jobId || "").trim();
+
+    if (!jobId) {
+      return res.status(400).json({
+        success: false,
+        message: "NAVTA AI import job ID is required.",
       });
+    }
 
-    console.log(
-      `NAVTA AI import completed: ${req.file.originalname}`,
-      result.summary
+    const job = await NavtaAIImportJob.findById(jobId).lean();
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: "NAVTA AI import job was not found.",
+      });
+    }
+
+    const currentAdminId = String(
+      req.user?._id ||
+      req.user?.id ||
+      ""
     );
+
+    if (
+      job.createdBy &&
+      currentAdminId &&
+      String(job.createdBy) !== currentAdminId
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot access this NAVTA AI import job.",
+      });
+    }
+
+    if (job.status === "failed") {
+      return res.status(200).json({
+        success: false,
+        jobId,
+        status: "failed",
+        progress: job.progress || null,
+        message:
+          job.error?.message ||
+          "NAVTA AI analysis failed.",
+        error: job.error || null,
+      });
+    }
+
+    if (job.status !== "completed") {
+      return res.status(200).json({
+        success: true,
+        jobId,
+        status: job.status,
+        progress: job.progress || null,
+        message:
+          job.progress?.message ||
+          "NAVTA AI analysis is still running.",
+      });
+    }
+
+    const result = job.result || {};
 
     return res.status(200).json({
       success: true,
-
+      jobId,
+      status: "completed",
       message:
-        result.acceptedQuestions.length > 0
-          ? `NAVTA AI found ${result.acceptedQuestions.length} question(s) ready for review.`
-          : "NAVTA AI analysed the document, but no questions were accepted.",
-
+        job.progress?.message ||
+        "NAVTA AI analysis completed.",
       acceptedQuestions:
         result.acceptedQuestions || [],
-
       droppedQuestions:
         result.droppedQuestions || [],
-
       summary:
         result.summary || {
           detected: 0,
           accepted: 0,
           dropped: 0,
+          needsReview: 0,
         },
-
       documentInfo:
         result.documentInfo || null,
     });
   } catch (error) {
     console.error(
-      "NAVTA AI IMPORT ERROR:",
+      "NAVTA AI IMPORT JOB STATUS ERROR:",
       error
     );
 
-    const message =
-      error?.message ||
-      "NAVTA AI could not analyse this file.";
-
-    if (
-      message.includes(
-        "GEMINI_API_KEY"
-      ) ||
-      message.includes(
-        "GOOGLE_API_KEY"
-      ) ||
-      message.includes(
-        "OPENAI_API_KEY"
-      )
-    ) {
-      return res.status(503).json({
-        success: false,
-        message:
-          "NAVTA AI is not configured on the server.",
-      });
-    }
-
-    if (
-      message.includes(
-        "DOCX NAVTA AI import"
-      ) ||
-      message.includes(
-        "TXT NAVTA AI import"
-      )
-    ) {
-      return res.status(501).json({
-        success: false,
-        message,
-      });
-    }
-
-    if (
-      Number(
-        error?.statusCode
-      ) === 429
-    ) {
-      return res.status(429).json({
-        success: false,
-        message,
-        retryAfter:
-          Number(
-            error?.retryAfter
-          ) || null,
-      });
-    }
-
-    if (
-      Number(
-        error?.statusCode
-      ) === 504
-    ) {
-      return res.status(504).json({
-        success: false,
-        message,
-      });
-    }
-
     return res.status(500).json({
       success: false,
-      message,
+      message:
+        error?.message ||
+        "Could not read NAVTA AI import status.",
     });
   }
 };
-
 
 // ============================================
 // NAVTA AI - CROP IMAGE DURING ADMIN REVIEW
