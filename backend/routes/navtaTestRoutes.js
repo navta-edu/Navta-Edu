@@ -14,18 +14,17 @@ const {
   generateRevengeBattle,
   evaluateWrittenAnswer,
   completeNavtaTest,
+
+  // ADMIN - NAVTA AI IMPORT
   importQuestionsWithAI,
+  getAIImportJob,
   confirmAIImport,
 
-  // ============================================
   // ADMIN - MANUAL QUESTION IMAGE CROP
-  // ============================================
   cropAIQuestionImage,
   resetAIQuestionImage,
 
-  // ============================================
   // ADMIN - AI REVIEW IMAGE CROP
-  // ============================================
   cropAIReviewImage,
 } = require("../controllers/navtaTestController");
 
@@ -34,21 +33,11 @@ const {
   authorizeRoles,
 } = require("../middleware/auth");
 
-// ============================================
-// HELPERS - BULK DELETE
-// ============================================
-
-const cleanFilterValue = (
-  value
-) => {
-  return String(
-    value ?? ""
-  ).trim();
+const cleanFilterValue = (value) => {
+  return String(value ?? "").trim();
 };
 
-const buildBulkDeleteFilter = (
-  query = {}
-) => {
+const buildBulkDeleteFilter = (query = {}) => {
   const allowedKeys = [
     "subject",
     "exam",
@@ -60,26 +49,16 @@ const buildBulkDeleteFilter = (
 
   const filter = {};
 
-  allowedKeys.forEach(
-    (key) => {
-      const value =
-        cleanFilterValue(
-          query[key]
-        );
+  allowedKeys.forEach((key) => {
+    const value = cleanFilterValue(query[key]);
 
-      if (value) {
-        filter[key] =
-          value;
-      }
+    if (value) {
+      filter[key] = value;
     }
-  );
+  });
 
   return filter;
 };
-
-// ============================================
-// ADMIN - QUESTION MANAGEMENT
-// ============================================
 
 router.post(
   "/questions",
@@ -95,33 +74,16 @@ router.get(
   getQuestions
 );
 
-// ============================================
-// ADMIN - BULK DELETE FILTERED QUESTIONS
-// IMPORTANT:
-// Keep this ABOVE "/questions/:id"
-// so Express does not treat "bulk" as an ID.
-// ============================================
-
 router.delete(
   "/questions/bulk",
   protect,
   authorizeRoles("admin"),
   async (req, res) => {
     try {
-      const filter =
-        buildBulkDeleteFilter(
-          req.query
-        );
+      const filter = buildBulkDeleteFilter(req.query);
+      const filterKeys = Object.keys(filter);
 
-      const filterKeys =
-        Object.keys(
-          filter
-        );
-
-      if (
-        filterKeys.length ===
-        0
-      ) {
+      if (filterKeys.length === 0) {
         return res.status(400).json({
           success: false,
           message:
@@ -130,32 +92,22 @@ router.delete(
       }
 
       const matchedCount =
-        await NavtaQuestion.countDocuments(
-          filter
-        );
+        await NavtaQuestion.countDocuments(filter);
 
-      if (
-        matchedCount ===
-        0
-      ) {
+      if (matchedCount === 0) {
         return res.status(404).json({
           success: false,
           message:
             "No NAVTA TEST questions matched the selected filters.",
-          deletedCount:
-            0,
+          deletedCount: 0,
         });
       }
 
       const result =
-        await NavtaQuestion.deleteMany(
-          filter
-        );
+        await NavtaQuestion.deleteMany(filter);
 
       const deletedCount =
-        Number(
-          result?.deletedCount
-        ) || 0;
+        Number(result?.deletedCount) || 0;
 
       console.log(
         "NAVTA BULK QUESTION DELETE:",
@@ -174,9 +126,7 @@ router.delete(
         success: true,
         message:
           `${deletedCount} question${
-            deletedCount === 1
-              ? ""
-              : "s"
+            deletedCount === 1 ? "" : "s"
           } deleted successfully.`,
         deletedCount,
         filter,
@@ -191,16 +141,11 @@ router.delete(
         success: false,
         message:
           "Failed to delete filtered NAVTA TEST questions.",
-        error:
-          error.message,
+        error: error.message,
       });
     }
   }
 );
-
-// ============================================
-// ADMIN - MANUAL AI IMAGE CROP
-// ============================================
 
 router.post(
   "/questions/:id/crop-ai-image",
@@ -216,20 +161,12 @@ router.post(
   resetAIQuestionImage
 );
 
-// ============================================
-// ADMIN - DELETE SINGLE QUESTION
-// ============================================
-
 router.delete(
   "/questions/:id",
   protect,
   authorizeRoles("admin"),
   deleteQuestion
 );
-
-// ============================================
-// ADMIN - NAVTA AI IMPORT
-// ============================================
 
 router.post(
   "/import",
@@ -240,9 +177,7 @@ router.post(
       const uploadNavtaAIFile =
         require("../middleware/navtaAiUpload");
 
-      return uploadNavtaAIFile.single(
-        "file"
-      )(
+      return uploadNavtaAIFile.single("file")(
         req,
         res,
         next
@@ -257,21 +192,21 @@ router.post(
         success: false,
         message:
           "NAVTA AI upload service could not be loaded.",
-        error:
-          error.message,
+        error: error.message,
       });
     }
   },
   importQuestionsWithAI
 );
 
-// ============================================
-// ADMIN - CROP IMAGE DURING AI REVIEW
-// ============================================
-//
-// This route works before the question is saved,
-// so no MongoDB question ID is required.
-// ============================================
+// Async import polling endpoint.
+// This fixes the 404 from GET /api/navta-test/import/jobs/:jobId.
+router.get(
+  "/import/jobs/:jobId",
+  protect,
+  authorizeRoles("admin"),
+  getAIImportJob
+);
 
 router.post(
   "/import/crop-image",
@@ -287,36 +222,20 @@ router.post(
   confirmAIImport
 );
 
-// ============================================
-// STANDARD TEST
-// ============================================
-
 router.post(
   "/generate",
   generateTest
 );
-
-// ============================================
-// BOSS BATTLE
-// ============================================
 
 router.post(
   "/boss-battle",
   generateBossBattle
 );
 
-// ============================================
-// REVENGE BATTLE
-// ============================================
-
 router.post(
   "/revenge-battle",
   generateRevengeBattle
 );
-
-// ============================================
-// COMPLETE NAVTA TEST
-// ============================================
 
 router.post(
   "/complete",
@@ -324,10 +243,6 @@ router.post(
   authorizeRoles("student"),
   completeNavtaTest
 );
-
-// ============================================
-// WRITTEN ANSWER EVALUATION
-// ============================================
 
 router.post(
   "/evaluate-answer",
