@@ -782,6 +782,57 @@ const stripJsonFences = (
     .trim();
 };
 
+const sanitizeInvalidJsonBackslashes = (input = "") => {
+  const text = String(input ?? "");
+  let result = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (!inString) {
+      result += char;
+      if (char === '"') {
+        inString = true;
+      }
+      continue;
+    }
+
+    if (escaped) {
+      result += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === '"') {
+      result += char;
+      inString = false;
+      continue;
+    }
+
+    if (char !== "\\") {
+      result += char;
+      continue;
+    }
+
+    const next = text[index + 1] || "";
+
+    // JSON only permits these escape starters. A backslash before any other
+    // character is almost certainly an under-escaped LaTeX command from the
+    // model (for example \alpha, \left, \q). Preserve it as a literal slash.
+    if (!/["\\/bfnrtu]/.test(next)) {
+      result += "\\\\";
+      continue;
+    }
+
+    result += char;
+    escaped = true;
+  }
+
+  return result;
+};
+
 const parseJsonObject = (
   raw
 ) => {
@@ -791,74 +842,57 @@ const parseJsonObject = (
     );
 
   if (!text) {
-    throw new Error(
+    const error = new Error(
       "NAVTA AI returned an empty JSON response."
     );
+    error.code = "NAVTA_EMPTY_JSON";
+    throw error;
   }
 
-  try {
-    return repairNavtaJsonLatexDeep(
-      JSON.parse(
-        text
-      )
-    );
-  } catch {
-    // Continue to recovery.
+  const candidates = [];
+  const addCandidate = (value) => {
+    const candidate = String(value ?? "").trim();
+    if (candidate && !candidates.includes(candidate)) {
+      candidates.push(candidate);
+    }
+  };
+
+  addCandidate(text);
+  addCandidate(sanitizeInvalidJsonBackslashes(text));
+
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+
+  if (start !== -1 && end > start) {
+    const sliced = text
+      .slice(start, end + 1)
+      .replace(/,\s*([}\]])/g, "$1");
+
+    addCandidate(sliced);
+    addCandidate(sanitizeInvalidJsonBackslashes(sliced));
   }
 
-  const start =
-    text.indexOf("{");
-
-  const end =
-    text.lastIndexOf("}");
-
-  if (
-    start !== -1 &&
-    end > start
-  ) {
-    const sliced =
-      text
-        .slice(
-          start,
-          end + 1
-        )
-        .replace(
-          /,\s*([}\]])/g,
-          "$1"
-        );
-
+  for (const candidate of candidates) {
     try {
       return repairNavtaJsonLatexDeep(
-        JSON.parse(
-          sliced
-        )
+        JSON.parse(candidate)
       );
     } catch {
-      // Continue to debug output.
+      // Try the next conservative recovery candidate.
     }
   }
 
-  console.error(
-    "NAVTA AI INVALID JSON"
-  );
+  console.error("NAVTA AI INVALID JSON");
+  console.error(`Response length: ${text.length}`);
+  console.error("Response ending:");
+  console.error(text.slice(-1200));
 
-  console.error(
-    `Response length: ${text.length}`
-  );
-
-  console.error(
-    "Response ending:"
-  );
-
-  console.error(
-    text.slice(
-      -1200
-    )
-  );
-
-  throw new Error(
+  const error = new Error(
     "NAVTA AI response was incomplete or invalid. Please retry the import."
   );
+  error.code = "NAVTA_INVALID_JSON";
+  error.responseLength = text.length;
+  throw error;
 };
 
 const extractGeminiText = (
@@ -903,99 +937,38 @@ const extractRetryAfterSeconds = (
   response,
   message = ""
 ) => {
-  const headerValue =
-    Number(
-      response?.headers?.get?.(
-        "retry-after"
-      )
-    );
+  const rawHeader = response?.headers?.get?.("retry-after");
+  const headerValue = Number(rawHeader);
 
-  if (
-    Number.isFinite(
-      headerValue
-    ) &&
-    headerValue > 0
-  ) {
-    return Math.ceil(
-      headerValue
-    );
+  if (rawHeader && Number.isFinite(headerValue) && headerValue > 0) {
+    return Math.ceil(headerValue);
   }
 
-  const match =
-    String(
-      message
-    ).match(
-      /retry\s+in\s+([\d.]+)s/i
-    );
+  const match = String(message).match(/retry\s+in\s+([\d.]+)s/i);
 
   if (match) {
-    return Math.ceil(
-      Number(
-        match[1]
-      ) || 60
-    );
+    const seconds = Number(match[1]);
+    return Number.isFinite(seconds) && seconds > 0
+      ? Math.ceil(seconds)
+      : null;
   }
 
-  return 60;
+  return null;
 };
 
-// =====================================================
-// GEMINI REQUEST
-// =====================================================
+const sleep = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-const sleep = (ms = 0) =>
-  new Promise((resolve) =>
-    setTimeout(resolve, ms)
-  );
+const isRetryableGeminiStatus = (status) =>
+  [429, 500, 502, 503, 504].includes(Number(status));
 
-const GEMINI_TRANSIENT_STATUS_CODES =
-  new Set([429, 500, 502, 503, 504]);
-
-const GEMINI_MAX_REQUEST_ATTEMPTS = 5;
-
-const getGeminiRetryDelayMs = ({
-  attempt,
-  response,
-  message = "",
-}) => {
-  const retryAfterHeader =
-    response?.headers?.get?.("retry-after");
-
-  const retryAfterNumber =
-    Number(retryAfterHeader);
-
-  if (
-    Number.isFinite(retryAfterNumber) &&
-    retryAfterNumber > 0
-  ) {
-    return Math.ceil(retryAfterNumber * 1000);
+const getGeminiRetryDelayMs = ({ attempt, retryAfter }) => {
+  if (Number.isFinite(Number(retryAfter)) && Number(retryAfter) > 0) {
+    return Math.min(Number(retryAfter) * 1000, 60000);
   }
 
-  const messageMatch =
-    String(message).match(
-      /retry\s+in\s+([\d.]+)s/i
-    );
-
-  if (messageMatch) {
-    const seconds =
-      Number(messageMatch[1]);
-
-    if (
-      Number.isFinite(seconds) &&
-      seconds > 0
-    ) {
-      return Math.ceil(seconds * 1000);
-    }
-  }
-
-  const backoff = [2000, 5000, 10000, 20000];
-
-  return backoff[
-    Math.min(
-      Math.max(attempt - 1, 0),
-      backoff.length - 1
-    )
-  ];
+  const delays = [2000, 5000, 10000, 20000];
+  return delays[Math.min(Math.max(attempt - 1, 0), delays.length - 1)];
 };
 
 // =====================================================
@@ -1014,190 +987,106 @@ const callGemini = async ({
 
   const endpoint =
     `${GEMINI_API_BASE}/models/` +
-    `${encodeURIComponent(
-      GEMINI_MODEL
-    )}:generateContent?key=` +
-    `${encodeURIComponent(
-      GEMINI_API_KEY
-    )}`;
+    `${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=` +
+    `${encodeURIComponent(GEMINI_API_KEY)}`;
 
+  const maxAttempts = 5;
   let lastError = null;
 
-  for (
-    let attempt = 1;
-    attempt <= GEMINI_MAX_REQUEST_ATTEMPTS;
-    attempt += 1
-  ) {
-    const controller =
-      new AbortController();
-
-    const timeout =
-      setTimeout(
-        () => {
-          controller.abort();
-        },
-        NAVTA_AI_TIMEOUT_MS
-      );
-
-    let response = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), NAVTA_AI_TIMEOUT_MS);
 
     try {
-      response =
-        await fetch(
-          endpoint,
-          {
-            method:
-              "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json",
-
-              Accept:
-                "application/json",
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts,
             },
+          ],
+          generationConfig: {
+            temperature: 0.05,
+            responseMimeType: "application/json",
+            maxOutputTokens,
+          },
+        }),
+      });
 
-            signal:
-              controller.signal,
-
-            body:
-              JSON.stringify({
-                contents: [
-                  {
-                    role:
-                      "user",
-
-                    parts,
-                  },
-                ],
-
-                generationConfig: {
-                  temperature:
-                    0.05,
-
-                  responseMimeType:
-                    "application/json",
-
-                  maxOutputTokens,
-                },
-              }),
-          }
-        );
-
-      const responseText =
-        await response.text();
-
+      const responseText = await response.text();
       let data = {};
 
       try {
-        data =
-          responseText
-            ? JSON.parse(
-                responseText
-              )
-            : {};
+        data = responseText ? JSON.parse(responseText) : {};
       } catch {
-        const invalidResponseError =
-          new Error(
-            "Gemini returned an invalid HTTP response."
-          );
-
-        invalidResponseError.statusCode =
-          response.status || 502;
-
-        throw invalidResponseError;
+        const error = new Error("Gemini returned an invalid HTTP response.");
+        error.statusCode = response.status || 502;
+        throw error;
       }
 
       if (!response.ok) {
         const message =
-          cleanString(
-            data?.error?.message
-          ) ||
+          cleanString(data?.error?.message) ||
           `Gemini returned HTTP ${response.status}.`;
 
-        const error =
-          new Error(message);
-
-        error.statusCode =
-          response.status;
-
-        if (
-          response.status === 429
-        ) {
-          error.retryAfter =
-            extractRetryAfterSeconds(
-              response,
-              message
-            );
-        }
-
+        const error = new Error(message);
+        error.statusCode = response.status;
+        error.retryAfter = extractRetryAfterSeconds(response, message);
         throw error;
       }
 
-      const modelText =
-        extractGeminiText(
-          data
-        );
+      const modelText = extractGeminiText(data);
 
       if (!modelText) {
-        const emptyError =
-          new Error(
-            "Gemini returned an empty response."
-          );
-
-        emptyError.statusCode = 502;
-
-        throw emptyError;
+        const finishReason = cleanString(data?.candidates?.[0]?.finishReason);
+        const error = new Error(
+          finishReason
+            ? `Gemini returned an empty response (${finishReason}).`
+            : "Gemini returned an empty response."
+        );
+        error.statusCode = 502;
+        throw error;
       }
 
       return modelText;
     } catch (error) {
       let normalizedError = error;
 
-      if (
-        error?.name ===
-        "AbortError"
-      ) {
-        normalizedError =
-          new Error(
-            "Gemini request timed out."
-          );
-
-        normalizedError.statusCode =
-          504;
+      if (error?.name === "AbortError") {
+        normalizedError = new Error("Gemini request timed out.");
+        normalizedError.statusCode = 504;
+      } else if (!error?.statusCode && error instanceof TypeError) {
+        normalizedError = new Error(
+          `Gemini network request failed: ${error?.message || "temporary network error"}`
+        );
+        normalizedError.statusCode = 503;
       }
 
       lastError = normalizedError;
 
-      const statusCode =
-        Number(
-          normalizedError?.statusCode
-        );
+      const retryable = isRetryableGeminiStatus(normalizedError?.statusCode);
 
-      const isTransient =
-        GEMINI_TRANSIENT_STATUS_CODES.has(
-          statusCode
-        ) ||
-        normalizedError?.name ===
-          "TypeError";
-
-      if (
-        !isTransient ||
-        attempt >= GEMINI_MAX_REQUEST_ATTEMPTS
-      ) {
+      if (!retryable || attempt >= maxAttempts) {
         throw normalizedError;
       }
 
-      const delayMs =
-        getGeminiRetryDelayMs({
-          attempt,
-          response,
-          message:
-            normalizedError?.message || "",
-        });
+      const delayMs = getGeminiRetryDelayMs({
+        attempt,
+        retryAfter: normalizedError?.retryAfter,
+      });
 
       console.warn(
-        `NAVTA Gemini request failed (${statusCode || normalizedError?.name || "network"}) on attempt ${attempt}/${GEMINI_MAX_REQUEST_ATTEMPTS}. Retrying in ${Math.ceil(delayMs / 1000)}s. ${normalizedError?.message || ""}`
+        `NAVTA Gemini temporary failure on attempt ${attempt}/${maxAttempts} ` +
+        `(HTTP ${normalizedError?.statusCode || "network"}). ` +
+        `Retrying in ${Math.round(delayMs / 1000)}s. ` +
+        `${normalizedError?.message || ""}`
       );
 
       await sleep(delayMs);
@@ -1206,12 +1095,7 @@ const callGemini = async ({
     }
   }
 
-  throw (
-    lastError ||
-    new Error(
-      "Gemini request failed after retries."
-    )
-  );
+  throw lastError || new Error("Gemini request failed.");
 };
 
 // =====================================================
@@ -3392,30 +3276,85 @@ const analyseRenderedPages =
           lastError =
             error;
 
-          if (
-            attempt >=
-            attempts
-          ) {
+          const isJsonRecoveryError =
+            error?.code === "NAVTA_INVALID_JSON" ||
+            error?.code === "NAVTA_EMPTY_JSON";
+
+          // HTTP/capacity/network retries already happen inside callGemini().
+          // Do not repeat the entire page batch after those retries are exhausted.
+          if (!isJsonRecoveryError) {
             throw error;
           }
 
-          if (
-            error?.statusCode ===
-              429
-          ) {
-            throw error;
+          if (attempt < attempts) {
+            console.warn(
+              `NAVTA AI batch ${pageNumbers} returned invalid/incomplete JSON on attempt ${attempt}; retrying the same batch.`
+            );
           }
-
-          console.warn(
-            `NAVTA AI batch ${pageNumbers} failed on attempt ${attempt}; retrying. ${error?.message || ""}`
-          );
         }
       }
 
-      if (
-        lastError
-      ) {
-        throw lastError;
+      if (lastError) {
+        const canSplitBatch =
+          batch.length > 1 &&
+          (
+            lastError?.code === "NAVTA_INVALID_JSON" ||
+            lastError?.code === "NAVTA_EMPTY_JSON"
+          );
+
+        if (!canSplitBatch) {
+          throw lastError;
+        }
+
+        console.warn(
+          `NAVTA AI batch ${pageNumbers} still returned invalid JSON; falling back to one-page extraction.`
+        );
+
+        batchQuestions = [];
+
+        for (const singlePage of batch) {
+          const singlePageNumber = singlePage.pageNumber;
+          let singlePageQuestions = [];
+          let singlePageError = null;
+
+          for (let singleAttempt = 1; singleAttempt <= attempts; singleAttempt += 1) {
+            try {
+              singlePageQuestions = await analyseRenderedPageBatch({
+                pages: [singlePage],
+                text,
+                hints,
+              });
+
+              singlePageError = null;
+
+              if (singlePageQuestions.length > 0 || singleAttempt >= attempts) {
+                break;
+              }
+            } catch (error) {
+              singlePageError = error;
+
+              const isJsonRecoveryError =
+                error?.code === "NAVTA_INVALID_JSON" ||
+                error?.code === "NAVTA_EMPTY_JSON";
+
+              if (!isJsonRecoveryError || singleAttempt >= attempts) {
+                throw error;
+              }
+
+              console.warn(
+                `NAVTA AI page ${singlePageNumber} returned invalid/incomplete JSON; retrying page alone.`
+              );
+            }
+          }
+
+          if (singlePageError) {
+            throw singlePageError;
+          }
+
+          batchQuestions.push(...singlePageQuestions);
+        }
+
+        lastError = null;
       }
 
       allQuestions.push(
