@@ -320,7 +320,7 @@ function repairLegacyNavtaLatex(input = "") {
   return String(input ?? "")
     .replace(/\r(?=ight\b)/g, "\\right")
     .replace(/\f(?=rac\b)/g, "\\frac")
-    .replace(/\b(?=egin\b)/g, "\\begin")
+    .replace(/\x08(?=egin\b)/g, "\\begin")
     .replace(/\t(?=heta\b)/g, "\\theta")
     .replace(/\t(?=imes\b)/g, "\\times")
     .replace(/\n(?=abla\b)/g, "\\nabla")
@@ -836,6 +836,266 @@ function renderNavtaContent(
       );
     }
   );
+}
+
+
+// =====================================================
+// NAVTA UNIVERSAL OPTION FORMAT NORMALIZER
+// =====================================================
+//
+// This renderer is used ONLY for MCQ option/correct-answer
+// content. It accepts:
+// - normal prose
+// - $...$ / \( ... \) / \[ ... \] math
+// - bare LaTeX: 3\pi-11, \frac{a}{b}, \sqrt{3}
+// - damaged legacy LaTeX: cosleft((a)/(π)right)
+// - Unicode maths: π, √, ≤, ≥, ∞, ×, ÷
+// - simple OCR fractions: (a)/(π), ((π)/(4a))
+// - matrices/determinants/sets/vectors/trig/log notation
+// - chemistry commands already supported by NAVTA KaTeX/mhchem
+//
+// Question prose is deliberately NOT passed through these
+// aggressive repairs.
+// =====================================================
+
+function repairNavtaOptionFormat(input = "") {
+  let value = String(input ?? "")
+    .replace(/\u00a0/g, " ")
+    .trim();
+
+  if (!value) {
+    return "";
+  }
+
+  // Repair JSON-control-character damage that can occur when
+  // LaTeX backslashes were under-escaped before JSON parsing.
+  value = repairLegacyNavtaLatex(value);
+
+  // Restore common commands when the leading "\" was lost.
+  value = value
+    .replace(
+      /\b(sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|log|ln|exp|lim|max|min)\s*left\s*\(/gi,
+      (_, fn) => `\\${fn.toLowerCase()}\\left(`
+    )
+    .replace(
+      /\b(sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|log|ln|exp|lim|max|min)left\s*\(/gi,
+      (_, fn) => `\\${fn.toLowerCase()}\\left(`
+    )
+    .replace(
+      /\b(sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|log|ln|exp|lim|max|min)\s*left\s*\[/gi,
+      (_, fn) => `\\${fn.toLowerCase()}\\left[`
+    )
+    .replace(
+      /\b(sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|log|ln|exp|lim|max|min)left\s*\[/gi,
+      (_, fn) => `\\${fn.toLowerCase()}\\left[`
+    );
+
+  // Restore orphaned left/right delimiters.
+  value = value
+    .replace(/(^|[^\\A-Za-z])left\s*\(/g, "$1\\left(")
+    .replace(/(^|[^\\A-Za-z])left\s*\[/g, "$1\\left[")
+    .replace(/(^|[^\\A-Za-z])left\s*\\\{/g, "$1\\left\\{")
+    .replace(/(^|[^\\A-Za-z])right\s*\)/g, "$1\\right)")
+    .replace(/(^|[^\\A-Za-z])right\s*\]/g, "$1\\right]")
+    .replace(/(^|[^\\A-Za-z])right\s*\\\}/g, "$1\\right\\}");
+
+  // Repair command names that sometimes lose only the slash.
+  value = value
+    .replace(/\bfrac\s*\{/g, "\\frac{")
+    .replace(/\bsqrt\s*\{/g, "\\sqrt{")
+    .replace(/\btext\s*\{/g, "\\text{")
+    .replace(/\bpi\b/g, "\\pi")
+    .replace(/\btheta\b/g, "\\theta")
+    .replace(/\balpha\b/g, "\\alpha")
+    .replace(/\bbeta\b/g, "\\beta")
+    .replace(/\bgamma\b/g, "\\gamma")
+    .replace(/\blambda\b/g, "\\lambda")
+    .replace(/\bDelta\b/g, "\\Delta")
+    .replace(/\bOmega\b/g, "\\Omega");
+
+  // Convert common Unicode symbols to stable KaTeX commands.
+  value = value
+    .replace(/π/g, "\\pi")
+    .replace(/θ/g, "\\theta")
+    .replace(/α/g, "\\alpha")
+    .replace(/β/g, "\\beta")
+    .replace(/γ/g, "\\gamma")
+    .replace(/δ/g, "\\delta")
+    .replace(/λ/g, "\\lambda")
+    .replace(/μ/g, "\\mu")
+    .replace(/σ/g, "\\sigma")
+    .replace(/φ/g, "\\phi")
+    .replace(/ω/g, "\\omega")
+    .replace(/Δ/g, "\\Delta")
+    .replace(/Ω/g, "\\Omega")
+    .replace(/∞/g, "\\infty")
+    .replace(/≤/g, "\\le ")
+    .replace(/≥/g, "\\ge ")
+    .replace(/≠/g, "\\ne ")
+    .replace(/≈/g, "\\approx ")
+    .replace(/±/g, "\\pm ")
+    .replace(/∓/g, "\\mp ")
+    .replace(/×/g, "\\times ")
+    .replace(/÷/g, "\\div ")
+    .replace(/→/g, "\\to ")
+    .replace(/⇒/g, "\\Rightarrow ")
+    .replace(/⇔/g, "\\Leftrightarrow ");
+
+  // √x and √(...) OCR forms.
+  value = value
+    .replace(/√\s*\(([^()]+)\)/g, "\\sqrt{$1}")
+    .replace(/√\s*([A-Za-z0-9]+)/g, "\\sqrt{$1}");
+
+  // Convert simple OCR/Gemini quotient notation to \frac.
+  // Multiple passes support forms nested inside trig brackets.
+  for (let pass = 0; pass < 4; pass += 1) {
+    const before = value;
+
+    value = value
+      .replace(
+        /\(\(\s*([^()]+?)\s*\)\s*\/\s*\(\s*([^()]+?)\s*\)\)/g,
+        "\\frac{$1}{$2}"
+      )
+      .replace(
+        /\(\s*([^()]+?)\s*\)\s*\/\s*\(\s*([^()]+?)\s*\)/g,
+        "\\frac{$1}{$2}"
+      );
+
+    if (value === before) {
+      break;
+    }
+  }
+
+  // Common inverse-trig OCR form: sin-1 / cos-1 etc.
+  value = value.replace(
+    /\\(sin|cos|tan|cot|sec|csc)\s*-\s*1\b/g,
+    "\\$1^{-1}"
+  );
+
+  return normaliseNavtaLatex(value);
+}
+
+function navtaOptionLooksMathematical(raw = "", cleaned = "") {
+  const source = String(raw ?? "");
+  const value = String(cleaned ?? "");
+
+  if (!source && !value) {
+    return false;
+  }
+
+  const hasCommand =
+    /\\[A-Za-z]+/.test(value);
+
+  const hasLegacyCommand =
+    /\b(?:sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|log|ln|exp|lim|max|min)(?:left|\s*\()/i.test(
+      source
+    );
+
+  const hasUnicodeMath =
+    /[πθαγβδλμσφωΔΩ∞≤≥≠≈±∓×÷√∑∏∫→⇒⇔]/.test(
+      source
+    );
+
+  const hasScripts =
+    /(?:\^|_)(?:\{[^}]+\}|[A-Za-z0-9()+-]+)/.test(
+      value
+    );
+
+  const hasEquation =
+    /(?:=|<|>|\+|\-|\*|\/)/.test(value) &&
+    /[A-Za-z0-9\\]/.test(value);
+
+  const hasMatrix =
+    /\\begin\{(?:matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix|array|cases|aligned)\}/.test(
+      value
+    );
+
+  const hasFractionLike =
+    /\\frac\{|(?:\([^()]+\)|[A-Za-z0-9]+)\s*\/\s*(?:\([^()]+\)|[A-Za-z0-9]+)/.test(
+      value
+    );
+
+  return Boolean(
+    hasCommand ||
+      hasLegacyCommand ||
+      hasUnicodeMath ||
+      hasScripts ||
+      hasEquation ||
+      hasMatrix ||
+      hasFractionLike
+  );
+}
+
+function renderNavtaOptionContent(input = "") {
+  const raw = String(input ?? "").trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  // Correctly delimited mixed prose/math should continue to
+  // use NAVTA's existing mixed-content renderer.
+  if (
+    /\$\$[\s\S]*?\$\$|\$[\s\S]*?\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]/.test(
+      raw
+    )
+  ) {
+    return renderNavtaContent(raw);
+  }
+
+  const cleaned =
+    repairNavtaOptionFormat(raw);
+
+  if (
+    navtaOptionLooksMathematical(
+      raw,
+      cleaned
+    )
+  ) {
+    const html =
+      navtaKatexHtml(
+        cleaned,
+        false
+      );
+
+    if (html) {
+      return (
+        <span
+          className="navta-option-math"
+          style={{
+            display: "inline-block",
+            maxWidth: "100%",
+            overflowX: "auto",
+            overflowY: "hidden",
+            verticalAlign: "middle",
+            lineHeight: 1.6,
+          }}
+          dangerouslySetInnerHTML={{
+            __html: html,
+          }}
+        />
+      );
+    }
+
+    // Never expose ugly raw LaTeX if KaTeX rejects a damaged
+    // legacy option.
+    return (
+      <span
+        className="navta-option-math-fallback"
+        style={{
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+        }}
+      >
+        {humaniseNavtaLatex(
+          cleaned
+        )}
+      </span>
+    );
+  }
+
+  // Plain-language options remain plain/mixed content.
+  return renderNavtaContent(raw);
 }
 
 
@@ -4909,7 +5169,7 @@ export default function NavtaTestPage() {
                               {String.fromCharCode(65 + index)}
                             </span>
                             <span className="navta-option-content">
-                              {renderNavtaContent(
+                              {renderNavtaOptionContent(
                                 option ||
                                   ""
                               )}
@@ -4947,7 +5207,7 @@ export default function NavtaTestPage() {
                         )}
                         <>
                           .{" "}
-                          {renderNavtaContent(
+                          {renderNavtaOptionContent(
                             currentTestQuestion
                               .options[
                                 answerFeedback[
