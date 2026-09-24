@@ -943,6 +943,65 @@ const extractRetryAfterSeconds = (
 // GEMINI REQUEST
 // =====================================================
 
+const sleep = (ms = 0) =>
+  new Promise((resolve) =>
+    setTimeout(resolve, ms)
+  );
+
+const GEMINI_TRANSIENT_STATUS_CODES =
+  new Set([429, 500, 502, 503, 504]);
+
+const GEMINI_MAX_REQUEST_ATTEMPTS = 5;
+
+const getGeminiRetryDelayMs = ({
+  attempt,
+  response,
+  message = "",
+}) => {
+  const retryAfterHeader =
+    response?.headers?.get?.("retry-after");
+
+  const retryAfterNumber =
+    Number(retryAfterHeader);
+
+  if (
+    Number.isFinite(retryAfterNumber) &&
+    retryAfterNumber > 0
+  ) {
+    return Math.ceil(retryAfterNumber * 1000);
+  }
+
+  const messageMatch =
+    String(message).match(
+      /retry\s+in\s+([\d.]+)s/i
+    );
+
+  if (messageMatch) {
+    const seconds =
+      Number(messageMatch[1]);
+
+    if (
+      Number.isFinite(seconds) &&
+      seconds > 0
+    ) {
+      return Math.ceil(seconds * 1000);
+    }
+  }
+
+  const backoff = [2000, 5000, 10000, 20000];
+
+  return backoff[
+    Math.min(
+      Math.max(attempt - 1, 0),
+      backoff.length - 1
+    )
+  ];
+};
+
+// =====================================================
+// GEMINI REQUEST
+// =====================================================
+
 const callGemini = async ({
   parts,
   maxOutputTokens = 16384,
@@ -962,147 +1021,197 @@ const callGemini = async ({
       GEMINI_API_KEY
     )}`;
 
-  const controller =
-    new AbortController();
+  let lastError = null;
 
-  const timeout =
-    setTimeout(
-      () => {
-        controller.abort();
-      },
-      NAVTA_AI_TIMEOUT_MS
-    );
+  for (
+    let attempt = 1;
+    attempt <= GEMINI_MAX_REQUEST_ATTEMPTS;
+    attempt += 1
+  ) {
+    const controller =
+      new AbortController();
 
-  try {
-    const response =
-      await fetch(
-        endpoint,
-        {
-          method:
-            "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-
-            Accept:
-              "application/json",
-          },
-
-          signal:
-            controller.signal,
-
-          body:
-            JSON.stringify({
-              contents: [
-                {
-                  role:
-                    "user",
-
-                  parts,
-                },
-              ],
-
-              generationConfig: {
-                temperature:
-                  0.05,
-
-                responseMimeType:
-                  "application/json",
-
-                maxOutputTokens,
-              },
-            }),
-        }
+    const timeout =
+      setTimeout(
+        () => {
+          controller.abort();
+        },
+        NAVTA_AI_TIMEOUT_MS
       );
 
-    const responseText =
-      await response.text();
-
-    let data = {};
+    let response = null;
 
     try {
-      data =
-        responseText
-          ? JSON.parse(
-              responseText
-            )
-          : {};
-    } catch {
-      throw new Error(
-        "Gemini returned an invalid HTTP response."
-      );
-    }
+      response =
+        await fetch(
+          endpoint,
+          {
+            method:
+              "POST",
 
-    if (!response.ok) {
-      const message =
-        cleanString(
-          data?.error?.message
-        ) ||
-        `Gemini returned HTTP ${response.status}.`;
+            headers: {
+              "Content-Type":
+                "application/json",
 
-      if (
-        response.status === 429
-      ) {
-        const retryAfter =
-          extractRetryAfterSeconds(
-            response,
-            message
+              Accept:
+                "application/json",
+            },
+
+            signal:
+              controller.signal,
+
+            body:
+              JSON.stringify({
+                contents: [
+                  {
+                    role:
+                      "user",
+
+                    parts,
+                  },
+                ],
+
+                generationConfig: {
+                  temperature:
+                    0.05,
+
+                  responseMimeType:
+                    "application/json",
+
+                  maxOutputTokens,
+                },
+              }),
+          }
+        );
+
+      const responseText =
+        await response.text();
+
+      let data = {};
+
+      try {
+        data =
+          responseText
+            ? JSON.parse(
+                responseText
+              )
+            : {};
+      } catch {
+        const invalidResponseError =
+          new Error(
+            "Gemini returned an invalid HTTP response."
           );
+
+        invalidResponseError.statusCode =
+          response.status || 502;
+
+        throw invalidResponseError;
+      }
+
+      if (!response.ok) {
+        const message =
+          cleanString(
+            data?.error?.message
+          ) ||
+          `Gemini returned HTTP ${response.status}.`;
 
         const error =
-          new Error(
-            `Gemini quota/rate limit reached. Please wait about ${retryAfter} seconds and try again.`
-          );
+          new Error(message);
 
         error.statusCode =
-          429;
+          response.status;
 
-        error.retryAfter =
-          retryAfter;
+        if (
+          response.status === 429
+        ) {
+          error.retryAfter =
+            extractRetryAfterSeconds(
+              response,
+              message
+            );
+        }
 
         throw error;
       }
 
-      throw new Error(
-        message
-      );
-    }
-
-    const modelText =
-      extractGeminiText(
-        data
-      );
-
-    if (!modelText) {
-      throw new Error(
-        "Gemini returned an empty response."
-      );
-    }
-
-    return modelText;
-  } catch (error) {
-    if (
-      error?.name ===
-      "AbortError"
-    ) {
-      const timeoutError =
-        new Error(
-          "Gemini request timed out."
+      const modelText =
+        extractGeminiText(
+          data
         );
 
-      timeoutError.statusCode =
-        504;
+      if (!modelText) {
+        const emptyError =
+          new Error(
+            "Gemini returned an empty response."
+          );
 
-      throw timeoutError;
+        emptyError.statusCode = 502;
+
+        throw emptyError;
+      }
+
+      return modelText;
+    } catch (error) {
+      let normalizedError = error;
+
+      if (
+        error?.name ===
+        "AbortError"
+      ) {
+        normalizedError =
+          new Error(
+            "Gemini request timed out."
+          );
+
+        normalizedError.statusCode =
+          504;
+      }
+
+      lastError = normalizedError;
+
+      const statusCode =
+        Number(
+          normalizedError?.statusCode
+        );
+
+      const isTransient =
+        GEMINI_TRANSIENT_STATUS_CODES.has(
+          statusCode
+        ) ||
+        normalizedError?.name ===
+          "TypeError";
+
+      if (
+        !isTransient ||
+        attempt >= GEMINI_MAX_REQUEST_ATTEMPTS
+      ) {
+        throw normalizedError;
+      }
+
+      const delayMs =
+        getGeminiRetryDelayMs({
+          attempt,
+          response,
+          message:
+            normalizedError?.message || "",
+        });
+
+      console.warn(
+        `NAVTA Gemini request failed (${statusCode || normalizedError?.name || "network"}) on attempt ${attempt}/${GEMINI_MAX_REQUEST_ATTEMPTS}. Retrying in ${Math.ceil(delayMs / 1000)}s. ${normalizedError?.message || ""}`
+      );
+
+      await sleep(delayMs);
+    } finally {
+      clearTimeout(timeout);
     }
-
-    throw error;
-  } finally {
-    clearTimeout(
-      timeout
-    );
   }
+
+  throw (
+    lastError ||
+    new Error(
+      "Gemini request failed after retries."
+    )
+  );
 };
 
 // =====================================================
