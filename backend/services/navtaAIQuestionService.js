@@ -1713,6 +1713,87 @@ const hasMatchColumnData = (value) =>
       value.right.length > 0
   );
 
+
+// =====================================================
+// MATRIX / DETERMINANT ROW-SEPARATOR REPAIR
+// =====================================================
+// Repairs ONLY inside matrix-like LaTeX environments.
+//
+// Example corruption:
+//   p+a & q+b & r+c \q+c & r+a & p+b \r+a & p+b & q+c
+//
+// Correct:
+//   p+a & q+b & r+c \\ q+c & r+a & p+b \\ r+a & p+b & q+c
+//
+// We do NOT globally rewrite \q, \r, \x, etc. because that could
+// alter legitimate scientific/LaTeX content outside a matrix.
+const repairBrokenMatrixRowSeparators = (input = "") => {
+  const matrixEnvironmentPattern =
+    /\\begin\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix|array|cases|aligned|gathered)\}([\s\S]*?)\\end\{\1\}/g;
+
+  return String(input ?? "").replace(
+    matrixEnvironmentPattern,
+    (fullMatch, environment, body) => {
+      let repairedBody = "";
+      let rowStart = 0;
+      let cursor = 0;
+
+      while (cursor < body.length) {
+        // Preserve already-correct \\ row separators.
+        if (
+          body[cursor] === "\\" &&
+          body[cursor + 1] === "\\"
+        ) {
+          repairedBody += "\\\\";
+          cursor += 2;
+          rowStart = repairedBody.length;
+          continue;
+        }
+
+        if (body[cursor] === "\\") {
+          const rest = body.slice(cursor);
+
+          // A single-letter command after a populated matrix row is almost
+          // certainly a collapsed row separator + the next row's variable.
+          const oneLetterMatch = rest.match(
+            /^\\([A-Za-z])(?=[_^+\-=(),.;:{}[\]\s&]|$)/
+          );
+
+          if (oneLetterMatch) {
+            const currentRow =
+              repairedBody.slice(rowStart);
+
+            const ampersandCount =
+              (currentRow.match(/&/g) || []).length;
+
+            if (ampersandCount > 0) {
+              repairedBody +=
+                `\\\\ ${oneLetterMatch[1]}`;
+
+              cursor +=
+                oneLetterMatch[0].length;
+
+              rowStart =
+                repairedBody.length;
+
+              continue;
+            }
+          }
+        }
+
+        repairedBody += body[cursor];
+        cursor += 1;
+      }
+
+      return (
+        `\\begin{${environment}}` +
+        repairedBody +
+        `\\end{${environment}}`
+      );
+    }
+  );
+};
+
 // =====================================================
 // UNIVERSAL NAVTA SCIENCE CONTENT REPAIR
 // =====================================================
@@ -1803,6 +1884,11 @@ const repairNavtaScienceContent = (input = "") => {
     .replace(/≈/g, "\\approx ")
     .replace(/±/g, "\\pm ")
     .replace(/∓/g, "\\mp ");
+
+  value =
+    repairBrokenMatrixRowSeparators(
+      value
+    );
 
   return value.trim();
 };
