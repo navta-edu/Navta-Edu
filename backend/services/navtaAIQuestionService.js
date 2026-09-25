@@ -1240,6 +1240,13 @@ correctAnswer = null
 needsReview = true
 
 =======================================================
+IMPORT EFFICIENCY RULE — MANDATORY:
+- Do NOT generate explanations, solutions, derivations, hints, reasoning, or step-by-step working during PDF import.
+- Always return explanation as an empty string: "".
+- Spend output budget on exact question transcription, every option, correct answer, metadata, LaTeX/scientific notation, match-column structure, and genuine visual bounding boxes.
+- Never shorten or omit question/options to provide reasoning.
+- If something is uncertain, preserve the source content for admin review instead of inventing an explanation.
+
 FORMAT-SAFETY REQUIREMENTS — MANDATORY:
 - Never output flattened commands like frac2√(5), cosleft(...), sinleft(...), sqrt5 or beginmatrix.
 - Use correctly JSON-escaped valid LaTeX for fractions, roots, trig, calculus, vectors, matrices and determinants.
