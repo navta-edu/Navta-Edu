@@ -739,12 +739,23 @@ const validateRenderedPage = (
 // Repair only these unmistakable LaTeX command fragments. This is deliberately
 // conservative so ordinary prose is never rewritten.
 const repairNavtaJsonLatexString = (input = "") => {
+  // IMPORTANT:
+  // JSON.parse interprets \t, \n, \r, \f and \b as JSON escapes.
+  // That can silently turn valid LaTeX such as \tan into TAB + "an",
+  // \beta into BACKSPACE + "eta", or \rho into CR + "ho".
+  // Restore only unmistakable LaTeX command suffixes.
   return String(input ?? "")
-    .replace(/\r(?=ight\b)/g, "\\\\r")
-    .replace(/\f(?=rac\b)/g, "\\\\f")
-    .replace(/\b(?=egin\b)/g, "\\\\b")
-    .replace(/\t(?=(?:heta|imes)\b)/g, "\\\\t")
-    .replace(/\n(?=(?:abla|eq|u)\b)/g, "\\\\n");
+    .replace(/\r(?=(?:ight|ho)\b)/g, "\\\\r")
+    .replace(/\f(?=(?:rac|orall)\b)/g, "\\\\f")
+    .replace(/\x08(?=(?:egin|eta|matrix)\b)/g, "\\\\b")
+    .replace(
+      /\t(?=(?:an|anh|ext|heta|imes|o|op|au|riangle|herefore)\b)/g,
+      "\\\\t"
+    )
+    .replace(
+      /\n(?=(?:abla|eq|u|ot|i|ewline)\b)/g,
+      "\\\\n"
+    );
 };
 
 const repairNavtaJsonLatexDeep = (value) => {
@@ -1717,14 +1728,17 @@ const repairNavtaScienceContent = (input = "") => {
   }
 
   value = value
-    .replace(/\x0D(?=ight\b)/g, "\\right")
-    .replace(/\x0C(?=rac\b)/g, "\\frac")
-    .replace(/\x08(?=egin\b)/g, "\\begin")
-    .replace(/\x09(?=heta\b)/g, "\\theta")
-    .replace(/\x09(?=imes\b)/g, "\\times")
-    .replace(/\x0A(?=abla\b)/g, "\\nabla")
-    .replace(/\x0A(?=eq\b)/g, "\\neq")
-    .replace(/\x0A(?=u\b)/g, "\\nu")
+    .replace(/\x0D(?=(?:ight|ho)\b)/g, "\\r")
+    .replace(/\x0C(?=(?:rac|orall)\b)/g, "\\f")
+    .replace(/\x08(?=(?:egin|eta|matrix)\b)/g, "\\b")
+    .replace(
+      /\x09(?=(?:an|anh|ext|heta|imes|o|op|au|riangle|herefore)\b)/g,
+      "\\t"
+    )
+    .replace(
+      /\x0A(?=(?:abla|eq|u|ot|i|ewline)\b)/g,
+      "\\n"
+    )
     .replace(
       /\b(sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|log|ln|exp|lim|max|min)\s*left\s*\(/gi,
       (_, fn) => `\\${fn.toLowerCase()}\\left(`
