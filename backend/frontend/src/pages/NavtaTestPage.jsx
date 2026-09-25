@@ -316,66 +316,6 @@ function formatSolveTime(totalSeconds) {
 const NAVTA_LATEX_COMMANDS =
   "begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|cdot|times|div|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|sin|cos|tan|cot|sec|csc|log|ln|exp|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|neq|ne|leq|geq|approx|equiv|sim|propto|pm|mp|infty|vec|overrightarrow|overleftarrow|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|leftrightarrow|Rightarrow|Leftarrow|Leftrightarrow|therefore|because|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|ce|pu";
 
-
-function repairBrokenMatrixRowSeparators(input = "") {
-  const matrixEnvironmentPattern =
-    /\\begin\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix|array|cases|aligned|gathered)\}([\s\S]*?)\\end\{\1\}/g;
-
-  return String(input ?? "").replace(
-    matrixEnvironmentPattern,
-    (fullMatch, environment, body) => {
-      let repairedBody = "";
-      let rowStart = 0;
-      let cursor = 0;
-
-      while (cursor < body.length) {
-        if (
-          body[cursor] === "\\" &&
-          body[cursor + 1] === "\\"
-        ) {
-          repairedBody += "\\\\";
-          cursor += 2;
-          rowStart = repairedBody.length;
-          continue;
-        }
-
-        if (body[cursor] === "\\") {
-          const rest = body.slice(cursor);
-          const oneLetterMatch = rest.match(
-            /^\\([A-Za-z])(?=[_^+\-=(),.;:{}[\]\s&]|$)/
-          );
-
-          if (oneLetterMatch) {
-            const currentRow =
-              repairedBody.slice(rowStart);
-            const ampersandCount =
-              (currentRow.match(/&/g) || []).length;
-
-            if (ampersandCount > 0) {
-              repairedBody +=
-                `\\\\ ${oneLetterMatch[1]}`;
-              cursor +=
-                oneLetterMatch[0].length;
-              rowStart =
-                repairedBody.length;
-              continue;
-            }
-          }
-        }
-
-        repairedBody += body[cursor];
-        cursor += 1;
-      }
-
-      return (
-        `\\begin{${environment}}` +
-        repairedBody +
-        `\\end{${environment}}`
-      );
-    }
-  );
-}
-
 function normaliseNavtaLatex(input = "") {
   let value = String(input ?? "")
     .replace(/```(?:latex|tex|math)?/gi, "")
@@ -471,11 +411,6 @@ function normaliseNavtaLatex(input = "") {
     .replace(
       /_\\([A-Za-z]+)\b/g,
       "_{\\$1}"
-    );
-
-  value =
-    repairBrokenMatrixRowSeparators(
-      value
     );
 
   return value.trim();
