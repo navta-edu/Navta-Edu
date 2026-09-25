@@ -323,7 +323,7 @@ function repairBrokenMatrixRowSeparators(input = "") {
       let cursor = 0;
 
       while (cursor < body.length) {
-        // Keep an already-correct matrix row separator (\\) unchanged.
+        // Preserve a correct LaTeX row separator exactly as-is.
         if (body[cursor] === "\\" && body[cursor + 1] === "\\") {
           repairedBody += "\\\\";
           cursor += 2;
@@ -331,23 +331,27 @@ function repairBrokenMatrixRowSeparators(input = "") {
           continue;
         }
 
+        // Gemini/JSON sometimes collapses a matrix row separator from "\\\\"
+        // to a single slash before the first variable of the next row:
+        //
+        //   p+a & q+b & r+c \q+c & r+a & p+b
+        //
+        // If the current row already contains column separators (&), an
+        // otherwise-invalid one-letter command is treated as the missing row
+        // separator plus that variable. This fixes \q, \r, \p, etc. without
+        // touching valid commands such as \frac, \sqrt, \alpha or \Gamma.
         if (body[cursor] === "\\") {
           const rest = body.slice(cursor);
           const oneLetterMatch = rest.match(
-            /^\\([A-Za-z])(?=[_^+\-=(),.;:{}\[\]\s&0-9]|$)/
+            /^\\([A-Za-z])(?=[_^+\-=(),.;:{}\[\]\s&]|$)/
           );
 
           if (oneLetterMatch) {
-            const letter = oneLetterMatch[1];
             const currentRow = repairedBody.slice(rowStart);
             const ampersandCount = (currentRow.match(/&/g) || []).length;
 
-            // A matrix row that already contains '&' has at least one completed
-            // column. If Gemini/JSON collapsed the next row's leading "\\ x"
-            // into "\\x", "\\a", "\\p", "\\q", etc., restore the missing
-            // row separator. This is deliberately matrix-only.
             if (ampersandCount > 0) {
-              repairedBody += `\\\\ ${letter}`;
+              repairedBody += `\\\\ ${oneLetterMatch[1]}`;
               cursor += oneLetterMatch[0].length;
               rowStart = repairedBody.length;
               continue;
@@ -364,15 +368,6 @@ function repairBrokenMatrixRowSeparators(input = "") {
   );
 }
 
-function repairNavtaMatrixLatexBeforeNormalise(input = "") {
-  // Run matrix repair before the general normaliser as well as immediately
-  // before KaTeX. This prevents a malformed row start such as "\\x-1" from
-  // surviving long enough to be interpreted by KaTeX as an undefined command.
-  return repairBrokenMatrixRowSeparators(
-    repairLegacyNavtaLatex(String(input ?? ""))
-  );
-}
-
 function repairNavtaMathSegment(input = "") {
   let value = repairUnicodeScriptsInsideMath(input);
   value = repairBrokenMatrixRowSeparators(value);
@@ -381,7 +376,7 @@ function repairNavtaMathSegment(input = "") {
 }
 
 function normaliseNavtaLatex(input = "") {
-  let value = repairNavtaMatrixLatexBeforeNormalise(input)
+  let value = repairLegacyNavtaLatex(input)
     .replace(/```(?:latex|tex|math)?/gi, "")
     .replace(/```/g, "")
     .replace(/\u00a0/g, " ")
@@ -617,10 +612,8 @@ function navtaKatexHtml(
 ) {
   const cleaned =
     repairNavtaMathSegment(
-      repairBrokenMatrixRowSeparators(
-        normaliseNavtaLatex(
-          math
-        )
+      normaliseNavtaLatex(
+        math
       )
     );
 
