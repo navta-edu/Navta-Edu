@@ -6,7 +6,9 @@ import {
   BlockMath,
 } from "react-katex";
 
+import katex from "katex";
 import "katex/dist/katex.min.css";
+import "katex/contrib/mhchem";
 
 const PREPARATION_OPTIONS = {
   Physics: {
@@ -295,189 +297,465 @@ function formatSolveTime(totalSeconds) {
 }
 
 // =====================================================
-// NAVTA UNIVERSAL LATEX RENDERER
+// NAVTA FINAL UNIVERSAL SCIENCE + MATH RENDERER
 // =====================================================
 //
-// Shared approach for Admin and Student:
+// Robust for Physics, Chemistry, Maths and Biology.
 //
-// - normal text stays normal text
-// - $...$ renders as inline KaTeX
-// - $$...$$ renders as block KaTeX
-// - \( ... \) and \[ ... \] are normalized
-// - bare matrix / determinant environments are wrapped
-//   automatically so students never see raw \begin{...}
-// - complete matrix expressions are rendered directly
-//   by KaTeX instead of being rebuilt manually
+// Key improvements:
+// - Uses KaTeX directly with strict parsing.
+// - Renders powers, subscripts, roots, fractions,
+//   summations, products, limits, integrals and vectors.
+// - Renders complete matrices/determinants with KaTeX.
+// - Normalizes common Gemini/OCR mistakes.
+// - Supports chemistry \ce{} and \pu{} via mhchem.
+// - Converts nC_r style combinations to \binom{n}{r}.
+// - Never exposes raw broken LaTeX to students.
 // =====================================================
 
+const NAVTA_LATEX_COMMANDS =
+  "begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|cdot|times|div|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|sin|cos|tan|cot|sec|csc|log|ln|exp|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|neq|ne|leq|geq|approx|equiv|sim|propto|pm|mp|infty|vec|overrightarrow|overleftarrow|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|leftrightarrow|Rightarrow|Leftarrow|Leftrightarrow|therefore|because|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|ce|pu";
+
+
+function repairBrokenMatrixRowSeparators(input = "") {
+  const matrixEnvironmentPattern =
+    /\\begin\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix|array|cases|aligned|gathered)\}([\s\S]*?)\\end\{\1\}/g;
+
+  return String(input ?? "").replace(
+    matrixEnvironmentPattern,
+    (fullMatch, environment, body) => {
+      let repairedBody = "";
+      let rowStart = 0;
+      let cursor = 0;
+
+      while (cursor < body.length) {
+        if (
+          body[cursor] === "\\" &&
+          body[cursor + 1] === "\\"
+        ) {
+          repairedBody += "\\\\";
+          cursor += 2;
+          rowStart = repairedBody.length;
+          continue;
+        }
+
+        if (body[cursor] === "\\") {
+          const rest = body.slice(cursor);
+          const oneLetterMatch = rest.match(
+            /^\\([A-Za-z])(?=[_^+\-=(),.;:{}[\]\s&]|$)/
+          );
+
+          if (oneLetterMatch) {
+            const currentRow =
+              repairedBody.slice(rowStart);
+            const ampersandCount =
+              (currentRow.match(/&/g) || []).length;
+
+            if (ampersandCount > 0) {
+              repairedBody +=
+                `\\\\ ${oneLetterMatch[1]}`;
+              cursor +=
+                oneLetterMatch[0].length;
+              rowStart =
+                repairedBody.length;
+              continue;
+            }
+          }
+        }
+
+        repairedBody += body[cursor];
+        cursor += 1;
+      }
+
+      return (
+        `\\begin{${environment}}` +
+        repairedBody +
+        `\\end{${environment}}`
+      );
+    }
+  );
+}
+
 function normaliseNavtaLatex(input = "") {
-  return String(input ?? "")
+  let value = String(input ?? "")
     .replace(/```(?:latex|tex|math)?/gi, "")
     .replace(/```/g, "")
     .replace(/\u00a0/g, " ")
     .replace(/\r\n?/g, "\n")
-
-    // Fix AI/JSON double-escaped LaTeX commands.
-    // Example:
-    // \\cos   -> \cos
-    // \\theta -> \theta
-    //
-    // Matrix row separators (\\) remain intact because
-    // they are not followed by a LaTeX command name.
-    .replace(
-      /\\\\(?=(?:begin|end|frac|dfrac|tfrac|sqrt|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|times|cdot|div|neq|ne|leq|geq|approx|equiv|pm|mp|sum|prod|int|lim|infty|sin|cos|tan|cot|sec|csc|log|ln|vec|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|Rightarrow|therefore|because)\b)/g,
-      "\\"
-    )
-
     .trim();
+
+  if (!value) {
+    return "";
+  }
+
+  // Convert Gemini/JSON double-escaped LaTeX commands
+  // while preserving matrix row separators \\.
+  value = value.replace(
+    new RegExp(
+      `\\\\\\\\(?=(?:${NAVTA_LATEX_COMMANDS})\\b)`,
+      "g"
+    ),
+    "\\"
+  );
+
+  // Repair "\ sum" -> "\sum".
+  value = value.replace(
+    /\\\s+(?=[A-Za-z])/g,
+    "\\"
+  );
+
+  // Common command aliases / OCR output.
+  value = value
+    .replace(/\\cdotp\b/g, "\\cdot")
+    .replace(/\\operatorname\s*\{C\}/g, "C")
+    .replace(/\\operatorname\s*\{sin\}/gi, "\\sin")
+    .replace(/\\operatorname\s*\{cos\}/gi, "\\cos")
+    .replace(/\\operatorname\s*\{tan\}/gi, "\\tan")
+    .replace(/\\operatorname\s*\{cot\}/gi, "\\cot");
+
+  // =====================================================
+  // REPAIR COMBINATION / NCR NOTATION
+  // =====================================================
+  //
+  // Gemini/OCR may produce any of:
+  //
+  // ^nC_r
+  // ^nC_{r+1}
+  // {}^nC_r
+  // nC_r
+  // n C_r
+  //
+  // The leading ^ in ^nC_r is NOT an exponent by
+  // itself; it is old-style nCr notation. Remove it
+  // completely and convert to valid KaTeX:
+  //
+  // \binom{n}{r}
+  //
+  // This fixes the "^binomnr" corruption that appeared
+  // inside determinants and summations.
+  // =====================================================
+
+  value = value
+    .replace(
+      /\{\}\^\{?([A-Za-z0-9+\-]+)\}?\s*C_\{([^{}]+)\}/g,
+      "\\binom{$1}{$2}"
+    )
+    .replace(
+      /\{\}\^\{?([A-Za-z0-9+\-]+)\}?\s*C_([A-Za-z0-9+\-]+)/g,
+      "\\binom{$1}{$2}"
+    )
+    .replace(
+      /\^\{?([A-Za-z0-9+\-]+)\}?\s*C_\{([^{}]+)\}/g,
+      "\\binom{$1}{$2}"
+    )
+    .replace(
+      /\^\{?([A-Za-z0-9+\-]+)\}?\s*C_([A-Za-z0-9+\-]+)/g,
+      "\\binom{$1}{$2}"
+    )
+    .replace(
+      /\b([A-Za-z0-9]+)\s*C_\{([^{}]+)\}/g,
+      "\\binom{$1}{$2}"
+    )
+    .replace(
+      /\b([A-Za-z0-9]+)\s*C_([A-Za-z0-9+\-]+)/g,
+      "\\binom{$1}{$2}"
+    );
+
+  // Make unbraced powers/subscripts safer when Gemini
+  // emits simple command or alphanumeric operands.
+  value = value
+    .replace(
+      /\^\\([A-Za-z]+)\b/g,
+      "^{\\$1}"
+    )
+    .replace(
+      /_\\([A-Za-z]+)\b/g,
+      "_{\\$1}"
+    );
+
+  value =
+    repairBrokenMatrixRowSeparators(
+      value
+    );
+
+  return value.trim();
 }
 
-// =====================================================
-// INLINE LATEX
-// =====================================================
+function humaniseNavtaLatex(input = "") {
+  let value =
+    normaliseNavtaLatex(
+      input
+    );
 
-function renderNavtaInlineMath(
+  if (!value) {
+    return "";
+  }
+
+  const replacements = [
+    [/\\alpha\b/g, "α"],
+    [/\\beta\b/g, "β"],
+    [/\\gamma\b/g, "γ"],
+    [/\\delta\b/g, "δ"],
+    [/\\epsilon\b/g, "ε"],
+    [/\\varepsilon\b/g, "ε"],
+    [/\\theta\b/g, "θ"],
+    [/\\vartheta\b/g, "ϑ"],
+    [/\\lambda\b/g, "λ"],
+    [/\\mu\b/g, "μ"],
+    [/\\nu\b/g, "ν"],
+    [/\\xi\b/g, "ξ"],
+    [/\\pi\b/g, "π"],
+    [/\\rho\b/g, "ρ"],
+    [/\\sigma\b/g, "σ"],
+    [/\\tau\b/g, "τ"],
+    [/\\phi\b/g, "φ"],
+    [/\\varphi\b/g, "ϕ"],
+    [/\\psi\b/g, "ψ"],
+    [/\\omega\b/g, "ω"],
+    [/\\Gamma\b/g, "Γ"],
+    [/\\Delta\b/g, "Δ"],
+    [/\\Theta\b/g, "Θ"],
+    [/\\Lambda\b/g, "Λ"],
+    [/\\Pi\b/g, "Π"],
+    [/\\Sigma\b/g, "Σ"],
+    [/\\Phi\b/g, "Φ"],
+    [/\\Psi\b/g, "Ψ"],
+    [/\\Omega\b/g, "Ω"],
+    [/\\cdot\b/g, "·"],
+    [/\\times\b/g, "×"],
+    [/\\div\b/g, "÷"],
+    [/\\pm\b/g, "±"],
+    [/\\mp\b/g, "∓"],
+    [/\\leq\b/g, "≤"],
+    [/\\geq\b/g, "≥"],
+    [/\\neq\b/g, "≠"],
+    [/\\ne\b/g, "≠"],
+    [/\\approx\b/g, "≈"],
+    [/\\equiv\b/g, "≡"],
+    [/\\propto\b/g, "∝"],
+    [/\\infty\b/g, "∞"],
+    [/\\rightarrow\b/g, "→"],
+    [/\\leftarrow\b/g, "←"],
+    [/\\leftrightarrow\b/g, "↔"],
+    [/\\Rightarrow\b/g, "⇒"],
+    [/\\Leftarrow\b/g, "⇐"],
+    [/\\Leftrightarrow\b/g, "⇔"],
+    [/\\therefore\b/g, "∴"],
+    [/\\because\b/g, "∵"],
+    [/\\perp\b/g, "⊥"],
+    [/\\parallel\b/g, "∥"],
+    [/\\angle\b/g, "∠"],
+    [/\\circ\b/g, "°"],
+  ];
+
+  for (
+    const [
+      pattern,
+      replacement
+    ] of replacements
+  ) {
+    value =
+      value.replace(
+        pattern,
+        replacement
+      );
+  }
+
+  value = value
+    .replace(
+      /\\sum_\{([^{}]+)\}\^\{([^{}]+)\}/g,
+      "Σ[$1→$2]"
+    )
+    .replace(
+      /\\prod_\{([^{}]+)\}\^\{([^{}]+)\}/g,
+      "Π[$1→$2]"
+    )
+    .replace(
+      /\\int_\{([^{}]+)\}\^\{([^{}]+)\}/g,
+      "∫[$1→$2]"
+    )
+    .replace(
+      /\\binom\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g,
+      "C($1,$2)"
+    )
+    .replace(
+      /\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g,
+      "($1)/($2)"
+    )
+    .replace(
+      /\\sqrt\s*\{([^{}]+)\}/g,
+      "√($1)"
+    )
+    .replace(
+      /\\(?:text|mathrm|mathbf|mathit|mathbb|mathcal)\s*\{([^{}]*)\}/g,
+      "$1"
+    )
+    .replace(
+      /\\begin\{[^{}]+\}|\\end\{[^{}]+\}/g,
+      ""
+    )
+    .replace(
+      /\\\\/g,
+      " ; "
+    )
+    .replace(/&/g, " ")
+    .replace(
+      /\\([A-Za-z]+)\b/g,
+      "$1"
+    )
+    .replace(/[{}]/g, "")
+    .replace(
+      /\s{2,}/g,
+      " "
+    );
+
+  return value.trim();
+}
+
+function navtaKatexHtml(
   math,
-  key
+  displayMode = false
 ) {
   const cleaned =
     normaliseNavtaLatex(
       math
-    )
-      .replace(
-        /^\$|\$$/g,
-        ""
-      )
-      .trim();
+    );
 
   if (!cleaned) {
     return null;
+  }
+
+  try {
+    return katex.renderToString(
+      cleaned,
+      {
+        displayMode,
+        throwOnError: true,
+        strict: "ignore",
+        trust: false,
+        output: "htmlAndMathml",
+      }
+    );
+  } catch (
+    error
+  ) {
+    console.error(
+      "NAVTA KaTeX render error:",
+      error,
+      cleaned
+    );
+
+    return null;
+  }
+}
+
+function NavtaMath({
+  math = "",
+  display = false,
+  className = "",
+}) {
+  const html =
+    navtaKatexHtml(
+      math,
+      display
+    );
+
+  if (!html) {
+    const fallback =
+      humaniseNavtaLatex(
+        math
+      );
+
+    return display ? (
+      <div
+        className={
+          className
+        }
+        style={{
+          whiteSpace:
+            "pre-wrap",
+          overflowX:
+            "auto",
+          maxWidth:
+            "100%"
+        }}
+      >
+        {fallback}
+      </div>
+    ) : (
+      <span
+        className={
+          className
+        }
+        style={{
+          whiteSpace:
+            "pre-wrap"
+        }}
+      >
+        {fallback}
+      </span>
+    );
+  }
+
+  if (display) {
+    return (
+      <div
+        className={
+          className
+        }
+        style={{
+          overflowX:
+            "auto",
+          maxWidth:
+            "100%",
+          margin:
+            "8px 0"
+        }}
+        dangerouslySetInnerHTML={{
+          __html: html
+        }}
+      />
+    );
   }
 
   return (
     <span
-      key={key}
+      className={
+        className
+      }
       style={{
-        display: "inline-block",
-        verticalAlign: "middle",
-        maxWidth: "100%",
-        overflowX: "auto"
+        display:
+          "inline-block",
+        verticalAlign:
+          "middle",
+        maxWidth:
+          "100%"
       }}
-    >
-      <InlineMath
-        math={cleaned}
-        renderError={(error) => {
-          console.error(
-            "NAVTA KaTeX inline error:",
-            error,
-            cleaned
-          );
-
-          return (
-            <span>
-              {cleaned}
-            </span>
-          );
-        }}
-      />
-    </span>
+      dangerouslySetInnerHTML={{
+        __html: html
+      }}
+    />
   );
 }
 
-// =====================================================
-// BLOCK LATEX
-// =====================================================
-
-function renderNavtaBlockMath(
-  math,
-  key
+function wrapBareNavtaLatex(
+  input = ""
 ) {
-  const cleaned =
-    normaliseNavtaLatex(
-      math
-    )
-      .replace(
-        /^\$\$|\$\$$/g,
-        ""
-      )
-      .trim();
+  let value =
+    String(
+      input ?? ""
+    );
 
-  if (!cleaned) {
-    return null;
-  }
-
-  return (
-    <div
-      key={key}
-      style={{
-        overflowX: "auto",
-        maxWidth: "100%",
-        margin: "10px 0"
-      }}
-    >
-      <BlockMath
-        math={cleaned}
-        renderError={(error) => {
-          console.error(
-            "NAVTA KaTeX block error:",
-            error,
-            cleaned
-          );
-
-          return (
-            <div>
-              {cleaned}
-            </div>
-          );
-        }}
-      />
-    </div>
+  // If Gemini forgot $ around a full matrix/determinant,
+  // wrap only that environment.
+  value = value.replace(
+    /(?<!\$)(\\begin\{(?:matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix|cases|array|aligned|gathered)\}[\s\S]*?\\end\{(?:matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix|cases|array|aligned|gathered)\})(?!\$)/g,
+    (math) =>
+      `$${math}$`
   );
-}
 
-
-// =====================================================
-// UNIVERSAL NAVTA OPTION FORMAT + RENDERER
-// =====================================================
-function repairNavtaUniversalOption(input=""){
-  let v=String(input??"").replace(/\u00a0/g," ").trim();
-  if(!v)return "";
-  v=repairLegacyNavtaLatex(v)
-    .replace(/\b(sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|log|ln|exp|lim|max|min)\s*left\s*\(/gi,(_,f)=>`\\${f.toLowerCase()}\\left(`)
-    .replace(/\b(sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|log|ln|exp|lim|max|min)left\s*\(/gi,(_,f)=>`\\${f.toLowerCase()}\\left(`)
-    .replace(/(^|[^\\A-Za-z])left\s*\(/g,"$1\\left(").replace(/(^|[^\\A-Za-z])right\s*\)/g,"$1\\right)")
-    .replace(/\bfrac(?=\s*[\{\d(])/g,"\\frac").replace(/\bsqrt(?=\s*[\{\d(A-Za-z])/g,"\\sqrt");
-  v=v.replace(/(?:\\?frac)\s*([+-]?(?:\d+(?:\.\d+)?|[A-Za-z]))\s*√\s*\(\s*([^()]+?)\s*\)/g,"\\frac{$1}{\\sqrt{$2}}")
-     .replace(/√\s*\(([^()]+)\)/g,"\\sqrt{$1}").replace(/√\s*([A-Za-z0-9]+)/g,"\\sqrt{$1}");
-  for(let i=0;i<4;i++){const b=v;v=v.replace(/\(\(\s*([^()]+?)\s*\)\s*\/\s*\(\s*([^()]+?)\s*\)\)/g,"\\frac{$1}{$2}")
-    .replace(/\(\s*([^()]+?)\s*\)\s*\/\s*\(\s*([^()]+?)\s*\)/g,"\\frac{$1}{$2}");if(v===b)break;}
-  v=v.replace(/π/g,"\\pi").replace(/θ/g,"\\theta").replace(/α/g,"\\alpha").replace(/β/g,"\\beta")
-     .replace(/γ/g,"\\gamma").replace(/δ/g,"\\delta").replace(/λ/g,"\\lambda").replace(/μ/g,"\\mu")
-     .replace(/σ/g,"\\sigma").replace(/φ/g,"\\phi").replace(/ω/g,"\\omega").replace(/∞/g,"\\infty")
-     .replace(/≤/g,"\\le ").replace(/≥/g,"\\ge ").replace(/≠/g,"\\ne ").replace(/≈/g,"\\approx ")
-     .replace(/±/g,"\\pm ").replace(/∓/g,"\\mp ").replace(/×/g,"\\times ").replace(/÷/g,"\\div ");
-  return normaliseNavtaLatex(v);
+  return value;
 }
-function navtaOptionIsMath(raw="",v=""){
-  return /\\[A-Za-z]+/.test(v)||/[πθαγβδλμσφω∞≤≥≠≈±∓×÷√∑∏∫]/.test(raw)||
-    /(?:\^|_)(?:\{[^}]+\}|[A-Za-z0-9()+-]+)/.test(v)||/\\begin\{(?:matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix|array|cases|aligned)\}/.test(v)||
-    ((/=|=|<|>|\+|\-|\*|\//).test(v)&&/[A-Za-z0-9\\]/.test(v))||/\b(?:sin|cos|tan|cot|sec|csc|log|ln|exp)(?:left|\s*\()/i.test(raw);
-}
-function renderNavtaUniversalOption(input=""){
-  const raw=String(input??"").trim(); if(!raw)return null;
-  if(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]/.test(raw))return renderNavtaContent(raw);
-  const v=repairNavtaUniversalOption(raw);
-  if(navtaOptionIsMath(raw,v)){
-    const html=navtaKatexHtml(v,false);
-    if(html)return <span className="navta-option-math" style={{display:"inline-block",maxWidth:"100%",overflowX:"auto",verticalAlign:"middle",lineHeight:1.6}} dangerouslySetInnerHTML={{__html:html}} />;
-    return <span style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{humaniseNavtaLatex(v)}</span>;
-  }
-  return renderNavtaContent(raw);
-}
-
-// =====================================================
-// MAIN NAVTA CONTENT RENDERER
-// =====================================================
 
 function renderNavtaContent(
   input = ""
@@ -491,11 +769,6 @@ function renderNavtaContent(
     return null;
   }
 
-  // Convert standard TeX wrappers:
-  //
-  // \( ... \) -> $ ... $
-  // \[ ... \] -> $$ ... $$
-
   value = value
     .replace(
       /\\\[([\s\S]*?)\\\]/g,
@@ -508,32 +781,25 @@ function renderNavtaContent(
         `$${math}$`
     );
 
-  // Wrap bare matrix / determinant environments.
-  // This prevents raw \begin{...} from appearing
-  // even if Gemini forgot $ delimiters.
+  value =
+    wrapBareNavtaLatex(
+      value
+    );
 
-  value = value.replace(
-    /(?<!\$)(\\begin\{(?:matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|cases|array|aligned)\}[\s\S]*?\\end\{(?:matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|cases|array|aligned)\})(?!\$)/g,
-    (math) =>
-      `$${math}$`
-  );
-
-  // Split text and math.
   const parts =
     value.split(
       /(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g
     );
 
   return parts.map(
-    (part, index) => {
+    (
+      part,
+      index
+    ) => {
       if (!part) {
         return null;
       }
 
-      // =====================================
-      // BLOCK MATH
-      // =====================================
-
       if (
         part.startsWith(
           "$$"
@@ -542,18 +808,19 @@ function renderNavtaContent(
           "$$"
         )
       ) {
-        return renderNavtaBlockMath(
-          part.slice(
-            2,
-            -2
-          ),
-          `block-${index}`
+        return (
+          <NavtaMath
+            key={`block-${index}`}
+            math={
+              part.slice(
+                2,
+                -2
+              )
+            }
+            display
+          />
         );
       }
-
-      // =====================================
-      // INLINE MATH
-      // =====================================
 
       if (
         part.startsWith(
@@ -563,18 +830,36 @@ function renderNavtaContent(
           "$"
         )
       ) {
-        return renderNavtaInlineMath(
-          part.slice(
-            1,
-            -1
-          ),
-          `inline-${index}`
+        return (
+          <NavtaMath
+            key={`inline-${index}`}
+            math={
+              part.slice(
+                1,
+                -1
+              )
+            }
+          />
         );
       }
 
-      // =====================================
-      // NORMAL TEXT
-      // =====================================
+      // Plain prose should remain untouched. If raw LaTeX
+      // commands leak into prose, show a readable fallback.
+      if (
+        /\\(?:begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|sin|cos|tan|cot|sec|csc|alpha|beta|gamma|delta|theta|lambda|mu|nu|rho|sigma|tau|phi|psi|omega|cdot|times|div|vec|hat|bar|dot|partial|nabla|ce|pu)\b/.test(
+          part
+        )
+      ) {
+        return (
+          <React.Fragment
+            key={`text-${index}`}
+          >
+            {humaniseNavtaLatex(
+              part
+            )}
+          </React.Fragment>
+        );
+      }
 
       return (
         <React.Fragment
@@ -588,13 +873,18 @@ function renderNavtaContent(
 }
 
 
+const NAVTA_VISUAL_MARKER =
+  "[[NAVTA_VISUAL]]";
+
 function getNavtaQuestionImage(question) {
   const visualType = String(
     question?.visualType || "none"
   ).trim();
 
   const hasRealVisual =
-    Boolean(question?.hasVisual) &&
+    Boolean(
+      question?.hasVisual
+    ) &&
     visualType !== "none";
 
   if (!hasRealVisual) {
@@ -614,37 +904,183 @@ function getNavtaQuestionImage(question) {
             question?.visualDescription ||
             question?.questionNumber ||
             "NAVTA question visual"
-        ).trim() || "NAVTA question visual",
+        ).trim() ||
+        "NAVTA question visual",
       visualType,
     };
   }
 
-  const firstImage = Array.isArray(
-    question?.questionImages
-  )
-    ? question.questionImages.find(
-        (image) =>
-          image &&
-          typeof image === "object" &&
-          String(image.url || "").trim()
-      )
-    : null;
+  const firstImage =
+    Array.isArray(
+      question?.questionImages
+    )
+      ? question.questionImages.find(
+          (image) =>
+            image &&
+            typeof image === "object" &&
+            String(
+              image.url || ""
+            ).trim()
+        )
+      : null;
 
   if (firstImage) {
     return {
-      url: String(firstImage.url || "").trim(),
+      url: String(
+        firstImage.url || ""
+      ).trim(),
+
       altText:
         String(
           firstImage.altText ||
             question?.visualDescription ||
             question?.questionNumber ||
             "NAVTA question visual"
-        ).trim() || "NAVTA question visual",
+        ).trim() ||
+        "NAVTA question visual",
+
       visualType,
     };
   }
 
   return null;
+}
+
+function NavtaVisual({
+  question,
+  className = "",
+  shellClassName = "",
+}) {
+  const image =
+    getNavtaQuestionImage(
+      question
+    );
+
+  if (!image?.url) {
+    return null;
+  }
+
+  return (
+    <div
+      className={
+        shellClassName
+      }
+      style={{
+        width: "100%",
+        display: "flex",
+        justifyContent: "center",
+        margin: "12px 0 16px",
+      }}
+    >
+      <img
+        src={image.url}
+        alt={image.altText}
+        className={className}
+        loading="eager"
+        decoding="async"
+        style={{
+          display: "block",
+          maxWidth: "100%",
+          width: "auto",
+          height: "auto",
+          maxHeight: "420px",
+          objectFit: "contain",
+        }}
+        onError={(event) => {
+          event.currentTarget.style.display =
+            "none";
+        }}
+      />
+    </div>
+  );
+}
+
+function NavtaQuestionContent({
+  question,
+  visualClassName = "",
+  visualShellClassName = "",
+}) {
+  const text =
+    String(
+      question?.question || ""
+    );
+
+  const image =
+    getNavtaQuestionImage(
+      question
+    );
+
+  if (!image?.url) {
+    return (
+      <>
+        {renderNavtaContent(
+          text
+            .split(
+              NAVTA_VISUAL_MARKER
+            )
+            .join("")
+            .trim()
+        )}
+      </>
+    );
+  }
+
+  if (
+    !text.includes(
+      NAVTA_VISUAL_MARKER
+    )
+  ) {
+    return (
+      <>
+        {renderNavtaContent(
+          text
+        )}
+
+        <NavtaVisual
+          question={question}
+          className={
+            visualClassName
+          }
+          shellClassName={
+            visualShellClassName
+          }
+        />
+      </>
+    );
+  }
+
+  const [
+    beforeVisual,
+    ...afterParts
+  ] =
+    text.split(
+      NAVTA_VISUAL_MARKER
+    );
+
+  const afterVisual =
+    afterParts.join("");
+
+  return (
+    <>
+      {renderNavtaContent(
+        beforeVisual
+      )}
+
+      <NavtaVisual
+        question={question}
+        className={
+          visualClassName
+        }
+        shellClassName={
+          visualShellClassName
+        }
+      />
+
+      {renderNavtaContent(
+        afterVisual
+      )}
+    </>
+  );
 }
 
 
@@ -653,32 +1089,18 @@ function shouldUseNavtaQuestionScreenshot(question) {
 }
 
 function NavtaQuestionBody({ question }) {
-  const image =
-    getNavtaQuestionImage(question);
-
   return (
-    <div className="navta-question-content">
+    <div className="navta-question-body">
       <h2 className="navta-question">
-        {renderNavtaContent(
-          question?.question || ""
-        )}
+        <NavtaQuestionContent
+          question={question}
+          visualClassName="navta-question-image"
+          visualShellClassName="navta-question-image-shell"
+        />
       </h2>
-
-      {image?.url ? (
-        <div className="navta-question-image-shell">
-          <img
-            src={image.url}
-            alt={image.altText}
-            className="navta-question-image"
-            loading="eager"
-            decoding="async"
-          />
-        </div>
-      ) : null}
     </div>
   );
 }
-
 
 export default function NavtaTestPage() {
   const {
@@ -4312,7 +4734,7 @@ export default function NavtaTestPage() {
               {shouldUseNavtaQuestionScreenshot(
                 currentTestQuestion
               )
-                ? " • Original Question Image"
+                ? " • Includes Visual"
                 : ""}
             </div>
 
@@ -4377,14 +4799,12 @@ export default function NavtaTestPage() {
                             <span style={styles.optionLetter}>
                               {String.fromCharCode(65 + index)}
                             </span>
-
-                            {!shouldUseNavtaQuestionScreenshot(
-                              currentTestQuestion
-                            ) && (
-                              <span className="navta-option-content">
-                                {renderNavtaUniversalOption(option)}
-                              </span>
-                            )}
+                            <span className="navta-option-content">
+                              {renderNavtaContent(
+                                option ||
+                                  ""
+                              )}
+                            </span>
                           </button>
                         );
                       }
@@ -4416,19 +4836,18 @@ export default function NavtaTestPage() {
                             answerFeedback[currentQuestion]
                               .correctAnswer
                         )}
-                        {!shouldUseNavtaQuestionScreenshot(
-                          currentTestQuestion
-                        ) && (
-                          <>
-                            .{" "}
-                            {renderNavtaUniversalOption(
-                              currentTestQuestion.options[
-                                answerFeedback[currentQuestion]
+                        <>
+                          .{" "}
+                          {renderNavtaContent(
+                            currentTestQuestion
+                              .options[
+                                answerFeedback[
+                                  currentQuestion
+                                ]
                                   .correctAnswer
-                              ]
-                            )}
-                          </>
-                        )}
+                              ] || ""
+                          )}
+                        </>
                       </div>
 
                       <div
