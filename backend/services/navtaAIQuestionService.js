@@ -782,57 +782,6 @@ const stripJsonFences = (
     .trim();
 };
 
-const sanitizeInvalidJsonBackslashes = (input = "") => {
-  const text = String(input ?? "");
-  let result = "";
-  let inString = false;
-  let escaped = false;
-
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-
-    if (!inString) {
-      result += char;
-      if (char === '"') {
-        inString = true;
-      }
-      continue;
-    }
-
-    if (escaped) {
-      result += char;
-      escaped = false;
-      continue;
-    }
-
-    if (char === '"') {
-      result += char;
-      inString = false;
-      continue;
-    }
-
-    if (char !== "\\") {
-      result += char;
-      continue;
-    }
-
-    const next = text[index + 1] || "";
-
-    // JSON only permits these escape starters. A backslash before any other
-    // character is almost certainly an under-escaped LaTeX command from the
-    // model (for example \alpha, \left, \q). Preserve it as a literal slash.
-    if (!/["\\/bfnrtu]/.test(next)) {
-      result += "\\\\";
-      continue;
-    }
-
-    result += char;
-    escaped = true;
-  }
-
-  return result;
-};
-
 const parseJsonObject = (
   raw
 ) => {
@@ -842,57 +791,74 @@ const parseJsonObject = (
     );
 
   if (!text) {
-    const error = new Error(
+    throw new Error(
       "NAVTA AI returned an empty JSON response."
     );
-    error.code = "NAVTA_EMPTY_JSON";
-    throw error;
   }
 
-  const candidates = [];
-  const addCandidate = (value) => {
-    const candidate = String(value ?? "").trim();
-    if (candidate && !candidates.includes(candidate)) {
-      candidates.push(candidate);
-    }
-  };
-
-  addCandidate(text);
-  addCandidate(sanitizeInvalidJsonBackslashes(text));
-
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-
-  if (start !== -1 && end > start) {
-    const sliced = text
-      .slice(start, end + 1)
-      .replace(/,\s*([}\]])/g, "$1");
-
-    addCandidate(sliced);
-    addCandidate(sanitizeInvalidJsonBackslashes(sliced));
+  try {
+    return repairNavtaJsonLatexDeep(
+      JSON.parse(
+        text
+      )
+    );
+  } catch {
+    // Continue to recovery.
   }
 
-  for (const candidate of candidates) {
+  const start =
+    text.indexOf("{");
+
+  const end =
+    text.lastIndexOf("}");
+
+  if (
+    start !== -1 &&
+    end > start
+  ) {
+    const sliced =
+      text
+        .slice(
+          start,
+          end + 1
+        )
+        .replace(
+          /,\s*([}\]])/g,
+          "$1"
+        );
+
     try {
       return repairNavtaJsonLatexDeep(
-        JSON.parse(candidate)
+        JSON.parse(
+          sliced
+        )
       );
     } catch {
-      // Try the next conservative recovery candidate.
+      // Continue to debug output.
     }
   }
 
-  console.error("NAVTA AI INVALID JSON");
-  console.error(`Response length: ${text.length}`);
-  console.error("Response ending:");
-  console.error(text.slice(-1200));
+  console.error(
+    "NAVTA AI INVALID JSON"
+  );
 
-  const error = new Error(
+  console.error(
+    `Response length: ${text.length}`
+  );
+
+  console.error(
+    "Response ending:"
+  );
+
+  console.error(
+    text.slice(
+      -1200
+    )
+  );
+
+  throw new Error(
     "NAVTA AI response was incomplete or invalid. Please retry the import."
   );
-  error.code = "NAVTA_INVALID_JSON";
-  error.responseLength = text.length;
-  throw error;
 };
 
 const extractGeminiText = (
@@ -937,38 +903,40 @@ const extractRetryAfterSeconds = (
   response,
   message = ""
 ) => {
-  const rawHeader = response?.headers?.get?.("retry-after");
-  const headerValue = Number(rawHeader);
+  const headerValue =
+    Number(
+      response?.headers?.get?.(
+        "retry-after"
+      )
+    );
 
-  if (rawHeader && Number.isFinite(headerValue) && headerValue > 0) {
-    return Math.ceil(headerValue);
+  if (
+    Number.isFinite(
+      headerValue
+    ) &&
+    headerValue > 0
+  ) {
+    return Math.ceil(
+      headerValue
+    );
   }
 
-  const match = String(message).match(/retry\s+in\s+([\d.]+)s/i);
+  const match =
+    String(
+      message
+    ).match(
+      /retry\s+in\s+([\d.]+)s/i
+    );
 
   if (match) {
-    const seconds = Number(match[1]);
-    return Number.isFinite(seconds) && seconds > 0
-      ? Math.ceil(seconds)
-      : null;
+    return Math.ceil(
+      Number(
+        match[1]
+      ) || 60
+    );
   }
 
-  return null;
-};
-
-const sleep = (milliseconds) =>
-  new Promise((resolve) => setTimeout(resolve, milliseconds));
-
-const isRetryableGeminiStatus = (status) =>
-  [429, 500, 502, 503, 504].includes(Number(status));
-
-const getGeminiRetryDelayMs = ({ attempt, retryAfter }) => {
-  if (Number.isFinite(Number(retryAfter)) && Number(retryAfter) > 0) {
-    return Math.min(Number(retryAfter) * 1000, 60000);
-  }
-
-  const delays = [2000, 5000, 10000, 20000];
-  return delays[Math.min(Math.max(attempt - 1, 0), delays.length - 1)];
+  return 60;
 };
 
 // =====================================================
@@ -987,115 +955,154 @@ const callGemini = async ({
 
   const endpoint =
     `${GEMINI_API_BASE}/models/` +
-    `${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=` +
-    `${encodeURIComponent(GEMINI_API_KEY)}`;
+    `${encodeURIComponent(
+      GEMINI_MODEL
+    )}:generateContent?key=` +
+    `${encodeURIComponent(
+      GEMINI_API_KEY
+    )}`;
 
-  const maxAttempts = 5;
-  let lastError = null;
+  const controller =
+    new AbortController();
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), NAVTA_AI_TIMEOUT_MS);
+  const timeout =
+    setTimeout(
+      () => {
+        controller.abort();
+      },
+      NAVTA_AI_TIMEOUT_MS
+    );
 
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts,
-            },
-          ],
-          generationConfig: {
-            temperature: 0.05,
-            responseMimeType: "application/json",
-            maxOutputTokens,
+  try {
+    const response =
+      await fetch(
+        endpoint,
+        {
+          method:
+            "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Accept:
+              "application/json",
           },
-        }),
-      });
 
-      const responseText = await response.text();
-      let data = {};
+          signal:
+            controller.signal,
 
-      try {
-        data = responseText ? JSON.parse(responseText) : {};
-      } catch {
-        const error = new Error("Gemini returned an invalid HTTP response.");
-        error.statusCode = response.status || 502;
-        throw error;
-      }
+          body:
+            JSON.stringify({
+              contents: [
+                {
+                  role:
+                    "user",
 
-      if (!response.ok) {
-        const message =
-          cleanString(data?.error?.message) ||
-          `Gemini returned HTTP ${response.status}.`;
+                  parts,
+                },
+              ],
 
-        const error = new Error(message);
-        error.statusCode = response.status;
-        error.retryAfter = extractRetryAfterSeconds(response, message);
-        throw error;
-      }
+              generationConfig: {
+                temperature:
+                  0.05,
 
-      const modelText = extractGeminiText(data);
+                responseMimeType:
+                  "application/json",
 
-      if (!modelText) {
-        const finishReason = cleanString(data?.candidates?.[0]?.finishReason);
-        const error = new Error(
-          finishReason
-            ? `Gemini returned an empty response (${finishReason}).`
-            : "Gemini returned an empty response."
-        );
-        error.statusCode = 502;
-        throw error;
-      }
-
-      return modelText;
-    } catch (error) {
-      let normalizedError = error;
-
-      if (error?.name === "AbortError") {
-        normalizedError = new Error("Gemini request timed out.");
-        normalizedError.statusCode = 504;
-      } else if (!error?.statusCode && error instanceof TypeError) {
-        normalizedError = new Error(
-          `Gemini network request failed: ${error?.message || "temporary network error"}`
-        );
-        normalizedError.statusCode = 503;
-      }
-
-      lastError = normalizedError;
-
-      const retryable = isRetryableGeminiStatus(normalizedError?.statusCode);
-
-      if (!retryable || attempt >= maxAttempts) {
-        throw normalizedError;
-      }
-
-      const delayMs = getGeminiRetryDelayMs({
-        attempt,
-        retryAfter: normalizedError?.retryAfter,
-      });
-
-      console.warn(
-        `NAVTA Gemini temporary failure on attempt ${attempt}/${maxAttempts} ` +
-        `(HTTP ${normalizedError?.statusCode || "network"}). ` +
-        `Retrying in ${Math.round(delayMs / 1000)}s. ` +
-        `${normalizedError?.message || ""}`
+                maxOutputTokens,
+              },
+            }),
+        }
       );
 
-      await sleep(delayMs);
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
+    const responseText =
+      await response.text();
 
-  throw lastError || new Error("Gemini request failed.");
+    let data = {};
+
+    try {
+      data =
+        responseText
+          ? JSON.parse(
+              responseText
+            )
+          : {};
+    } catch {
+      throw new Error(
+        "Gemini returned an invalid HTTP response."
+      );
+    }
+
+    if (!response.ok) {
+      const message =
+        cleanString(
+          data?.error?.message
+        ) ||
+        `Gemini returned HTTP ${response.status}.`;
+
+      if (
+        response.status === 429
+      ) {
+        const retryAfter =
+          extractRetryAfterSeconds(
+            response,
+            message
+          );
+
+        const error =
+          new Error(
+            `Gemini quota/rate limit reached. Please wait about ${retryAfter} seconds and try again.`
+          );
+
+        error.statusCode =
+          429;
+
+        error.retryAfter =
+          retryAfter;
+
+        throw error;
+      }
+
+      throw new Error(
+        message
+      );
+    }
+
+    const modelText =
+      extractGeminiText(
+        data
+      );
+
+    if (!modelText) {
+      throw new Error(
+        "Gemini returned an empty response."
+      );
+    }
+
+    return modelText;
+  } catch (error) {
+    if (
+      error?.name ===
+      "AbortError"
+    ) {
+      const timeoutError =
+        new Error(
+          "Gemini request timed out."
+        );
+
+      timeoutError.statusCode =
+        504;
+
+      throw timeoutError;
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(
+      timeout
+    );
+  }
 };
 
 // =====================================================
@@ -1233,6 +1240,16 @@ correctAnswer = null
 needsReview = true
 
 =======================================================
+FORMAT-SAFETY REQUIREMENTS — MANDATORY:
+- Never output flattened commands like frac2√(5), cosleft(...), sinleft(...), sqrt5 or beginmatrix.
+- Use correctly JSON-escaped valid LaTeX for fractions, roots, trig, calculus, vectors, matrices and determinants.
+- Re-check all four MCQ options for lost backslashes, braces, roots, scripts and delimiters.
+- Physics: preserve vectors, Greek symbols, units, scientific notation, subscripts and superscripts.
+- Chemistry: preserve formula subscripts, ionic charges, equations, arrows and states. Keep spatial organic structures/mechanisms as visuals.
+- Maths: preserve fractions, roots, powers, logs, trig, calculus, vectors, matrices, determinants, sets and cases.
+- Biology: preserve gene/protein/allele/chromosome notation and genuine labelled diagrams.
+- Never invent missing spatial scientific content; keep genuine graphs/circuits/geometry/apparatus/biology diagrams as visuals.
+
 UNIVERSAL MATH / SCIENCE RENDERING RULES
 =======================================================
 
@@ -1665,6 +1682,34 @@ const hasMatchColumnData = (value) =>
       value.right.length > 0
   );
 
+
+// =====================================================
+// UNIVERSAL NAVTA SCIENCE FORMAT REPAIR
+// =====================================================
+const repairNavtaScienceContent = (input = "") => {
+  let v = String(input ?? "").trim();
+  if (!v) return "";
+  v=v.replace(/\x0D(?=ight\b)/g,"\\right").replace(/\x0C(?=rac\b)/g,"\\frac")
+     .replace(/\x08(?=egin\b)/g,"\\begin").replace(/\x09(?=heta\b)/g,"\\theta")
+     .replace(/\x09(?=imes\b)/g,"\\times").replace(/\x0A(?=abla\b)/g,"\\nabla")
+     .replace(/\x0A(?=eq\b)/g,"\\neq").replace(/\x0A(?=u\b)/g,"\\nu")
+     .replace(/\b(sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|log|ln|exp|lim|max|min)\s*left\s*\(/gi,(_,f)=>`\\${f.toLowerCase()}\\left(`)
+     .replace(/\b(sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|log|ln|exp|lim|max|min)left\s*\(/gi,(_,f)=>`\\${f.toLowerCase()}\\left(`)
+     .replace(/(^|[^\\A-Za-z])left\s*\(/g,"$1\\left(").replace(/(^|[^\\A-Za-z])right\s*\)/g,"$1\\right)")
+     .replace(/\bfrac(?=\s*[\{\d(])/g,"\\frac").replace(/\bsqrt(?=\s*[\{\d(A-Za-z])/g,"\\sqrt");
+  v=v.replace(/(?:\\?frac)\s*([+-]?(?:\d+(?:\.\d+)?|[A-Za-z]))\s*√\s*\(\s*([^()]+?)\s*\)/g,"\\frac{$1}{\\sqrt{$2}}")
+     .replace(/√\s*\(([^()]+)\)/g,"\\sqrt{$1}").replace(/√\s*([A-Za-z0-9]+)/g,"\\sqrt{$1}");
+  for(let i=0;i<4;i++){const b=v;v=v.replace(/\(\(\s*([^()]+?)\s*\)\s*\/\s*\(\s*([^()]+?)\s*\)\)/g,"\\frac{$1}{$2}")
+    .replace(/\(\s*([^()]+?)\s*\)\s*\/\s*\(\s*([^()]+?)\s*\)/g,"\\frac{$1}{$2}");if(v===b)break;}
+  v=v.replace(/π/g,"\\pi").replace(/θ/g,"\\theta").replace(/α/g,"\\alpha").replace(/β/g,"\\beta")
+     .replace(/γ/g,"\\gamma").replace(/δ/g,"\\delta").replace(/λ/g,"\\lambda").replace(/μ/g,"\\mu")
+     .replace(/σ/g,"\\sigma").replace(/φ/g,"\\phi").replace(/ω/g,"\\omega").replace(/∞/g,"\\infty")
+     .replace(/≤/g,"\\le ").replace(/≥/g,"\\ge ").replace(/≠/g,"\\ne ").replace(/≈/g,"\\approx ")
+     .replace(/±/g,"\\pm ").replace(/∓/g,"\\mp ");
+  return v.trim();
+};
+const formatNavtaScienceContent=(input="")=>formatNavtaQuestionContent(repairNavtaScienceContent(input));
+
 // =====================================================
 // NORMALIZE DETECTED QUESTION
 // =====================================================
@@ -1681,7 +1726,7 @@ const normalizeDetectedQuestion = ({
     )
       .map(
         (option) =>
-          formatNavtaQuestionContent(
+          formatNavtaScienceContent(
             option
           )
       )
@@ -1811,7 +1856,7 @@ const normalizeDetectedQuestion = ({
   }
 
   let question =
-    formatNavtaQuestionContent(
+    formatNavtaScienceContent(
       item.question
     );
 
@@ -3276,85 +3321,30 @@ const analyseRenderedPages =
           lastError =
             error;
 
-          const isJsonRecoveryError =
-            error?.code === "NAVTA_INVALID_JSON" ||
-            error?.code === "NAVTA_EMPTY_JSON";
-
-          // HTTP/capacity/network retries already happen inside callGemini().
-          // Do not repeat the entire page batch after those retries are exhausted.
-          if (!isJsonRecoveryError) {
+          if (
+            attempt >=
+            attempts
+          ) {
             throw error;
           }
 
-          if (attempt < attempts) {
-            console.warn(
-              `NAVTA AI batch ${pageNumbers} returned invalid/incomplete JSON on attempt ${attempt}; retrying the same batch.`
-            );
+          if (
+            error?.statusCode ===
+              429
+          ) {
+            throw error;
           }
+
+          console.warn(
+            `NAVTA AI batch ${pageNumbers} failed on attempt ${attempt}; retrying. ${error?.message || ""}`
+          );
         }
       }
 
-      if (lastError) {
-        const canSplitBatch =
-          batch.length > 1 &&
-          (
-            lastError?.code === "NAVTA_INVALID_JSON" ||
-            lastError?.code === "NAVTA_EMPTY_JSON"
-          );
-
-        if (!canSplitBatch) {
-          throw lastError;
-        }
-
-        console.warn(
-          `NAVTA AI batch ${pageNumbers} still returned invalid JSON; falling back to one-page extraction.`
-        );
-
-        batchQuestions = [];
-
-        for (const singlePage of batch) {
-          const singlePageNumber = singlePage.pageNumber;
-          let singlePageQuestions = [];
-          let singlePageError = null;
-
-          for (let singleAttempt = 1; singleAttempt <= attempts; singleAttempt += 1) {
-            try {
-              singlePageQuestions = await analyseRenderedPageBatch({
-                pages: [singlePage],
-                text,
-                hints,
-              });
-
-              singlePageError = null;
-
-              if (singlePageQuestions.length > 0 || singleAttempt >= attempts) {
-                break;
-              }
-            } catch (error) {
-              singlePageError = error;
-
-              const isJsonRecoveryError =
-                error?.code === "NAVTA_INVALID_JSON" ||
-                error?.code === "NAVTA_EMPTY_JSON";
-
-              if (!isJsonRecoveryError || singleAttempt >= attempts) {
-                throw error;
-              }
-
-              console.warn(
-                `NAVTA AI page ${singlePageNumber} returned invalid/incomplete JSON; retrying page alone.`
-              );
-            }
-          }
-
-          if (singlePageError) {
-            throw singlePageError;
-          }
-
-          batchQuestions.push(...singlePageQuestions);
-        }
-
-        lastError = null;
+      if (
+        lastError
+      ) {
+        throw lastError;
       }
 
       allQuestions.push(
