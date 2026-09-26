@@ -17,25 +17,25 @@ import "katex/contrib/mhchem";
 // NAVTA CLASSIFICATION DATA
 // =====================================================
 
-const SUBJECT_EXAMS = {
+export const SUBJECT_EXAMS = {
   Physics: ["NEET", "JEE", "Boards"],
   Chemistry: ["NEET", "JEE", "Boards"],
   Maths: ["JEE", "Boards"],
   Biology: ["NEET", "Boards"],
 };
 
-const DIFFICULTIES = [
+export const DIFFICULTIES = [
   "Easy",
   "Medium",
   "Hard",
 ];
 
-const CLASSES = [
+export const CLASSES = [
   "Class 11",
   "Class 12",
 ];
 
-const CHAPTERS = {
+export const CHAPTERS = {
   Physics: {
     "Class 11": [
       "Units and Measurements",
