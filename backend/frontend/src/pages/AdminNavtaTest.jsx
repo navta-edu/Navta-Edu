@@ -2284,20 +2284,10 @@ export default function AdminNavtaTest() {
       }
 
       setImportLoading(true);
-
       setImportMessage("");
-
-      setImportMessageType(
-        ""
-      );
-
-      setAcceptedQuestions(
-        []
-      );
-
-      setDroppedQuestions(
-        []
-      );
+      setImportMessageType("");
+      setAcceptedQuestions([]);
+      setDroppedQuestions([]);
 
       setImportSummary({
         detected: 0,
@@ -2305,85 +2295,14 @@ export default function AdminNavtaTest() {
         dropped: 0,
       });
 
-      try {
-        const formData =
-          new FormData();
-
-        formData.append(
-          "file",
-          importFile
+      const wait = (milliseconds) =>
+        new Promise((resolve) =>
+          setTimeout(resolve, milliseconds)
         );
 
-        if (
-          importHints.subject
-        ) {
-          formData.append(
-            "subject",
-            importHints.subject
-          );
-        }
-
-        if (
-          importHints.exam
-        ) {
-          formData.append(
-            "exam",
-            importHints.exam
-          );
-        }
-
-        if (
-          importHints.classLevel
-        ) {
-          formData.append(
-            "classLevel",
-            importHints.classLevel
-          );
-        }
-
-        if (
-          importHints.chapter
-        ) {
-          formData.append(
-            "chapter",
-            importHints.chapter
-          );
-        }
-
-        const response =
-          await fetch(
-            "/api/navta-test/import",
-            {
-              method:
-                "POST",
-
-              credentials:
-                "include",
-
-              headers:
-                buildAdminHeaders(),
-
-              body:
-                formData,
-            }
-          );
-
-        let data = {};
-
-        try {
-          data =
-            await response.json();
-        } catch {
-          data = {};
-        }
-
-        if (!response.ok) {
-          throw new Error(
-            data.message ||
-              "AI analysis failed."
-          );
-        }
-
+      const applyImportResult = (
+        data = {}
+      ) => {
         const acceptedRaw =
           Array.isArray(
             data.acceptedQuestions
@@ -2391,8 +2310,6 @@ export default function AdminNavtaTest() {
             ? data.acceptedQuestions
             : [];
 
-        // Apply NAVTA hard hints and chapter whitelist rules
-        // before the admin sees the review screen.
         const accepted =
           acceptedRaw.map(
             normaliseAcceptedImportQuestion
@@ -2410,7 +2327,9 @@ export default function AdminNavtaTest() {
                       question.question
                     ),
                   options:
-                    Array.isArray(question.options)
+                    Array.isArray(
+                      question.options
+                    )
                       ? question.options.map(
                           (option) =>
                             formatNavtaSimpleScripts(
@@ -2465,6 +2384,262 @@ export default function AdminNavtaTest() {
 
         setImportMessageType(
           "success"
+        );
+      };
+
+      try {
+        const formData =
+          new FormData();
+
+        formData.append(
+          "file",
+          importFile
+        );
+
+        if (
+          importHints.subject
+        ) {
+          formData.append(
+            "subject",
+            importHints.subject
+          );
+        }
+
+        if (
+          importHints.exam
+        ) {
+          formData.append(
+            "exam",
+            importHints.exam
+          );
+        }
+
+        if (
+          importHints.classLevel
+        ) {
+          formData.append(
+            "classLevel",
+            importHints.classLevel
+          );
+        }
+
+        if (
+          importHints.chapter
+        ) {
+          formData.append(
+            "chapter",
+            importHints.chapter
+          );
+        }
+
+        const response =
+          await fetch(
+            "/api/navta-test/import",
+            {
+              method: "POST",
+              credentials:
+                "include",
+              headers:
+                buildAdminHeaders(),
+              body: formData,
+            }
+          );
+
+        let data = {};
+
+        try {
+          data =
+            await response.json();
+        } catch {
+          data = {};
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              data.error ||
+              "AI analysis failed."
+          );
+        }
+
+        // Backward compatibility:
+        // older/synchronous backend can still return questions immediately.
+        if (
+          Array.isArray(
+            data.acceptedQuestions
+          ) ||
+          Array.isArray(
+            data.droppedQuestions
+          )
+        ) {
+          applyImportResult(
+            data
+          );
+          return;
+        }
+
+        const jobId =
+          String(
+            data.jobId || ""
+          ).trim();
+
+        if (!jobId) {
+          throw new Error(
+            "NAVTA AI started but no import job ID was returned."
+          );
+        }
+
+        setImportMessage(
+          data.message ||
+            "NAVTA AI analysis started. Processing your file..."
+        );
+
+        setImportMessageType(
+          "success"
+        );
+
+        // Poll every 2 seconds for up to ~15 minutes.
+        const maxPolls = 450;
+
+        for (
+          let pollIndex = 0;
+          pollIndex < maxPolls;
+          pollIndex += 1
+        ) {
+          await wait(2000);
+
+          const jobResponse =
+            await fetch(
+              `/api/navta-test/import/jobs/${encodeURIComponent(
+                jobId
+              )}`,
+              {
+                method: "GET",
+                credentials:
+                  "include",
+                headers:
+                  buildAdminHeaders(),
+              }
+            );
+
+          let jobData = {};
+
+          try {
+            jobData =
+              await jobResponse.json();
+          } catch {
+            jobData = {};
+          }
+
+          if (
+            !jobResponse.ok
+          ) {
+            throw new Error(
+              jobData.message ||
+                jobData.error ||
+                `Unable to check NAVTA AI job (${jobResponse.status}).`
+            );
+          }
+
+          const status =
+            String(
+              jobData.status || ""
+            )
+              .trim()
+              .toLowerCase();
+
+          if (
+            status ===
+            "completed"
+          ) {
+            // Support both:
+            // { status, acceptedQuestions, ... }
+            // and { status, result: { acceptedQuestions, ... } }
+            const finalData =
+              jobData.result &&
+              typeof jobData.result ===
+                "object"
+                ? {
+                    ...jobData.result,
+                    message:
+                      jobData.message ||
+                      jobData.result
+                        .message ||
+                      "AI analysis completed.",
+                  }
+                : jobData;
+
+            applyImportResult(
+              finalData
+            );
+
+            return;
+          }
+
+          if (
+            status === "failed"
+          ) {
+            throw new Error(
+              jobData.error ||
+                jobData.message ||
+                "NAVTA AI analysis failed."
+            );
+          }
+
+          if (
+            status ===
+              "queued" ||
+            status ===
+              "processing"
+          ) {
+            const progress =
+              Number(
+                jobData.progress
+              );
+
+            setImportMessage(
+              Number.isFinite(
+                progress
+              ) &&
+                progress > 0
+                ? `NAVTA AI is analysing your file... ${Math.min(
+                    100,
+                    Math.max(
+                      0,
+                      Math.round(
+                        progress
+                      )
+                    )
+                  )}%`
+                : "NAVTA AI is analysing your file. Please keep this page open..."
+            );
+
+            setImportMessageType(
+              "success"
+            );
+
+            continue;
+          }
+
+          // A completed payload may occasionally arrive without a status.
+          if (
+            Array.isArray(
+              jobData.acceptedQuestions
+            ) ||
+            Array.isArray(
+              jobData.droppedQuestions
+            )
+          ) {
+            applyImportResult(
+              jobData
+            );
+
+            return;
+          }
+        }
+
+        throw new Error(
+          "NAVTA AI analysis is taking too long. Please retry the import."
         );
       } catch (error) {
         console.error(
