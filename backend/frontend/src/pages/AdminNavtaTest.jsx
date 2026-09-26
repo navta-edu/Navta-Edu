@@ -315,6 +315,15 @@ function normaliseNavtaArrowSymbols(input = "") {
     value = value.replace(pattern, symbol);
   });
 
+  // Collapse duplicate directional arrows introduced when AI/PDF extraction
+  // supplies both a LaTeX arrow command and an already-rendered arrow.
+  // Keep equilibrium/reversible arrows (⇌, ⇋, ↔, ⇔) unchanged.
+  value = value
+    .replace(/→(?:\s*→)+/g, "→")
+    .replace(/←(?:\s*←)+/g, "←")
+    .replace(/⇒(?:\s*⇒)+/g, "⇒")
+    .replace(/⇐(?:\s*⇐)+/g, "⇐");
+
   return value;
 }
 
