@@ -583,6 +583,164 @@ function normaliseNavtaLatex(input = "") {
   return value.trim();
 }
 
+
+// =====================================================
+// NAVTA PHYSICS-SPECIFIC LATEX REPAIR
+// =====================================================
+//
+// Additive only: the existing universal renderer above is left unchanged.
+// This repairs common Physics AI/PDF notation damage before review/import,
+// especially vectors, unit vectors, magnitudes, dot/cross products and
+// escaped LaTeX. It runs ONLY when the classified subject is Physics.
+// =====================================================
+
+function normaliseNavtaPhysicsLatex(
+  input = "",
+  subject = ""
+) {
+  let value = String(input ?? "");
+
+  if (
+    String(subject || "")
+      .trim()
+      .toLowerCase() !== "physics"
+  ) {
+    return value;
+  }
+
+  if (!value) {
+    return "";
+  }
+
+  const repairPhysicsMath = (segment = "") => {
+    let math = String(segment ?? "");
+
+    // Unicode combining-vector notation: P⃗, v⃗, A⃗ -> \vec{P}, etc.
+    math = math.replace(
+      /([A-Za-z])\u20D7/g,
+      (_, symbol) => `\\vec{${symbol}}`
+    );
+
+    // Common Gemini/OCR vector forms.
+    math = math
+      .replace(
+        /\\vec\s*\(\s*([A-Za-z])\s*\)/g,
+        "\\vec{$1}"
+      )
+      .replace(
+        /\\vec\s+([A-Za-z])\b/g,
+        "\\vec{$1}"
+      )
+      .replace(
+        /(?<!\\)\bvec\s*\{\s*([A-Za-z])\s*\}/g,
+        "\\vec{$1}"
+      )
+      .replace(
+        /(?<!\\)\bvec\s*\(\s*([A-Za-z])\s*\)/g,
+        "\\vec{$1}"
+      );
+
+    // Unit-vector repairs: \hat(i), \hat i, hat{i} -> \hat{i}.
+    math = math
+      .replace(
+        /\\hat\s*\(\s*([ijkxyz])\s*\)/gi,
+        "\\hat{$1}"
+      )
+      .replace(
+        /\\hat\s+([ijkxyz])\b/gi,
+        "\\hat{$1}"
+      )
+      .replace(
+        /(?<!\\)\bhat\s*\{\s*([ijkxyz])\s*\}/gi,
+        "\\hat{$1}"
+      )
+      .replace(
+        /(?<!\\)\bhat\s*\(\s*([ijkxyz])\s*\)/gi,
+        "\\hat{$1}"
+      );
+
+    // Long-vector OCR variants.
+    math = math
+      .replace(
+        /\\overrightarrow\s*\(\s*([A-Za-z]+)\s*\)/g,
+        "\\overrightarrow{$1}"
+      )
+      .replace(
+        /\\overleftarrow\s*\(\s*([A-Za-z]+)\s*\)/g,
+        "\\overleftarrow{$1}"
+      );
+
+    // Physics operation aliases frequently returned as words.
+    math = math
+      .replace(
+        /\\dotproduct\b/gi,
+        "\\cdot"
+      )
+      .replace(
+        /\\crossproduct\b/gi,
+        "\\times"
+      );
+
+    // Repair magnitude bars when AI writes | \vec{P} |.
+    math = math.replace(
+      /\|\s*(\\(?:vec|overrightarrow)\{[^{}]+\})\s*\|/g,
+      "\\lvert $1 \\rvert"
+    );
+
+    // Make common derivative notation valid when braces are omitted.
+    math = math
+      .replace(
+        /\\frac\s+d([A-Za-z])\s+d([A-Za-z])/g,
+        "\\frac{d$1}{d$2}"
+      )
+      .replace(
+        /\\frac\s+\\partial\s*([A-Za-z])\s+\\partial\s*([A-Za-z])/g,
+        "\\frac{\\partial $1}{\\partial $2}"
+      );
+
+    return math;
+  };
+
+  // Repair only mathematical regions when delimiters already exist.
+  value = value
+    .split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g)
+    .map((part) => {
+      if (
+        part.startsWith("$$") &&
+        part.endsWith("$$")
+      ) {
+        return `$$${repairPhysicsMath(
+          part.slice(2, -2)
+        )}$$`;
+      }
+
+      if (
+        part.startsWith("$") &&
+        part.endsWith("$")
+      ) {
+        return `$${repairPhysicsMath(
+          part.slice(1, -1)
+        )}$`;
+      }
+
+      // Preserve prose, but repair Unicode vector combining marks because
+      // these are unambiguous Physics notation even outside $...$.
+      return part.replace(
+        /([A-Za-z])\u20D7/g,
+        (_, symbol) => `$\\vec{${symbol}}$`
+      );
+    })
+    .join("");
+
+  // Improve readability between adjacent inline equations and prose.
+  value = value
+    .replace(/\$(and|or|with|where|if|then)\$/gi, "$ $1 $")
+    .replace(/\$\s*(and|or|with|where|if|then)(?=\$)/gi, "$ $1 ")
+    .replace(/(and|or|with|where|if|then)\s*\$/gi, "$1 $");
+
+  return value;
+}
+
 function humaniseNavtaLatex(input = "") {
   let value =
     normaliseNavtaLatex(
@@ -2390,8 +2548,11 @@ export default function AdminNavtaTest() {
 
       question:
         formatNavtaSimpleScripts(
-          normaliseNavtaArrowSymbols(
-            question.question
+          normaliseNavtaPhysicsLatex(
+            normaliseNavtaArrowSymbols(
+              question.question
+            ),
+            subject
           )
         ),
 
@@ -2400,8 +2561,11 @@ export default function AdminNavtaTest() {
           ? question.options.map(
               (option) =>
                 formatNavtaSimpleScripts(
-                  normaliseNavtaArrowSymbols(
-                    option
+                  normaliseNavtaPhysicsLatex(
+                    normaliseNavtaArrowSymbols(
+                      option
+                    ),
+                    subject
                   )
                 )
             )
@@ -2409,15 +2573,21 @@ export default function AdminNavtaTest() {
 
       explanation:
         formatNavtaSimpleScripts(
-          normaliseNavtaArrowSymbols(
-            question.explanation
+          normaliseNavtaPhysicsLatex(
+            normaliseNavtaArrowSymbols(
+              question.explanation
+            ),
+            subject
           )
         ),
 
       modelAnswer:
         formatNavtaSimpleScripts(
-          normaliseNavtaArrowSymbols(
-            question.modelAnswer
+          normaliseNavtaPhysicsLatex(
+            normaliseNavtaArrowSymbols(
+              question.modelAnswer
+            ),
+            subject
           )
         ),
 
@@ -2426,7 +2596,10 @@ export default function AdminNavtaTest() {
           ? question.keyPoints.map(
               (point) =>
                 formatNavtaSimpleScripts(
-                  point
+                  normaliseNavtaPhysicsLatex(
+                    point,
+                    subject
+                  )
                 )
             )
           : [],
