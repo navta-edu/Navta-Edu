@@ -203,6 +203,7 @@ const navtaQuestionSchema = new mongoose.Schema(
     // - "ai"             = original automatic AI crop
     // - "admin-ai-crop"  = admin cropped the existing AI image
     // - "admin-original-page" = reserved for future original-page crop
+    // - "admin-pdf-crop"       = admin manually cropped a question from a PDF
     //
     // adminImageCrop stores the most recent normalized 0..1 crop box
     // used by the admin on the AI-cropped image.
@@ -252,6 +253,7 @@ const navtaQuestionSchema = new mongoose.Schema(
         "ai",
         "admin-ai-crop",
         "admin-original-page",
+        "admin-pdf-crop",
       ],
       default: "ai",
     },
