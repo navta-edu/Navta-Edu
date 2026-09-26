@@ -26,7 +26,8 @@ import {
   Atom,
   FlaskConical,
   Dna,
-  ChevronDown
+  ChevronDown,
+  Crop
 } from 'lucide-react';
 
 
@@ -2211,7 +2212,16 @@ const fetchData = async () => {
             id: 'navtaTest',
             label: 'Navta TEST',
             icon: Target,
-            isRoute: true
+            isRoute: true,
+            route: '/admin/navta-test'
+          },
+
+          {
+            id: 'pdfQuestionCropper',
+            label: 'PDF Question Cropper',
+            icon: Crop,
+            isRoute: true,
+            route: '/admin/pdf-question-cropper'
           }
 
         ].map(
@@ -2225,13 +2235,12 @@ const fetchData = async () => {
               <button
                 key={tab.id}
                 onClick={() => {
-                  if (tab.isRoute) {
-                    navigate('/admin/navta-test');
+                  if (tab.isRoute && tab.route) {
+                    navigate(tab.route);
                     return;
                   }
 
-                  window.location.hash =
-                    tab.id;
+                  window.location.hash = tab.id;
                 }}
                 className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl border transition-all ${
                   activeSection === tab.id
