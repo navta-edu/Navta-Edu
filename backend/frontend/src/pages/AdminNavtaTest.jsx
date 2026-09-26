@@ -260,6 +260,76 @@ function buildAdminHeaders(extraHeaders = {}) {
 const NAVTA_LATEX_COMMANDS =
   "begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|cdot|times|div|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|sin|cos|tan|cot|sec|csc|log|ln|exp|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|neq|ne|leq|geq|approx|equiv|sim|propto|pm|mp|infty|vec|overrightarrow|overleftarrow|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|leftrightarrow|Rightarrow|Leftarrow|Leftrightarrow|therefore|because|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|ce|pu";
 
+function normaliseNavtaArrowSymbols(input = "") {
+  let value = String(input ?? "");
+
+  // Repair common JSON/AI/OCR damage first.
+  value = value
+    .replace(/\r(?=ightarrow\b)/g, "→")
+    .replace(/\r(?=ightleftharpoons\b)/g, "⇌");
+
+  const replacements = [
+    [/\\\\rightleftharpoons\b/g, "⇌"],
+    [/\\rightleftharpoons\b/g, "⇌"],
+    [/\brightleftharpoons\b/g, "⇌"],
+    [/\bightleftharpoons\b/g, "⇌"],
+
+    [/\\\\leftrightharpoons\b/g, "⇋"],
+    [/\\leftrightharpoons\b/g, "⇋"],
+    [/\bleftrightharpoons\b/g, "⇋"],
+
+    [/\\\\longleftrightarrow\b/g, "↔"],
+    [/\\longleftrightarrow\b/g, "↔"],
+    [/\blongleftrightarrow\b/g, "↔"],
+
+    [/\\\\longrightarrow\b/g, "→"],
+    [/\\longrightarrow\b/g, "→"],
+    [/\blongrightarrow\b/g, "→"],
+
+    [/\\\\longleftarrow\b/g, "←"],
+    [/\\longleftarrow\b/g, "←"],
+    [/\blongleftarrow\b/g, "←"],
+
+    [/\\\\leftrightarrow\b/g, "↔"],
+    [/\\leftrightarrow\b/g, "↔"],
+    [/\bleftrightarrow\b/g, "↔"],
+
+    [/\\\\rightarrow\b/g, "→"],
+    [/\\rightarrow\b/g, "→"],
+    [/\brightarrow\b/g, "→"],
+    [/\bightarrow\b/g, "→"],
+
+    [/\\\\leftarrow\b/g, "←"],
+    [/\\leftarrow\b/g, "←"],
+    [/\bleftarrow\b/g, "←"],
+
+    [/\\\\Rightarrow\b/g, "⇒"],
+    [/\\Rightarrow\b/g, "⇒"],
+    [/\bRightarrow\b/g, "⇒"],
+
+    [/\\\\Leftarrow\b/g, "⇐"],
+    [/\\Leftarrow\b/g, "⇐"],
+    [/\bLeftarrow\b/g, "⇐"],
+
+    [/\\\\Leftrightarrow\b/g, "⇔"],
+    [/\\Leftrightarrow\b/g, "⇔"],
+    [/\bLeftrightarrow\b/g, "⇔"],
+  ];
+
+  replacements.forEach(([pattern, symbol]) => {
+    value = value.replace(pattern, symbol);
+  });
+
+  return value;
+}
+
+function repairUnsupportedNavtaCommands(input = "") {
+  return String(input ?? "")
+    // Gemini sometimes emits \e for Euler's number / electron text.
+    // KaTeX does not define \e, so render it as an ordinary e.
+    .replace(/\\e(?![A-Za-z])/g, "e");
+}
+
 function repairLegacyNavtaLatex(input = "") {
   return String(input ?? "")
     .replace(/\r(?=ight\b)/g, "\\right")
@@ -376,7 +446,11 @@ function repairNavtaMathSegment(input = "") {
 }
 
 function normaliseNavtaLatex(input = "") {
-  let value = repairLegacyNavtaLatex(input)
+  let value = repairUnsupportedNavtaCommands(
+    repairLegacyNavtaLatex(
+      normaliseNavtaArrowSymbols(input)
+    )
+  )
     .replace(/```(?:latex|tex|math)?/gi, "")
     .replace(/```/g, "")
     .replace(/\u00a0/g, " ")
@@ -626,7 +700,7 @@ function navtaKatexHtml(
       cleaned,
       {
         displayMode,
-        throwOnError: true,
+        throwOnError: false,
         strict: "ignore",
         trust: false,
         output: "htmlAndMathml",
@@ -635,12 +709,8 @@ function navtaKatexHtml(
   } catch (
     error
   ) {
-    console.error(
-      "NAVTA KaTeX render error:",
-      error,
-      cleaned
-    );
-
+    // Never flood the browser console for malformed historical AI/OCR math.
+    // The component below will use its readable fallback instead.
     return null;
   }
 }
@@ -1216,6 +1286,73 @@ function NavtaQuestionContent({
 // =====================================================
 
 export default function AdminNavtaTest() {
+  const [adminNavtaIsDarkMode, setAdminNavtaIsDarkMode] =
+    useState(() => {
+      if (typeof document === "undefined") return true;
+      return document.documentElement.classList.contains("dark");
+    });
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+
+    const readTheme = () => {
+      const html = document.documentElement;
+      const body = document.body;
+      const storedTheme =
+        localStorage.getItem("theme") ||
+        localStorage.getItem("navta-theme") ||
+        "";
+
+      const explicitLight =
+        html.classList.contains("light") ||
+        body.classList.contains("light") ||
+        html.getAttribute("data-theme") === "light" ||
+        body.getAttribute("data-theme") === "light" ||
+        storedTheme === "light";
+
+      const explicitDark =
+        html.classList.contains("dark") ||
+        body.classList.contains("dark") ||
+        html.getAttribute("data-theme") === "dark" ||
+        body.getAttribute("data-theme") === "dark" ||
+        storedTheme === "dark";
+
+      if (explicitLight) {
+        setAdminNavtaIsDarkMode(false);
+        return;
+      }
+
+      if (explicitDark) {
+        setAdminNavtaIsDarkMode(true);
+        return;
+      }
+
+      // NAVTA's normal theme implementation uses the root .dark class.
+      // When that class is absent, treat the site as light mode.
+      setAdminNavtaIsDarkMode(false);
+    };
+
+    readTheme();
+
+    const observer = new MutationObserver(readTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
+    });
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
+    });
+
+    window.addEventListener("storage", readTheme);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("storage", readTheme);
+    };
+  }, []);
+
+
   // ===================================================
   // MANUAL QUESTION STATE
   // ===================================================
@@ -2210,7 +2347,9 @@ export default function AdminNavtaTest() {
 
       question:
         formatNavtaSimpleScripts(
-          question.question
+          normaliseNavtaArrowSymbols(
+            question.question
+          )
         ),
 
       options:
@@ -2218,19 +2357,25 @@ export default function AdminNavtaTest() {
           ? question.options.map(
               (option) =>
                 formatNavtaSimpleScripts(
-                  option
+                  normaliseNavtaArrowSymbols(
+                    option
+                  )
                 )
             )
           : [],
 
       explanation:
         formatNavtaSimpleScripts(
-          question.explanation
+          normaliseNavtaArrowSymbols(
+            question.explanation
+          )
         ),
 
       modelAnswer:
         formatNavtaSimpleScripts(
-          question.modelAnswer
+          normaliseNavtaArrowSymbols(
+            question.modelAnswer
+          )
         ),
 
       keyPoints:
@@ -4397,6 +4542,218 @@ export default function AdminNavtaTest() {
           }
         }
 
+
+        /* =================================================
+           ADMIN NAVTA TEST — REAL LIGHT MODE
+           Driven by the component's live theme state.
+        ================================================= */
+        .admin-navta-test-page.admin-navta-light {
+          background: #f8fafc !important;
+          color: #0f172a !important;
+        }
+
+        .admin-navta-light .admin-navta-test-title,
+        .admin-navta-light .admin-navta-section-title,
+        .admin-navta-light h1,
+        .admin-navta-light h2,
+        .admin-navta-light h3,
+        .admin-navta-light h4,
+        .admin-navta-light strong {
+          color: #0f172a !important;
+        }
+
+        .admin-navta-light .admin-navta-test-subtitle {
+          color: #64748b !important;
+        }
+
+        .admin-navta-light .admin-navta-test-card {
+          background: #ffffff !important;
+          border-color: #d7e0ea !important;
+          color: #0f172a !important;
+          box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06) !important;
+        }
+
+        .admin-navta-light .admin-navta-ai-card {
+          border-color: #bae6fd !important;
+          background:
+            radial-gradient(
+              circle at top right,
+              rgba(14, 165, 233, 0.10),
+              transparent 35%
+            ),
+            #f0f9ff !important;
+        }
+
+        .admin-navta-light .admin-navta-label {
+          color: #334155 !important;
+        }
+
+        .admin-navta-light .admin-navta-input,
+        .admin-navta-light .admin-navta-select,
+        .admin-navta-light .admin-navta-textarea {
+          background: #ffffff !important;
+          color: #0f172a !important;
+          border-color: #cbd5e1 !important;
+          color-scheme: light;
+        }
+
+        .admin-navta-light .admin-navta-input::placeholder,
+        .admin-navta-light .admin-navta-textarea::placeholder {
+          color: #94a3b8 !important;
+        }
+
+        .admin-navta-light .admin-navta-info {
+          background: #f8fafc !important;
+          color: #475569 !important;
+          border-color: #dbe3ec !important;
+        }
+
+        .admin-navta-light .admin-navta-ai-badge {
+          background: #e0f2fe !important;
+          color: #0369a1 !important;
+        }
+
+        .admin-navta-light .admin-navta-file-box {
+          background: #ffffff !important;
+          color: #334155 !important;
+          border-color: #94a3b8 !important;
+        }
+
+        .admin-navta-light .admin-navta-secondary-button {
+          background: #ffffff !important;
+          color: #334155 !important;
+          border-color: #cbd5e1 !important;
+        }
+
+        .admin-navta-light .admin-navta-secondary-button:hover {
+          color: #0369a1 !important;
+          border-color: #0ea5e9 !important;
+        }
+
+        .admin-navta-light .admin-navta-message.success {
+          background: #ecfdf5 !important;
+          color: #047857 !important;
+          border-color: #86efac !important;
+        }
+
+        .admin-navta-light .admin-navta-message.error {
+          background: #fef2f2 !important;
+          color: #b91c1c !important;
+          border-color: #fecaca !important;
+        }
+
+        .admin-navta-light .admin-navta-import-summary-card,
+        .admin-navta-light .admin-navta-import-question-card,
+        .admin-navta-light .admin-navta-bank-card {
+          background: #ffffff !important;
+          color: #0f172a !important;
+          border-color: #d7e0ea !important;
+        }
+
+        .admin-navta-light .admin-navta-import-summary-label,
+        .admin-navta-light .admin-navta-import-question-meta,
+        .admin-navta-light .admin-navta-bank-meta,
+        .admin-navta-light .admin-navta-bank-options {
+          color: #64748b !important;
+        }
+
+        .admin-navta-light .admin-navta-import-tabs {
+          border-color: #cbd5e1 !important;
+        }
+
+        .admin-navta-light .admin-navta-import-tab {
+          color: #64748b !important;
+        }
+
+        .admin-navta-light .admin-navta-import-tab.active {
+          color: #0284c7 !important;
+        }
+
+        .admin-navta-light .admin-navta-image-edit-button,
+        .admin-navta-light .admin-navta-image-reset-button {
+          background: #ffffff !important;
+          color: #334155 !important;
+          border-color: #cbd5e1 !important;
+        }
+
+        .admin-navta-light select option {
+          background: #ffffff !important;
+          color: #0f172a !important;
+        }
+
+
+        /* =================================================
+           LIGHT MODE — QUESTION BANK READABILITY
+        ================================================= */
+        .admin-navta-light .admin-navta-bank-card {
+          background: #ffffff !important;
+          border-color: #d7e0ea !important;
+          color: #0f172a !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-card,
+        .admin-navta-light .admin-navta-bank-card p,
+        .admin-navta-light .admin-navta-bank-card div,
+        .admin-navta-light .admin-navta-bank-card span:not(.admin-navta-bank-badge),
+        .admin-navta-light .admin-navta-bank-card strong {
+          color: #334155 !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-question {
+          color: #0f172a !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-question strong,
+        .admin-navta-light .admin-navta-bank-question span,
+        .admin-navta-light .admin-navta-bank-question p,
+        .admin-navta-light .admin-navta-bank-question .katex,
+        .admin-navta-light .admin-navta-bank-question .katex * {
+          color: #0f172a !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-options,
+        .admin-navta-light .admin-navta-bank-options li,
+        .admin-navta-light .admin-navta-bank-options p,
+        .admin-navta-light .admin-navta-bank-options span,
+        .admin-navta-light .admin-navta-bank-options .katex,
+        .admin-navta-light .admin-navta-bank-options .katex * {
+          color: #475569 !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-meta {
+          color: #64748b !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-badge {
+          background: #ffffff !important;
+          color: #64748b !important;
+          border-color: #94a3b8 !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-card button.admin-navta-danger-button {
+          background: #fff1f2 !important;
+          color: #ef4444 !important;
+          border-color: #f87171 !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-card button.admin-navta-danger-button:hover {
+          background: #fee2e2 !important;
+          color: #dc2626 !important;
+          border-color: #ef4444 !important;
+        }
+
+
+        .admin-navta-light .admin-navta-bank-card > div:not(.admin-navta-bank-meta),
+        .admin-navta-light .admin-navta-bank-card > p {
+          color: #0f172a !important;
+          opacity: 1 !important;
+        }
+
         @media (max-width: 700px) {
           .admin-navta-test-page {
             padding: 22px 14px;
@@ -4423,7 +4780,13 @@ export default function AdminNavtaTest() {
         }
       `}</style>
 
-      <div className="admin-navta-test-page">
+      <div
+        className={`admin-navta-test-page ${
+          adminNavtaIsDarkMode
+            ? "admin-navta-dark"
+            : "admin-navta-light"
+        }`}
+      >
         <div className="admin-navta-test-container">
 
           <h1 className="admin-navta-test-title">
@@ -5464,22 +5827,12 @@ export default function AdminNavtaTest() {
                                         padding: "12px 14px",
                                         borderRadius: "10px",
                                         border: reviewState.needsReview
-                                          ? adminNavtaIsDarkMode
-                                            ? "1px solid rgba(245, 158, 11, 0.35)"
-                                            : "1px solid #f6c86f"
-                                          : adminNavtaIsDarkMode
-                                            ? "1px solid #243047"
-                                            : "1px solid #b9e5ca",
+                                          ? "1px solid rgba(245, 158, 11, 0.35)"
+                                          : "1px solid #243047",
                                         background: reviewState.needsReview
-                                          ? adminNavtaIsDarkMode
-                                            ? "rgba(245, 158, 11, 0.08)"
-                                            : "#fff9ed"
-                                          : adminNavtaIsDarkMode
-                                            ? "rgba(15, 23, 42, 0.6)"
-                                            : "#eefbf3",
-                                        color: adminNavtaIsDarkMode
-                                          ? "#94a3b8"
-                                          : "#52657a",
+                                          ? "rgba(245, 158, 11, 0.08)"
+                                          : "rgba(15, 23, 42, 0.6)",
+                                        color: "#94a3b8",
                                         fontSize: "12px",
                                         lineHeight: 1.7,
                                       }}
@@ -5496,12 +5849,8 @@ export default function AdminNavtaTest() {
                                         <strong
                                           style={{
                                             color: reviewState.needsReview
-                                              ? adminNavtaIsDarkMode
-                                                ? "#fbbf24"
-                                                : "#b56a00"
-                                              : adminNavtaIsDarkMode
-                                                ? "#86efac"
-                                                : "#15803d",
+                                              ? "#fbbf24"
+                                              : "#86efac",
                                           }}
                                         >
                                           {reviewState.needsReview
