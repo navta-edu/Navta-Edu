@@ -4681,6 +4681,79 @@ export default function AdminNavtaTest() {
           color: #0f172a !important;
         }
 
+
+        /* =================================================
+           LIGHT MODE — QUESTION BANK READABILITY
+        ================================================= */
+        .admin-navta-light .admin-navta-bank-card {
+          background: #ffffff !important;
+          border-color: #d7e0ea !important;
+          color: #0f172a !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-card,
+        .admin-navta-light .admin-navta-bank-card p,
+        .admin-navta-light .admin-navta-bank-card div,
+        .admin-navta-light .admin-navta-bank-card span:not(.admin-navta-bank-badge),
+        .admin-navta-light .admin-navta-bank-card strong {
+          color: #334155 !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-question {
+          color: #0f172a !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-question strong,
+        .admin-navta-light .admin-navta-bank-question span,
+        .admin-navta-light .admin-navta-bank-question p,
+        .admin-navta-light .admin-navta-bank-question .katex,
+        .admin-navta-light .admin-navta-bank-question .katex * {
+          color: #0f172a !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-options,
+        .admin-navta-light .admin-navta-bank-options li,
+        .admin-navta-light .admin-navta-bank-options p,
+        .admin-navta-light .admin-navta-bank-options span,
+        .admin-navta-light .admin-navta-bank-options .katex,
+        .admin-navta-light .admin-navta-bank-options .katex * {
+          color: #475569 !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-meta {
+          color: #64748b !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-badge {
+          background: #ffffff !important;
+          color: #64748b !important;
+          border-color: #94a3b8 !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-card button.admin-navta-danger-button {
+          background: #fff1f2 !important;
+          color: #ef4444 !important;
+          border-color: #f87171 !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-bank-card button.admin-navta-danger-button:hover {
+          background: #fee2e2 !important;
+          color: #dc2626 !important;
+          border-color: #ef4444 !important;
+        }
+
+
+        .admin-navta-light .admin-navta-bank-card > div:not(.admin-navta-bank-meta),
+        .admin-navta-light .admin-navta-bank-card > p {
+          color: #0f172a !important;
+          opacity: 1 !important;
+        }
+
         @media (max-width: 700px) {
           .admin-navta-test-page {
             padding: 22px 14px;
