@@ -811,64 +811,54 @@ function renderNavtaContent(
 const NAVTA_VISUAL_MARKER =
   "[[NAVTA_VISUAL]]";
 
-const NAVTA_VISUAL_MARKER_PATTERN =
-  /\[+\s*NAVTA[_\s-]*VISUAL\s*\]+/gi;
+function isPdfCropQuestion(question) {
+  return (
+    String(
+      question?.imageCropSource || ""
+    ).trim() === "admin-pdf-crop" ||
+    Boolean(
+      question?.sourceDocument?.fileName &&
+      question?.questionImage?.url
+    )
+  );
+}
 
-function cleanNavtaVisualTextSegment(
-  input = "",
-  position = "both"
+function cleanNavtaVisualText(
+  input = ""
 ) {
   let value = String(input ?? "");
 
-  // Remove any complete visual markers that may have been
-  // stored with extra brackets, spaces or underscores.
-  value = value.replace(
-    NAVTA_VISUAL_MARKER_PATTERN,
-    ""
-  );
-
-  // PDF-cropped questions can occasionally be stored as:
-  // [[[ [[NAVTA_VISUAL]] ]]]
-  // After removing the marker, the outer [[[ / ]]] must not
-  // be shown to students.
-  if (
-    position === "before" ||
-    position === "both"
-  ) {
-    value = value.replace(
-      /(?:\s*\[{2,}\s*)+$/g,
+  // Remove the normal marker and malformed variants such as
+  // [[[NAVTA_VISUAL]]], [[ [NAVTA_VISUAL] ]], etc.
+  value = value
+    .replace(
+      /\[+\s*NAVTA[\s_-]*VISUAL\s*\]+/gi,
+      ""
+    )
+    .replace(
+      /\[\[\s*\[\s*/g,
+      ""
+    )
+    .replace(
+      /\s*\]\s*\]\]/g,
       ""
     );
-  }
 
+  // If a visual-only cropped question leaves bracket wrappers
+  // behind, remove those wrappers without touching normal maths.
   if (
-    position === "after" ||
-    position === "both"
-  ) {
-    value = value.replace(
-      /^(?:\s*\]{2,}\s*)+/g,
+    !value.replace(
+      /[\[\]\s]/g,
       ""
-    );
+    )
+  ) {
+    return "";
   }
 
   return value.trim();
 }
 
 function getNavtaQuestionImage(question) {
-  const visualType = String(
-    question?.visualType || "none"
-  ).trim();
-
-  const hasRealVisual =
-    Boolean(
-      question?.hasVisual
-    ) &&
-    visualType !== "none";
-
-  if (!hasRealVisual) {
-    return null;
-  }
-
   const primaryUrl = String(
     question?.questionImage?.url || ""
   ).trim();
@@ -884,7 +874,10 @@ function getNavtaQuestionImage(question) {
             "NAVTA question visual"
         ).trim() ||
         "NAVTA question visual",
-      visualType,
+      visualType:
+        String(
+          question?.visualType || "image"
+        ).trim() || "image",
     };
   }
 
@@ -893,11 +886,11 @@ function getNavtaQuestionImage(question) {
       question?.questionImages
     )
       ? question.questionImages.find(
-          (image) =>
-            image &&
-            typeof image === "object" &&
+          (item) =>
+            item &&
+            typeof item === "object" &&
             String(
-              image.url || ""
+              item.url || ""
             ).trim()
         )
       : null;
@@ -907,7 +900,6 @@ function getNavtaQuestionImage(question) {
       url: String(
         firstImage.url || ""
       ).trim(),
-
       altText:
         String(
           firstImage.altText ||
@@ -916,8 +908,10 @@ function getNavtaQuestionImage(question) {
             "NAVTA question visual"
         ).trim() ||
         "NAVTA question visual",
-
-      visualType,
+      visualType:
+        String(
+          question?.visualType || "image"
+        ).trim() || "image",
     };
   }
 
@@ -992,71 +986,71 @@ function NavtaVisual({
           margin: "12px 0 16px",
         }}
       >
-        <button
-          type="button"
+        <img
+          src={image.url}
+          alt={image.altText}
+          className={className}
+          loading="eager"
+          decoding="async"
+          role="button"
+          tabIndex={0}
+          title="Click to enlarge image"
           onClick={() =>
             setIsEnlarged(true)
           }
-          aria-label="Enlarge question image"
-          title="Click to enlarge image"
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" ||
+              event.key === " "
+            ) {
+              event.preventDefault();
+              setIsEnlarged(true);
+            }
+          }}
           style={{
             display: "block",
-            width: "100%",
-            padding: 0,
-            border: 0,
-            background: "transparent",
+            maxWidth: "100%",
+            width: "auto",
+            height: "auto",
+            maxHeight: "460px",
+            objectFit: "contain",
+            margin: "0 auto",
             cursor: "zoom-in",
           }}
-        >
-          <img
-            src={image.url}
-            alt={image.altText}
-            className={className}
-            loading="eager"
-            decoding="async"
-            style={{
-              display: "block",
-              maxWidth: "100%",
-              width: "auto",
-              height: "auto",
-              maxHeight: "420px",
-              objectFit: "contain",
-              margin: "0 auto",
-            }}
-            onError={(event) => {
-              event.currentTarget.style.display =
-                "none";
-            }}
-          />
-        </button>
+          onError={(event) => {
+            event.currentTarget.style.display =
+              "none";
+          }}
+        />
 
         <button
           type="button"
           onClick={() =>
             setIsEnlarged(true)
           }
+          aria-label="Enlarge question image"
           style={{
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            gap: "7px",
-            minHeight: "38px",
-            padding: "8px 14px",
+            gap: "8px",
+            minHeight: "40px",
+            padding: "9px 15px",
             borderRadius: "10px",
             border:
-              "1px solid rgba(59, 130, 246, 0.28)",
+              "1px solid rgba(14, 165, 233, 0.35)",
             background:
-              "rgba(59, 130, 246, 0.08)",
-            color: "#2563eb",
+              "rgba(14, 165, 233, 0.1)",
+            color: "#0284c7",
             fontSize: "13px",
-            fontWeight: 700,
+            fontWeight: 800,
             cursor: "zoom-in",
           }}
         >
           <span
             aria-hidden="true"
             style={{
-              fontSize: "16px",
+              fontSize: "17px",
               lineHeight: 1,
             }}
           >
@@ -1082,17 +1076,17 @@ function NavtaVisual({
           style={{
             position: "fixed",
             inset: 0,
-            zIndex: 99999,
+            zIndex: 999999,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             padding:
-              "clamp(14px, 3vw, 36px)",
+              "clamp(12px, 3vw, 32px)",
             background:
-              "rgba(2, 6, 23, 0.88)",
-            backdropFilter: "blur(5px)",
+              "rgba(2, 6, 23, 0.92)",
+            backdropFilter: "blur(6px)",
             WebkitBackdropFilter:
-              "blur(5px)",
+              "blur(6px)",
           }}
         >
           <div
@@ -1101,14 +1095,14 @@ function NavtaVisual({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              width: "min(1200px, 96vw)",
-              height: "min(850px, 92vh)",
+              width: "min(1400px, 96vw)",
+              height: "min(900px, 92vh)",
               padding:
-                "clamp(12px, 2vw, 24px)",
+                "clamp(14px, 2vw, 26px)",
               borderRadius: "18px",
               background: "#ffffff",
               boxShadow:
-                "0 24px 80px rgba(0, 0, 0, 0.35)",
+                "0 25px 90px rgba(0,0,0,.4)",
               overflow: "auto",
             }}
           >
@@ -1123,21 +1117,20 @@ function NavtaVisual({
                 position: "absolute",
                 top: "12px",
                 right: "12px",
-                zIndex: 2,
-                width: "42px",
-                height: "42px",
+                zIndex: 10,
+                width: "44px",
+                height: "44px",
                 display: "grid",
                 placeItems: "center",
                 border: 0,
                 borderRadius: "50%",
-                background:
-                  "rgba(15, 23, 42, 0.9)",
+                background: "#0f172a",
                 color: "#ffffff",
-                fontSize: "25px",
+                fontSize: "27px",
                 lineHeight: 1,
                 cursor: "pointer",
                 boxShadow:
-                  "0 8px 24px rgba(0, 0, 0, 0.2)",
+                  "0 8px 24px rgba(0,0,0,.25)",
               }}
             >
               ×
@@ -1167,87 +1160,54 @@ function NavtaQuestionContent({
   visualClassName = "",
   visualShellClassName = "",
 }) {
-  const text =
+  const image =
+    getNavtaQuestionImage(
+      question
+    );
+
+  const rawText =
     String(
       question?.question || ""
     );
 
-  const image =
-    getNavtaQuestionImage(
-      question
+  // PDF crops are visual-only questions. Never pass their
+  // storage marker through the text/KaTeX renderer.
+  if (
+    image?.url &&
+    isPdfCropQuestion(question)
+  ) {
+    return (
+      <NavtaVisual
+        question={question}
+        className={
+          visualClassName
+        }
+        shellClassName={
+          visualShellClassName
+        }
+      />
+    );
+  }
+
+  const cleanedText =
+    cleanNavtaVisualText(
+      rawText
     );
 
   if (!image?.url) {
     return (
       <>
         {renderNavtaContent(
-          cleanNavtaVisualTextSegment(
-            text,
-            "both"
-          )
+          cleanedText
         )}
       </>
     );
   }
-
-  const markerMatch =
-    text.match(
-      NAVTA_VISUAL_MARKER_PATTERN
-    );
-
-  if (!markerMatch) {
-    return (
-      <>
-        {renderNavtaContent(
-          cleanNavtaVisualTextSegment(
-            text,
-            "both"
-          )
-        )}
-
-        <NavtaVisual
-          question={question}
-          className={
-            visualClassName
-          }
-          shellClassName={
-            visualShellClassName
-          }
-        />
-      </>
-    );
-  }
-
-  const markerIndex =
-    text.search(
-      NAVTA_VISUAL_MARKER_PATTERN
-    );
-
-  const matchedMarker =
-    markerMatch[0];
-
-  const beforeVisual =
-    cleanNavtaVisualTextSegment(
-      text.slice(
-        0,
-        markerIndex
-      ),
-      "before"
-    );
-
-  const afterVisual =
-    cleanNavtaVisualTextSegment(
-      text.slice(
-        markerIndex +
-          matchedMarker.length
-      ),
-      "after"
-    );
 
   return (
     <>
       {renderNavtaContent(
-        beforeVisual
+        cleanedText
       )}
 
       <NavtaVisual
@@ -1259,10 +1219,6 @@ function NavtaQuestionContent({
           visualShellClassName
         }
       />
-
-      {renderNavtaContent(
-        afterVisual
-      )}
     </>
   );
 }
