@@ -158,6 +158,229 @@ exports.createSubject = async (req, res) => {
   }
 };
 
+// @desc    Create a new chapter
+// @route   POST /api/admin/chapters
+// @access  Private (Admin)
+exports.createChapter = async (req, res) => {
+  try {
+    const body = req.body || {};
+    const subjectInput = String(body.subject ?? body.subjectId ?? '').trim();
+    const title = String(body.title ?? body.name ?? body.chapterTitle ?? '').trim();
+    const description = String(body.description ?? body.chapterDescription ?? '').trim();
+    const examination = String(body.examination ?? body.exam ?? body.preparation ?? '').trim();
+    const classLevel = String(body.classLevel ?? body.className ?? body.class ?? '').trim();
+
+    if (!subjectInput) {
+      return res.status(400).json({ success: false, message: 'Subject is required.' });
+    }
+    if (!title) {
+      return res.status(400).json({ success: false, message: 'Chapter title is required.' });
+    }
+
+    const escapeRegex = (value) =>
+      String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    let subject = null;
+
+    if (/^[a-f\d]{24}$/i.test(subjectInput)) {
+      subject = await Subject.findById(subjectInput);
+    }
+
+    if (!subject) {
+      subject = await Subject.findOne({
+        name: { $regex: `^${escapeRegex(subjectInput)}$`, $options: 'i' }
+      });
+    }
+
+    if (!subject) {
+      return res.status(400).json({
+        success: false,
+        message: `Subject "${subjectInput}" was not found.`
+      });
+    }
+
+    const chapterData = {};
+
+    if (Chapter.schema.path('title')) chapterData.title = title;
+    if (Chapter.schema.path('name')) chapterData.name = title;
+    if (Chapter.schema.path('description')) chapterData.description = description;
+    if (Chapter.schema.path('subject')) chapterData.subject = subject._id;
+
+    if (Chapter.schema.path('examination')) chapterData.examination = examination;
+    if (Chapter.schema.path('exam')) chapterData.exam = examination;
+    if (Chapter.schema.path('preparation')) chapterData.preparation = examination;
+
+    if (Chapter.schema.path('classLevel')) chapterData.classLevel = classLevel;
+    if (Chapter.schema.path('className')) chapterData.className = classLevel;
+    if (Chapter.schema.path('class')) chapterData.class = classLevel;
+
+    const duplicateQuery = { subject: subject._id };
+
+    if (Chapter.schema.path('title')) {
+      duplicateQuery.title = {
+        $regex: `^${escapeRegex(title)}$`,
+        $options: 'i'
+      };
+    } else if (Chapter.schema.path('name')) {
+      duplicateQuery.name = {
+        $regex: `^${escapeRegex(title)}$`,
+        $options: 'i'
+      };
+    }
+
+    if (examination) {
+      if (Chapter.schema.path('examination')) duplicateQuery.examination = examination;
+      else if (Chapter.schema.path('exam')) duplicateQuery.exam = examination;
+      else if (Chapter.schema.path('preparation')) duplicateQuery.preparation = examination;
+    }
+
+    if (classLevel) {
+      if (Chapter.schema.path('classLevel')) duplicateQuery.classLevel = classLevel;
+      else if (Chapter.schema.path('className')) duplicateQuery.className = classLevel;
+      else if (Chapter.schema.path('class')) duplicateQuery.class = classLevel;
+    }
+
+    const existingChapter = await Chapter.findOne(duplicateQuery);
+
+    if (existingChapter) {
+      return res.status(400).json({
+        success: false,
+        message: 'This chapter already exists for the selected Subject / Examination / Class.'
+      });
+    }
+
+    // The admin no longer supplies a chapter number. If an older Chapter
+    // schema still requires one, assign an internal value automatically.
+    const numberPath =
+      Chapter.schema.path('chapterNumber') ? 'chapterNumber' :
+      Chapter.schema.path('number') ? 'number' :
+      null;
+
+    if (numberPath) {
+      const siblings = await Chapter.find({ subject: subject._id }).lean();
+      const names = siblings
+        .map((chapter) => String(chapter.title ?? chapter.name ?? '').trim())
+        .filter(Boolean)
+        .concat(title)
+        .sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true })
+        );
+
+      chapterData[numberPath] =
+        names.findIndex(
+          (name) =>
+            name.localeCompare(title, undefined, { sensitivity: 'base' }) === 0
+        ) + 1;
+    }
+
+    const chapter = await Chapter.create(chapterData);
+
+    const sortField = Chapter.schema.path('title')
+      ? 'title'
+      : Chapter.schema.path('name')
+        ? 'name'
+        : '_id';
+
+    const chapters = await Chapter.find({ subject: subject._id })
+      .populate('subject')
+      .sort({ [sortField]: 1 });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Chapter created successfully.',
+      data: chapter,
+      chapters
+    });
+  } catch (err) {
+    console.error('Create chapter error:', err);
+
+    if (err?.name === 'ValidationError' || err?.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message:
+          err?.code === 11000
+            ? 'This chapter already exists.'
+            : err.message
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Unable to create chapter.'
+    });
+  }
+};
+
+// @desc    Get chapters alphabetically for admin/NAVTA TEST consumers
+// @route   GET /api/admin/chapters
+// @access  Private (Admin)
+exports.getChapters = async (req, res) => {
+  try {
+    const query = {};
+    const escapeRegex = (value) =>
+      String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    if (req.query.subject) {
+      const subjectInput = String(req.query.subject).trim();
+      let subject = null;
+
+      if (/^[a-f\d]{24}$/i.test(subjectInput)) {
+        subject = await Subject.findById(subjectInput);
+      }
+
+      if (!subject) {
+        subject = await Subject.findOne({
+          name: { $regex: `^${escapeRegex(subjectInput)}$`, $options: 'i' }
+        });
+      }
+
+      if (!subject) {
+        return res.status(200).json({ success: true, count: 0, data: [] });
+      }
+
+      query.subject = subject._id;
+    }
+
+    const examValue = String(
+      req.query.examination ?? req.query.exam ?? req.query.preparation ?? ''
+    ).trim();
+
+    if (examValue) {
+      if (Chapter.schema.path('examination')) query.examination = examValue;
+      else if (Chapter.schema.path('exam')) query.exam = examValue;
+      else if (Chapter.schema.path('preparation')) query.preparation = examValue;
+    }
+
+    const classValue = String(
+      req.query.classLevel ?? req.query.className ?? req.query.class ?? ''
+    ).trim();
+
+    if (classValue) {
+      if (Chapter.schema.path('classLevel')) query.classLevel = classValue;
+      else if (Chapter.schema.path('className')) query.className = classValue;
+      else if (Chapter.schema.path('class')) query.class = classValue;
+    }
+
+    const sortField = Chapter.schema.path('title')
+      ? 'title'
+      : Chapter.schema.path('name')
+        ? 'name'
+        : '_id';
+
+    const chapters = await Chapter.find(query)
+      .populate('subject')
+      .sort({ [sortField]: 1 });
+
+    return res.status(200).json({
+      success: true,
+      count: chapters.length,
+      data: chapters
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 // @desc    Delete subject category
 // @route   DELETE /api/admin/subjects/:id
 // @access  Private (Admin)
