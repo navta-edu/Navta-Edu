@@ -1,4 +1,5 @@
 const { createCanvas } = require("@napi-rs/canvas");
+const path = require("path");
 
 // =====================================================
 // LOAD PDF.JS
@@ -14,18 +15,58 @@ const loadPdfJs = async () => {
 };
 
 // =====================================================
+// PDF.JS RESOURCE PATHS
+// =====================================================
+// The previous renderer used useSystemFonts:true without explicitly giving
+// PDF.js its bundled standard fonts/CMaps. On Linux/Hostinger this can make
+// characters inside tables/figures render as empty square boxes.
+// Use PDF.js's own resources instead of depending on server-installed fonts.
+
+const getPdfJsResourcePaths = () => {
+  try {
+    const packageJson = require.resolve("pdfjs-dist/package.json");
+    const root = path.dirname(packageJson);
+
+    const withTrailingSlash = (value) =>
+      value.endsWith(path.sep) ? value : `${value}${path.sep}`;
+
+    return {
+      standardFontDataUrl: withTrailingSlash(
+        path.join(root, "standard_fonts")
+      ),
+      cMapUrl: withTrailingSlash(
+        path.join(root, "cmaps")
+      ),
+      wasmUrl: withTrailingSlash(
+        path.join(root, "wasm")
+      ),
+    };
+  } catch (error) {
+    console.warn(
+      "NAVTA PDF renderer could not resolve pdfjs-dist resource folders:",
+      error?.message || error
+    );
+    return {};
+  }
+};
+
+// =====================================================
 // HELPERS
 // =====================================================
 
 const validatePdfBuffer = (buffer) => {
-  if (!Buffer.isBuffer(buffer)) throw new Error("A valid PDF buffer is required.");
-  if (buffer.length === 0) throw new Error("The PDF buffer is empty.");
+  if (!Buffer.isBuffer(buffer)) {
+    throw new Error("A valid PDF buffer is required.");
+  }
+  if (buffer.length === 0) {
+    throw new Error("The PDF buffer is empty.");
+  }
 };
 
 const normalizeScale = (scale) => {
   const value = Number(scale);
-  if (!Number.isFinite(value)) return 2.2;
-  return Math.min(3, Math.max(0.8, value));
+  if (!Number.isFinite(value)) return 2.4;
+  return Math.min(3.2, Math.max(1, value));
 };
 
 const normalizeMaxPages = (maxPages) => {
@@ -38,25 +79,33 @@ const normalizeMaxPages = (maxPages) => {
 // RENDER ONE PDF PAGE TO PNG
 // =====================================================
 
-const renderPdfPageToPng = async ({ page, scale = 2.2 }) => {
+const renderPdfPageToPng = async ({ page, scale = 2.4 }) => {
   if (!page || typeof page.getViewport !== "function") {
     throw new Error("A valid PDF page is required.");
   }
 
   const safeScale = normalizeScale(scale);
   const viewport = page.getViewport({ scale: safeScale });
+
   const width = Math.max(1, Math.ceil(viewport.width));
   const height = Math.max(1, Math.ceil(viewport.height));
 
   const canvas = createCanvas(width, height);
   const context = canvas.getContext("2d");
+
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, width, height);
 
-  const renderTask = page.render({ canvasContext: context, viewport });
+  const renderTask = page.render({
+    canvasContext: context,
+    viewport,
+    background: "#ffffff",
+  });
+
   await renderTask.promise;
 
   const buffer = await canvas.encode("png");
+
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
     throw new Error("Rendered PDF page produced an empty PNG.");
   }
@@ -76,13 +125,26 @@ const renderPdfPageToPng = async ({ page, scale = 2.2 }) => {
 
 const openPdf = async (buffer) => {
   validatePdfBuffer(buffer);
+
   const pdfjsLib = await loadPdfJs();
+  const resources = getPdfJsResourcePaths();
 
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(buffer),
-    useSystemFonts: true,
+
+    // IMPORTANT:
+    // Do not depend on fonts installed on Hostinger/Linux.
+    // Prefer embedded PDF fonts + PDF.js bundled standard fonts.
+    useSystemFonts: false,
     disableFontFace: false,
+
+    // Needed by many exam PDFs containing custom encodings/font maps.
+    cMapPacked: true,
+
+    // Keep the backend renderer safe.
     isEvalSupported: false,
+
+    ...resources,
   });
 
   return loadingTask.promise;
@@ -90,11 +152,17 @@ const openPdf = async (buffer) => {
 
 const closePdf = async (pdf) => {
   if (!pdf) return;
+
   try {
-    if (typeof pdf.cleanup === "function") pdf.cleanup();
+    if (typeof pdf.cleanup === "function") {
+      pdf.cleanup();
+    }
   } catch {}
+
   try {
-    if (typeof pdf.destroy === "function") await pdf.destroy();
+    if (typeof pdf.destroy === "function") {
+      await pdf.destroy();
+    }
   } catch {}
 };
 
@@ -104,10 +172,11 @@ const closePdf = async (pdf) => {
 
 const renderPdfPages = async ({
   buffer,
-  scale = 2.2,
+  scale = 2.4,
   maxPages = 100,
 }) => {
   validatePdfBuffer(buffer);
+
   const pdf = await openPdf(buffer);
   const pages = [];
 
@@ -118,12 +187,22 @@ const renderPdfPages = async ({
 
     for (let pageNumber = 1; pageNumber <= pagesToRender; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
+
       try {
-        const rendered = await renderPdfPageToPng({ page, scale });
-        pages.push({ pageNumber, ...rendered });
+        const rendered = await renderPdfPageToPng({
+          page,
+          scale,
+        });
+
+        pages.push({
+          pageNumber,
+          ...rendered,
+        });
       } finally {
         try {
-          if (typeof page.cleanup === "function") page.cleanup();
+          if (typeof page.cleanup === "function") {
+            page.cleanup();
+          }
         } catch {}
       }
     }
@@ -146,7 +225,7 @@ const renderPdfPages = async ({
 const renderSelectedPdfPages = async ({
   buffer,
   pageNumbers = [],
-  scale = 2.2,
+  scale = 2.4,
 }) => {
   validatePdfBuffer(buffer);
 
@@ -154,12 +233,20 @@ const renderSelectedPdfPages = async ({
     ...new Set(
       (Array.isArray(pageNumbers) ? pageNumbers : [])
         .map(Number)
-        .filter((pageNumber) => Number.isInteger(pageNumber) && pageNumber > 0)
+        .filter(
+          (pageNumber) =>
+            Number.isInteger(pageNumber) &&
+            pageNumber > 0
+        )
     ),
   ].sort((a, b) => a - b);
 
   if (uniquePages.length === 0) {
-    return { totalPages: 0, renderedPages: 0, pages: [] };
+    return {
+      totalPages: 0,
+      renderedPages: 0,
+      pages: [],
+    };
   }
 
   const pdf = await openPdf(buffer);
@@ -170,19 +257,33 @@ const renderSelectedPdfPages = async ({
 
     for (const pageNumber of uniquePages) {
       if (pageNumber > totalPages) continue;
+
       const page = await pdf.getPage(pageNumber);
 
       try {
-        const rendered = await renderPdfPageToPng({ page, scale });
-        pages.push({ pageNumber, ...rendered });
+        const rendered = await renderPdfPageToPng({
+          page,
+          scale,
+        });
+
+        pages.push({
+          pageNumber,
+          ...rendered,
+        });
       } finally {
         try {
-          if (typeof page.cleanup === "function") page.cleanup();
+          if (typeof page.cleanup === "function") {
+            page.cleanup();
+          }
         } catch {}
       }
     }
 
-    return { totalPages, renderedPages: pages.length, pages };
+    return {
+      totalPages,
+      renderedPages: pages.length,
+      pages,
+    };
   } finally {
     await closePdf(pdf);
   }
