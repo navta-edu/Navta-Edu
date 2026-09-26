@@ -823,35 +823,18 @@ function isPdfCropQuestion(question) {
   );
 }
 
-function cleanNavtaVisualText(
-  input = ""
-) {
+function cleanNavtaVisualText(input = "") {
   let value = String(input ?? "");
 
-  // Remove the normal marker and malformed variants such as
-  // [[[NAVTA_VISUAL]]], [[ [NAVTA_VISUAL] ]], etc.
   value = value
     .replace(
       /\[+\s*NAVTA[\s_-]*VISUAL\s*\]+/gi,
       ""
     )
-    .replace(
-      /\[\[\s*\[\s*/g,
-      ""
-    )
-    .replace(
-      /\s*\]\s*\]\]/g,
-      ""
-    );
+    .replace(/\[\[\s*\[\s*/g, "")
+    .replace(/\s*\]\s*\]\]/g, "");
 
-  // If a visual-only cropped question leaves bracket wrappers
-  // behind, remove those wrappers without touching normal maths.
-  if (
-    !value.replace(
-      /[\[\]\s]/g,
-      ""
-    )
-  ) {
+  if (!value.replace(/[\[\]\s]/g, "")) {
     return "";
   }
 
@@ -882,24 +865,18 @@ function getNavtaQuestionImage(question) {
   }
 
   const firstImage =
-    Array.isArray(
-      question?.questionImages
-    )
+    Array.isArray(question?.questionImages)
       ? question.questionImages.find(
           (item) =>
             item &&
             typeof item === "object" &&
-            String(
-              item.url || ""
-            ).trim()
+            String(item.url || "").trim()
         )
       : null;
 
   if (firstImage) {
     return {
-      url: String(
-        firstImage.url || ""
-      ).trim(),
+      url: String(firstImage.url || "").trim(),
       altText:
         String(
           firstImage.altText ||
@@ -925,11 +902,47 @@ function NavtaVisual({
 }) {
   const [isEnlarged, setIsEnlarged] =
     useState(false);
+  const [zoom, setZoom] =
+    useState(1);
 
   const image =
-    getNavtaQuestionImage(
-      question
+    getNavtaQuestionImage(question);
+
+  const closeViewer = () => {
+    setIsEnlarged(false);
+    setZoom(1);
+  };
+
+  const openViewer = () => {
+    setZoom(1);
+    setIsEnlarged(true);
+  };
+
+  const zoomIn = () => {
+    setZoom((previous) =>
+      Math.min(
+        5,
+        Number(
+          (previous + 0.25).toFixed(2)
+        )
+      )
     );
+  };
+
+  const zoomOut = () => {
+    setZoom((previous) =>
+      Math.max(
+        0.5,
+        Number(
+          (previous - 0.25).toFixed(2)
+        )
+      )
+    );
+  };
+
+  const resetZoom = () => {
+    setZoom(1);
+  };
 
   useEffect(() => {
     if (!isEnlarged) {
@@ -942,11 +955,27 @@ function NavtaVisual({
     document.body.style.overflow =
       "hidden";
 
-    const handleKeyDown = (
-      event
-    ) => {
+    const handleKeyDown = (event) => {
       if (event.key === "Escape") {
-        setIsEnlarged(false);
+        closeViewer();
+      }
+
+      if (
+        event.key === "+" ||
+        event.key === "="
+      ) {
+        event.preventDefault();
+        zoomIn();
+      }
+
+      if (event.key === "-") {
+        event.preventDefault();
+        zoomOut();
+      }
+
+      if (event.key === "0") {
+        event.preventDefault();
+        resetZoom();
       }
     };
 
@@ -973,9 +1002,7 @@ function NavtaVisual({
   return (
     <>
       <div
-        className={
-          shellClassName
-        }
+        className={shellClassName}
         style={{
           width: "100%",
           display: "flex",
@@ -994,17 +1021,15 @@ function NavtaVisual({
           decoding="async"
           role="button"
           tabIndex={0}
-          title="Click to enlarge image"
-          onClick={() =>
-            setIsEnlarged(true)
-          }
+          title="Click to open zoom viewer"
+          onClick={openViewer}
           onKeyDown={(event) => {
             if (
               event.key === "Enter" ||
               event.key === " "
             ) {
               event.preventDefault();
-              setIsEnlarged(true);
+              openViewer();
             }
           }}
           style={{
@@ -1025,10 +1050,7 @@ function NavtaVisual({
 
         <button
           type="button"
-          onClick={() =>
-            setIsEnlarged(true)
-          }
-          aria-label="Enlarge question image"
+          onClick={openViewer}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -1047,16 +1069,10 @@ function NavtaVisual({
             cursor: "zoom-in",
           }}
         >
-          <span
-            aria-hidden="true"
-            style={{
-              fontSize: "17px",
-              lineHeight: 1,
-            }}
-          >
+          <span aria-hidden="true">
             ⛶
           </span>
-          Enlarge Image
+          Zoom Question
         </button>
       </div>
 
@@ -1064,90 +1080,208 @@ function NavtaVisual({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Enlarged question image"
+          aria-label="Question image zoom viewer"
           onMouseDown={(event) => {
             if (
               event.target ===
               event.currentTarget
             ) {
-              setIsEnlarged(false);
+              closeViewer();
             }
           }}
           style={{
             position: "fixed",
             inset: 0,
-            zIndex: 999999,
+            zIndex: 2147483647,
             display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding:
-              "clamp(12px, 3vw, 32px)",
+            flexDirection: "column",
             background:
-              "rgba(2, 6, 23, 0.92)",
-            backdropFilter: "blur(6px)",
-            WebkitBackdropFilter:
-              "blur(6px)",
+              "rgba(2, 6, 23, 0.96)",
           }}
         >
           <div
             style={{
               position: "relative",
+              zIndex: 5,
+              minHeight: "68px",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              width: "min(1400px, 96vw)",
-              height: "min(900px, 92vh)",
-              padding:
-                "clamp(14px, 2vw, 26px)",
-              borderRadius: "18px",
-              background: "#ffffff",
-              boxShadow:
-                "0 25px 90px rgba(0,0,0,.4)",
-              overflow: "auto",
+              gap: "8px",
+              flexWrap: "wrap",
+              padding: "10px 76px 10px 14px",
+              background:
+                "rgba(15, 23, 42, 0.98)",
+              borderBottom:
+                "1px solid rgba(255,255,255,.14)",
             }}
           >
             <button
               type="button"
-              onClick={() =>
-                setIsEnlarged(false)
-              }
-              aria-label="Close enlarged image"
-              title="Close"
+              onClick={zoomOut}
+              disabled={zoom <= 0.5}
+              title="Zoom out"
               style={{
-                position: "absolute",
-                top: "12px",
-                right: "12px",
-                zIndex: 10,
-                width: "44px",
-                height: "44px",
-                display: "grid",
-                placeItems: "center",
+                minWidth: "44px",
+                height: "42px",
                 border: 0,
-                borderRadius: "50%",
-                background: "#0f172a",
-                color: "#ffffff",
-                fontSize: "27px",
-                lineHeight: 1,
-                cursor: "pointer",
-                boxShadow:
-                  "0 8px 24px rgba(0,0,0,.25)",
+                borderRadius: "10px",
+                background: "#ffffff",
+                color: "#0f172a",
+                fontSize: "24px",
+                fontWeight: 900,
+                cursor:
+                  zoom <= 0.5
+                    ? "not-allowed"
+                    : "pointer",
+                opacity:
+                  zoom <= 0.5
+                    ? 0.45
+                    : 1,
               }}
             >
-              ×
+              −
             </button>
 
-            <img
-              src={image.url}
-              alt={image.altText}
+            <button
+              type="button"
+              onClick={resetZoom}
+              title="Reset to 100%"
               style={{
-                display: "block",
-                width: "auto",
-                height: "auto",
-                maxWidth: "100%",
-                maxHeight: "100%",
-                objectFit: "contain",
+                minWidth: "92px",
+                height: "42px",
+                border: 0,
+                borderRadius: "10px",
+                background: "#ffffff",
+                color: "#0f172a",
+                fontSize: "14px",
+                fontWeight: 900,
+                cursor: "pointer",
               }}
-            />
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+
+            <button
+              type="button"
+              onClick={zoomIn}
+              disabled={zoom >= 5}
+              title="Zoom in"
+              style={{
+                minWidth: "44px",
+                height: "42px",
+                border: 0,
+                borderRadius: "10px",
+                background: "#ffffff",
+                color: "#0f172a",
+                fontSize: "24px",
+                fontWeight: 900,
+                cursor:
+                  zoom >= 5
+                    ? "not-allowed"
+                    : "pointer",
+                opacity:
+                  zoom >= 5
+                    ? 0.45
+                    : 1,
+              }}
+            >
+              +
+            </button>
+
+            <span
+              style={{
+                color: "#cbd5e1",
+                fontSize: "12px",
+                fontWeight: 700,
+              }}
+            >
+              Wheel/trackpad to zoom
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={closeViewer}
+            aria-label="Close zoom viewer"
+            title="Close (Esc)"
+            style={{
+              position: "fixed",
+              top: "10px",
+              right: "14px",
+              zIndex: 2147483647,
+              minWidth: "48px",
+              height: "48px",
+              padding: "0 14px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+              border:
+                "2px solid rgba(255,255,255,.7)",
+              borderRadius: "12px",
+              background: "#ef4444",
+              color: "#ffffff",
+              fontSize: "15px",
+              fontWeight: 900,
+              cursor: "pointer",
+              boxShadow:
+                "0 8px 28px rgba(0,0,0,.35)",
+            }}
+          >
+            ✕ Close
+          </button>
+
+          <div
+            onWheel={(event) => {
+              event.preventDefault();
+
+              if (event.deltaY < 0) {
+                zoomIn();
+              } else {
+                zoomOut();
+              }
+            }}
+            style={{
+              flex: 1,
+              width: "100%",
+              overflow: "auto",
+              padding: "30px",
+              overscrollBehavior: "contain",
+            }}
+          >
+            <div
+              style={{
+                minWidth: "100%",
+                minHeight: "100%",
+                display: "flex",
+                alignItems:
+                  zoom <= 1
+                    ? "center"
+                    : "flex-start",
+                justifyContent:
+                  zoom <= 1
+                    ? "center"
+                    : "flex-start",
+              }}
+            >
+              <img
+                src={image.url}
+                alt={image.altText}
+                draggable="false"
+                style={{
+                  display: "block",
+                  width:
+                    `${zoom * 100}%`,
+                  maxWidth: "none",
+                  height: "auto",
+                  objectFit: "contain",
+                  transformOrigin:
+                    "top left",
+                  userSelect: "none",
+                }}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -1161,17 +1295,13 @@ function NavtaQuestionContent({
   visualShellClassName = "",
 }) {
   const image =
-    getNavtaQuestionImage(
-      question
-    );
+    getNavtaQuestionImage(question);
 
   const rawText =
     String(
       question?.question || ""
     );
 
-  // PDF crops are visual-only questions. Never pass their
-  // storage marker through the text/KaTeX renderer.
   if (
     image?.url &&
     isPdfCropQuestion(question)
@@ -1179,9 +1309,7 @@ function NavtaQuestionContent({
     return (
       <NavtaVisual
         question={question}
-        className={
-          visualClassName
-        }
+        className={visualClassName}
         shellClassName={
           visualShellClassName
         }
@@ -1190,9 +1318,7 @@ function NavtaQuestionContent({
   }
 
   const cleanedText =
-    cleanNavtaVisualText(
-      rawText
-    );
+    cleanNavtaVisualText(rawText);
 
   if (!image?.url) {
     return (
@@ -1212,9 +1338,7 @@ function NavtaQuestionContent({
 
       <NavtaVisual
         question={question}
-        className={
-          visualClassName
-        }
+        className={visualClassName}
         shellClassName={
           visualShellClassName
         }
