@@ -7,6 +7,7 @@ const NavtaQuestion =
 
 const {
   createQuestion,
+  createPDFCropQuestion,
   getQuestions,
   deleteQuestion,
   generateTest,
@@ -65,6 +66,119 @@ router.post(
   protect,
   authorizeRoles("admin"),
   createQuestion
+);
+
+// ADMIN - SAVE MANUALLY CROPPED PDF QUESTION
+//
+// The upload middleware is loaded lazily so a configuration problem
+// returns a useful API error instead of crashing the entire backend.
+//
+// Field name expected from the frontend: questionImage
+router.post(
+  "/questions/pdf-crop",
+  protect,
+  authorizeRoles("admin"),
+  (req, res, next) => {
+    try {
+      const multer =
+        require("multer");
+
+      const upload =
+        multer({
+          storage:
+            multer.memoryStorage(),
+
+          limits: {
+            fileSize:
+              12 * 1024 * 1024,
+          },
+
+          fileFilter: (
+            request,
+            file,
+            callback
+          ) => {
+            const mimeType =
+              String(
+                file?.mimetype || ""
+              ).toLowerCase();
+
+            const allowedTypes =
+              new Set([
+                "image/png",
+                "image/jpeg",
+                "image/jpg",
+                "image/webp",
+              ]);
+
+            if (
+              !allowedTypes.has(
+                mimeType
+              )
+            ) {
+              const error =
+                new Error(
+                  "Only PNG, JPG and WEBP cropped question images are allowed."
+                );
+
+              error.statusCode =
+                400;
+
+              return callback(
+                error
+              );
+            }
+
+            return callback(
+              null,
+              true
+            );
+          },
+        });
+
+      return upload.single(
+        "questionImage"
+      )(
+        req,
+        res,
+        (error) => {
+          if (!error) {
+            return next();
+          }
+
+          console.error(
+            "NAVTA PDF CROP UPLOAD ERROR:",
+            error
+          );
+
+          return res.status(
+            Number(
+              error?.statusCode
+            ) || 400
+          ).json({
+            success: false,
+            message:
+              error?.message ||
+              "Could not upload the cropped question image.",
+          });
+        }
+      );
+    } catch (error) {
+      console.error(
+        "NAVTA PDF CROP UPLOAD MIDDLEWARE ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "NAVTA PDF crop upload service could not be loaded.",
+        error:
+          error.message,
+      });
+    }
+  },
+  createPDFCropQuestion
 );
 
 router.get(
