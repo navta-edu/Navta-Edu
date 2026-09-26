@@ -659,6 +659,15 @@ function normaliseNavtaPhysicsLatex(
         "\\hat{$1}"
       );
 
+    // Make valid Physics vector notation visually explicit.
+    // KaTeX's short \\vec accent can be extremely subtle at the small
+    // review-card font size. Use \\overrightarrow for Physics vectors so
+    // P, Q, A, B, v, etc. visibly carry a vector arrow.
+    math = math.replace(
+      /\\vec\s*\{\s*([^{}]+?)\s*\}/g,
+      "\\overrightarrow{$1}"
+    );
+
     // Long-vector OCR variants.
     math = math
       .replace(
