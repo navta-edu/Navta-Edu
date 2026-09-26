@@ -95,6 +95,10 @@ const AdminNavtaTest = lazy(() =>
   import('./pages/AdminNavtaTest')
 );
 
+const PDFQuestionCropper = lazy(() =>
+  import('./pages/PDFQuestionCropper')
+);
+
 // =====================================================
 // SHARED PAGES
 // =====================================================
@@ -582,6 +586,13 @@ export default function App() {
                   path="/admin/navta-test"
                   element={
                     <AdminNavtaTest />
+                  }
+                />
+
+                <Route
+                  path="/admin/pdf-question-cropper"
+                  element={
+                    <PDFQuestionCropper />
                   }
                 />
 
