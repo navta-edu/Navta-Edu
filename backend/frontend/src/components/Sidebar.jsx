@@ -21,7 +21,8 @@ import {
   Users,
   Award,
   FilePlus2,
-  Target
+  Target,
+  Crop
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -187,11 +188,6 @@ export default function Sidebar() {
       hash: '#studyMaterial'
     },
 
-    // ===================================================
-    // NEW: STUDY NOTES
-    // Opens AdminDashboard directly on the Study Notes tab
-    // ===================================================
-
     {
       to: '/admin',
       label: 'Study Notes',
@@ -199,15 +195,16 @@ export default function Sidebar() {
       hash: '#note'
     },
 
-    // ===================================================
-    // NEW: NAVTA TEST
-    // Opens dedicated admin Navta TEST page
-    // ===================================================
-
     {
       to: '/admin/navta-test',
       label: 'Navta TEST',
       icon: Target
+    },
+
+    {
+      to: '/admin/pdf-question-cropper',
+      label: 'PDF Question Cropper',
+      icon: Crop
     },
 
     {
