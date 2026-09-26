@@ -258,7 +258,7 @@ function buildAdminHeaders(extraHeaders = {}) {
 // =====================================================
 
 const NAVTA_LATEX_COMMANDS =
-  "begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|cdot|times|div|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|sin|cos|tan|cot|sec|csc|log|ln|exp|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|neq|ne|leq|geq|approx|equiv|sim|propto|pm|mp|infty|vec|overrightarrow|overleftarrow|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|leftrightarrow|Rightarrow|Leftarrow|Leftrightarrow|therefore|because|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|ce|pu";
+  "begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|cdot|times|div|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|sin|cos|tan|cot|sec|csc|log|ln|exp|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|neq|ne|leq|geq|approx|equiv|sim|propto|pm|mp|infty|vec|overrightarrow|overleftarrow|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|leftrightarrow|rightleftharpoons|leftrightharpoons|longrightarrow|longleftarrow|longleftrightarrow|mapsto|uparrow|downarrow|Rightarrow|Leftarrow|Leftrightarrow|therefore|because|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|ce|pu";
 
 function repairLegacyNavtaLatex(input = "") {
   return String(input ?? "")
@@ -368,8 +368,57 @@ function repairBrokenMatrixRowSeparators(input = "") {
   );
 }
 
+function repairNavtaArrowCommands(input = "") {
+  let value = String(input ?? "");
+
+  // AI/OCR sometimes loses the leading backslash and produces:
+  // "rightarrow", "leftrightarrow", "rightleftharpoons", etc.
+  // Convert only standalone command words so normal English is untouched.
+  const arrowCommands = [
+    "rightleftharpoons",
+    "leftrightharpoons",
+    "longleftrightarrow",
+    "longrightarrow",
+    "longleftarrow",
+    "leftrightarrow",
+    "rightarrow",
+    "leftarrow",
+    "Rightarrow",
+    "Leftarrow",
+    "Leftrightarrow",
+    "mapsto",
+    "uparrow",
+    "downarrow",
+  ];
+
+  arrowCommands.forEach((command) => {
+    const pattern = new RegExp(
+      `(^|[^A-Za-z\\\\])${command}(?=$|[^A-Za-z])`,
+      "g"
+    );
+
+    value = value.replace(
+      pattern,
+      (_, prefix) => `${prefix}\\\\${command}`
+    );
+  });
+
+  // Also normalize Unicode arrows when they occur inside math.
+  value = value
+    .replace(/⇌/g, "\\\\rightleftharpoons")
+    .replace(/↔/g, "\\\\leftrightarrow")
+    .replace(/→/g, "\\\\rightarrow")
+    .replace(/←/g, "\\\\leftarrow")
+    .replace(/⇒/g, "\\\\Rightarrow")
+    .replace(/⇐/g, "\\\\Leftarrow")
+    .replace(/⇔/g, "\\\\Leftrightarrow");
+
+  return value;
+}
+
 function repairNavtaMathSegment(input = "") {
   let value = repairUnicodeScriptsInsideMath(input);
+  value = repairNavtaArrowCommands(value);
   value = repairBrokenMatrixRowSeparators(value);
   value = repairAccidentalSingleLetterLatexCommands(value);
   return value;
@@ -528,9 +577,17 @@ function humaniseNavtaLatex(input = "") {
     [/\\equiv\b/g, "≡"],
     [/\\propto\b/g, "∝"],
     [/\\infty\b/g, "∞"],
+    [/\\rightleftharpoons\b/g, "⇌"],
+    [/\\leftrightharpoons\b/g, "⇋"],
+    [/\\longleftrightarrow\b/g, "↔"],
+    [/\\longrightarrow\b/g, "→"],
+    [/\\longleftarrow\b/g, "←"],
     [/\\rightarrow\b/g, "→"],
     [/\\leftarrow\b/g, "←"],
     [/\\leftrightarrow\b/g, "↔"],
+    [/\\mapsto\b/g, "↦"],
+    [/\\uparrow\b/g, "↑"],
+    [/\\downarrow\b/g, "↓"],
     [/\\Rightarrow\b/g, "⇒"],
     [/\\Leftarrow\b/g, "⇐"],
     [/\\Leftrightarrow\b/g, "⇔"],
@@ -777,6 +834,11 @@ function renderNavtaContent(
         `$${math}$`
     );
 
+  // Repair arrow words that arrived without their LaTeX backslash.
+  // This fixes AI-imported chemistry such as:
+  // Fe(CN)_6^{4-} rightarrow Fe(CN)_6^{3-} + e^-
+  value = repairNavtaArrowCommands(value);
+
   value =
     wrapBareNavtaLatex(
       value
@@ -842,7 +904,7 @@ function renderNavtaContent(
       // Plain prose should remain untouched. If raw LaTeX
       // commands leak into prose, show a readable fallback.
       if (
-        /\\(?:begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|sin|cos|tan|cot|sec|csc|alpha|beta|gamma|delta|theta|lambda|mu|nu|rho|sigma|tau|phi|psi|omega|cdot|times|div|vec|hat|bar|dot|partial|nabla|ce|pu)\b/.test(
+        /\\(?:begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|sin|cos|tan|cot|sec|csc|alpha|beta|gamma|delta|theta|lambda|mu|nu|rho|sigma|tau|phi|psi|omega|cdot|times|div|vec|hat|bar|dot|partial|nabla|rightarrow|leftarrow|leftrightarrow|rightleftharpoons|leftrightharpoons|longrightarrow|longleftarrow|longleftrightarrow|mapsto|uparrow|downarrow|ce|pu)\b/.test(
           part
         )
       ) {
