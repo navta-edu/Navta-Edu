@@ -260,6 +260,76 @@ function buildAdminHeaders(extraHeaders = {}) {
 const NAVTA_LATEX_COMMANDS =
   "begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|cdot|times|div|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|sin|cos|tan|cot|sec|csc|log|ln|exp|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|neq|ne|leq|geq|approx|equiv|sim|propto|pm|mp|infty|vec|overrightarrow|overleftarrow|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|leftrightarrow|Rightarrow|Leftarrow|Leftrightarrow|therefore|because|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|ce|pu";
 
+function normaliseNavtaArrowSymbols(input = "") {
+  let value = String(input ?? "");
+
+  // Repair common JSON/AI/OCR damage first.
+  value = value
+    .replace(/\r(?=ightarrow\b)/g, "→")
+    .replace(/\r(?=ightleftharpoons\b)/g, "⇌");
+
+  const replacements = [
+    [/\\\\rightleftharpoons\b/g, "⇌"],
+    [/\\rightleftharpoons\b/g, "⇌"],
+    [/\brightleftharpoons\b/g, "⇌"],
+    [/\bightleftharpoons\b/g, "⇌"],
+
+    [/\\\\leftrightharpoons\b/g, "⇋"],
+    [/\\leftrightharpoons\b/g, "⇋"],
+    [/\bleftrightharpoons\b/g, "⇋"],
+
+    [/\\\\longleftrightarrow\b/g, "↔"],
+    [/\\longleftrightarrow\b/g, "↔"],
+    [/\blongleftrightarrow\b/g, "↔"],
+
+    [/\\\\longrightarrow\b/g, "→"],
+    [/\\longrightarrow\b/g, "→"],
+    [/\blongrightarrow\b/g, "→"],
+
+    [/\\\\longleftarrow\b/g, "←"],
+    [/\\longleftarrow\b/g, "←"],
+    [/\blongleftarrow\b/g, "←"],
+
+    [/\\\\leftrightarrow\b/g, "↔"],
+    [/\\leftrightarrow\b/g, "↔"],
+    [/\bleftrightarrow\b/g, "↔"],
+
+    [/\\\\rightarrow\b/g, "→"],
+    [/\\rightarrow\b/g, "→"],
+    [/\brightarrow\b/g, "→"],
+    [/\bightarrow\b/g, "→"],
+
+    [/\\\\leftarrow\b/g, "←"],
+    [/\\leftarrow\b/g, "←"],
+    [/\bleftarrow\b/g, "←"],
+
+    [/\\\\Rightarrow\b/g, "⇒"],
+    [/\\Rightarrow\b/g, "⇒"],
+    [/\bRightarrow\b/g, "⇒"],
+
+    [/\\\\Leftarrow\b/g, "⇐"],
+    [/\\Leftarrow\b/g, "⇐"],
+    [/\bLeftarrow\b/g, "⇐"],
+
+    [/\\\\Leftrightarrow\b/g, "⇔"],
+    [/\\Leftrightarrow\b/g, "⇔"],
+    [/\bLeftrightarrow\b/g, "⇔"],
+  ];
+
+  replacements.forEach(([pattern, symbol]) => {
+    value = value.replace(pattern, symbol);
+  });
+
+  return value;
+}
+
+function repairUnsupportedNavtaCommands(input = "") {
+  return String(input ?? "")
+    // Gemini sometimes emits \e for Euler's number / electron text.
+    // KaTeX does not define \e, so render it as an ordinary e.
+    .replace(/\\e(?![A-Za-z])/g, "e");
+}
+
 function repairLegacyNavtaLatex(input = "") {
   return String(input ?? "")
     .replace(/\r(?=ight\b)/g, "\\right")
@@ -375,85 +445,11 @@ function repairNavtaMathSegment(input = "") {
   return value;
 }
 
-function normaliseNavtaArrowSymbols(input = "") {
-  let value = String(input ?? "");
-
-  // Repair control-character damage that can happen when "\rightarrow"
-  // is decoded as "\r" + "ightarrow".
-  value = value
-    .replace(/\r(?=ightarrow\b)/g, "→")
-    .replace(/\r(?=ightleftharpoons\b)/g, "⇌");
-
-  const replacements = [
-    [/\\\\rightleftharpoons\b/g, "⇌"],
-    [/\\rightleftharpoons\b/g, "⇌"],
-    [/\brightleftharpoons\b/g, "⇌"],
-    [/\bightleftharpoons\b/g, "⇌"],
-
-    [/\\\\leftrightharpoons\b/g, "⇋"],
-    [/\\leftrightharpoons\b/g, "⇋"],
-    [/\bleftrightharpoons\b/g, "⇋"],
-
-    [/\\\\longleftrightarrow\b/g, "↔"],
-    [/\\longleftrightarrow\b/g, "↔"],
-    [/\blongleftrightarrow\b/g, "↔"],
-
-    [/\\\\longrightarrow\b/g, "→"],
-    [/\\longrightarrow\b/g, "→"],
-    [/\blongrightarrow\b/g, "→"],
-
-    [/\\\\longleftarrow\b/g, "←"],
-    [/\\longleftarrow\b/g, "←"],
-    [/\blongleftarrow\b/g, "←"],
-
-    [/\\\\leftrightarrow\b/g, "↔"],
-    [/\\leftrightarrow\b/g, "↔"],
-    [/\bleftrightarrow\b/g, "↔"],
-
-    [/\\\\rightarrow\b/g, "→"],
-    [/\\rightarrow\b/g, "→"],
-    [/\brightarrow\b/g, "→"],
-    [/\bightarrow\b/g, "→"],
-
-    [/\\\\leftarrow\b/g, "←"],
-    [/\\leftarrow\b/g, "←"],
-    [/\bleftarrow\b/g, "←"],
-
-    [/\\\\Rightarrow\b/g, "⇒"],
-    [/\\Rightarrow\b/g, "⇒"],
-    [/\bRightarrow\b/g, "⇒"],
-
-    [/\\\\Leftarrow\b/g, "⇐"],
-    [/\\Leftarrow\b/g, "⇐"],
-    [/\bLeftarrow\b/g, "⇐"],
-
-    [/\\\\Leftrightarrow\b/g, "⇔"],
-    [/\\Leftrightarrow\b/g, "⇔"],
-    [/\bLeftrightarrow\b/g, "⇔"],
-
-    [/\\\\mapsto\b/g, "↦"],
-    [/\\mapsto\b/g, "↦"],
-    [/\bmapsto\b/g, "↦"],
-
-    [/\\\\uparrow\b/g, "↑"],
-    [/\\uparrow\b/g, "↑"],
-    [/\buparrow\b/g, "↑"],
-
-    [/\\\\downarrow\b/g, "↓"],
-    [/\\downarrow\b/g, "↓"],
-    [/\bdownarrow\b/g, "↓"],
-  ];
-
-  replacements.forEach(([pattern, symbol]) => {
-    value = value.replace(pattern, symbol);
-  });
-
-  return value;
-}
-
 function normaliseNavtaLatex(input = "") {
-  let value = repairLegacyNavtaLatex(
-    normaliseNavtaArrowSymbols(input)
+  let value = repairUnsupportedNavtaCommands(
+    repairLegacyNavtaLatex(
+      normaliseNavtaArrowSymbols(input)
+    )
   )
     .replace(/```(?:latex|tex|math)?/gi, "")
     .replace(/```/g, "")
@@ -704,7 +700,7 @@ function navtaKatexHtml(
       cleaned,
       {
         displayMode,
-        throwOnError: true,
+        throwOnError: false,
         strict: "ignore",
         trust: false,
         output: "htmlAndMathml",
@@ -713,12 +709,8 @@ function navtaKatexHtml(
   } catch (
     error
   ) {
-    console.error(
-      "NAVTA KaTeX render error:",
-      error,
-      cleaned
-    );
-
+    // Never flood the browser console for malformed historical AI/OCR math.
+    // The component below will use its readable fallback instead.
     return null;
   }
 }
@@ -2324,9 +2316,7 @@ export default function AdminNavtaTest() {
           ? question.keyPoints.map(
               (point) =>
                 formatNavtaSimpleScripts(
-                  normaliseNavtaArrowSymbols(
-                    point
-                  )
+                  point
                 )
             )
           : [],
