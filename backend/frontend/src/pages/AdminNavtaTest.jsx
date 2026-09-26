@@ -4,11 +4,6 @@ import React, {
   useState
 } from "react";
 
-import {
-  InlineMath,
-  BlockMath
-} from "react-katex";
-
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import "katex/contrib/mhchem";
@@ -381,6 +376,35 @@ function repairAccidentalSingleLetterLatexCommands(input = "") {
   );
 }
 
+function repairUnknownSingleLetterCommands(input = "") {
+  // A lone backslash + Latin letter (for example \\x, \\K, \\A) is almost
+  // always damage introduced by PDF extraction / JSON escaping. None of the
+  // supported NAVTA math commands are one-letter commands. Keep escaped
+  // backslashes (matrix row separators) untouched and turn only genuinely
+  // unknown one-letter commands back into their literal variable.
+  return String(input ?? "").replace(
+    /(^|[^\\])\\([A-Za-z])(?![A-Za-z])/g,
+    (_, prefix, letter) => `${prefix}${letter}`
+  );
+}
+
+function hasBalancedNavtaBraces(input = "") {
+  let depth = 0;
+  const value = String(input ?? "");
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === "\\\\") {
+      index += 1;
+      continue;
+    }
+    if (value[index] === "{") depth += 1;
+    if (value[index] === "}") depth -= 1;
+    if (depth < 0) return false;
+  }
+
+  return depth === 0;
+}
+
 function repairBrokenMatrixRowSeparators(input = "") {
   const matrixEnvironmentPattern =
     /\\begin\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix|array|cases|aligned|gathered)\}([\s\S]*?)\\end\{\1\}/g;
@@ -442,6 +466,7 @@ function repairNavtaMathSegment(input = "") {
   let value = repairUnicodeScriptsInsideMath(input);
   value = repairBrokenMatrixRowSeparators(value);
   value = repairAccidentalSingleLetterLatexCommands(value);
+  value = repairUnknownSingleLetterCommands(value);
   return value;
 }
 
@@ -695,12 +720,21 @@ function navtaKatexHtml(
     return null;
   }
 
+  // Do not send structurally broken expressions to KaTeX. The readable
+  // fallback is safer for old AI imports with truncated braces.
+  if (!hasBalancedNavtaBraces(cleaned)) {
+    return null;
+  }
+
   try {
     return katex.renderToString(
       cleaned,
       {
         displayMode,
-        throwOnError: false,
+        // Parse strictly here and catch failures silently below. This prevents
+        // malformed historical AI/OCR LaTeX from creating KaTeX error markup
+        // or repeatedly flooding DevTools.
+        throwOnError: true,
         strict: "ignore",
         trust: false,
         output: "htmlAndMathml",
