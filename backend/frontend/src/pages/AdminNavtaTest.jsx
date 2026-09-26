@@ -4836,6 +4836,101 @@ export default function AdminNavtaTest() {
           opacity: 1 !important;
         }
 
+
+        /* =================================================
+           LIGHT MODE — AI IMPORT RESULTS / REVIEW AREA
+           These are the actual class names used by the
+           Detected/Accepted/Dropped boxes and review cards.
+        ================================================= */
+        .admin-navta-light .admin-navta-summary-box {
+          background: #ffffff !important;
+          border-color: #d7e0ea !important;
+          color: #0f172a !important;
+          box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05) !important;
+        }
+
+        .admin-navta-light .admin-navta-summary-label {
+          color: #64748b !important;
+        }
+
+        .admin-navta-light .admin-navta-summary-value:not(.accepted):not(.dropped) {
+          color: #0f172a !important;
+        }
+
+        .admin-navta-light .admin-navta-tabs {
+          border-bottom-color: #cbd5e1 !important;
+        }
+
+        .admin-navta-light .admin-navta-tab {
+          color: #64748b !important;
+        }
+
+        .admin-navta-light .admin-navta-tab.active {
+          color: #0284c7 !important;
+          border-bottom-color: #0ea5e9 !important;
+        }
+
+        .admin-navta-light .admin-navta-review-question {
+          background: #ffffff !important;
+          border-color: #d7e0ea !important;
+          color: #0f172a !important;
+          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05) !important;
+        }
+
+        .admin-navta-light .admin-navta-review-text,
+        .admin-navta-light .admin-navta-rendered-question,
+        .admin-navta-light .admin-navta-rendered-question p,
+        .admin-navta-light .admin-navta-rendered-question span,
+        .admin-navta-light .admin-navta-rendered-question strong,
+        .admin-navta-light .admin-navta-rendered-question .katex,
+        .admin-navta-light .admin-navta-rendered-question .katex * {
+          color: #0f172a !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-review-question label,
+        .admin-navta-light .admin-navta-review-question .admin-navta-label {
+          color: #475569 !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-review-question input,
+        .admin-navta-light .admin-navta-review-question textarea,
+        .admin-navta-light .admin-navta-review-question select {
+          background: #ffffff !important;
+          color: #0f172a !important;
+          border-color: #cbd5e1 !important;
+          -webkit-text-fill-color: #0f172a !important;
+          color-scheme: light;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-review-question input:disabled,
+        .admin-navta-light .admin-navta-review-question textarea:disabled,
+        .admin-navta-light .admin-navta-review-question select:disabled {
+          background: #f1f5f9 !important;
+          color: #475569 !important;
+          border-color: #cbd5e1 !important;
+          -webkit-text-fill-color: #475569 !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-review-question option {
+          background: #ffffff !important;
+          color: #0f172a !important;
+        }
+
+        .admin-navta-light .admin-navta-question-preview-image-shell {
+          background: #ffffff !important;
+          border-color: #d7e0ea !important;
+        }
+
+        .admin-navta-light .admin-navta-empty-state {
+          background: #f8fafc !important;
+          color: #64748b !important;
+          border-color: #d7e0ea !important;
+        }
+
         @media (max-width: 700px) {
           .admin-navta-test-page {
             padding: 22px 14px;
