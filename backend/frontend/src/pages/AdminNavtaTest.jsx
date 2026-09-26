@@ -4754,6 +4754,88 @@ export default function AdminNavtaTest() {
           opacity: 1 !important;
         }
 
+
+        /* LIGHT MODE — AI IMPORT REVIEW CARDS */
+        .admin-navta-light .admin-navta-import-question-card {
+          background: #ffffff !important;
+          border-color: #cbd5e1 !important;
+          color: #0f172a !important;
+          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05) !important;
+        }
+
+        .admin-navta-light .admin-navta-import-question-card p,
+        .admin-navta-light .admin-navta-import-question-card span,
+        .admin-navta-light .admin-navta-import-question-card strong,
+        .admin-navta-light .admin-navta-import-question-card .katex,
+        .admin-navta-light .admin-navta-import-question-card .katex * {
+          color: #0f172a !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-import-question-card label,
+        .admin-navta-light .admin-navta-import-question-card .admin-navta-label {
+          color: #475569 !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-import-question-card input,
+        .admin-navta-light .admin-navta-import-question-card textarea,
+        .admin-navta-light .admin-navta-import-question-card select {
+          background: #ffffff !important;
+          color: #0f172a !important;
+          border-color: #cbd5e1 !important;
+          opacity: 1 !important;
+          -webkit-text-fill-color: #0f172a !important;
+          color-scheme: light;
+        }
+
+        .admin-navta-light .admin-navta-import-question-card input:disabled,
+        .admin-navta-light .admin-navta-import-question-card textarea:disabled,
+        .admin-navta-light .admin-navta-import-question-card select:disabled {
+          background: #f1f5f9 !important;
+          color: #475569 !important;
+          border-color: #cbd5e1 !important;
+          -webkit-text-fill-color: #475569 !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-import-question-card option {
+          background: #ffffff !important;
+          color: #0f172a !important;
+        }
+
+        .admin-navta-light .admin-navta-import-summary-card {
+          background: #ffffff !important;
+          border-color: #cbd5e1 !important;
+          color: #0f172a !important;
+        }
+
+        .admin-navta-light .admin-navta-import-summary-label,
+        .admin-navta-light .admin-navta-import-question-meta {
+          color: #64748b !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-import-tabs {
+          border-color: #94a3b8 !important;
+        }
+
+        .admin-navta-light .admin-navta-import-tab {
+          color: #64748b !important;
+          opacity: 1 !important;
+        }
+
+        .admin-navta-light .admin-navta-import-tab.active {
+          color: #0284c7 !important;
+        }
+
+        .admin-navta-light .admin-navta-import-question-card .admin-navta-danger-button {
+          background: #fff1f2 !important;
+          color: #ef4444 !important;
+          border-color: #f87171 !important;
+          opacity: 1 !important;
+        }
+
         @media (max-width: 700px) {
           .admin-navta-test-page {
             padding: 22px 14px;
