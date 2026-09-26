@@ -918,31 +918,28 @@ function NavtaVisual({
     setIsEnlarged(true);
   };
 
-  const zoomIn = () => {
+  const changeZoom = (amount) => {
     setZoom((previous) =>
       Math.min(
         5,
-        Number(
-          (previous + 0.25).toFixed(2)
+        Math.max(
+          0.5,
+          Number(
+            (previous + amount).toFixed(2)
+          )
         )
       )
     );
   };
 
-  const zoomOut = () => {
-    setZoom((previous) =>
-      Math.max(
-        0.5,
-        Number(
-          (previous - 0.25).toFixed(2)
-        )
-      )
-    );
-  };
+  const zoomIn = () =>
+    changeZoom(0.25);
 
-  const resetZoom = () => {
+  const zoomOut = () =>
+    changeZoom(-0.25);
+
+  const resetZoom = () =>
     setZoom(1);
-  };
 
   useEffect(() => {
     if (!isEnlarged) {
@@ -1004,12 +1001,11 @@ function NavtaVisual({
       <div
         className={shellClassName}
         style={{
+          position: "relative",
           width: "100%",
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          gap: "10px",
           margin: "12px 0 16px",
         }}
       >
@@ -1019,18 +1015,9 @@ function NavtaVisual({
           className={className}
           loading="eager"
           decoding="async"
-          role="button"
-          tabIndex={0}
-          title="Click to open zoom viewer"
-          onClick={openViewer}
-          onKeyDown={(event) => {
-            if (
-              event.key === "Enter" ||
-              event.key === " "
-            ) {
-              event.preventDefault();
-              openViewer();
-            }
+          onError={(event) => {
+            event.currentTarget.style.display =
+              "none";
           }}
           style={{
             display: "block",
@@ -1040,39 +1027,41 @@ function NavtaVisual({
             maxHeight: "460px",
             objectFit: "contain",
             margin: "0 auto",
-            cursor: "zoom-in",
-          }}
-          onError={(event) => {
-            event.currentTarget.style.display =
-              "none";
           }}
         />
 
         <button
           type="button"
           onClick={openViewer}
+          aria-label="Open question image zoom"
+          title="Zoom image"
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "8px",
-            minHeight: "40px",
-            padding: "9px 15px",
-            borderRadius: "10px",
+            position: "absolute",
+            top: "10px",
+            right: "10px",
+            zIndex: 4,
+            width: "42px",
+            height: "42px",
+            display: "grid",
+            placeItems: "center",
+            padding: 0,
             border:
-              "1px solid rgba(14, 165, 233, 0.35)",
+              "1px solid rgba(255,255,255,.72)",
+            borderRadius: "11px",
             background:
-              "rgba(14, 165, 233, 0.1)",
-            color: "#0284c7",
-            fontSize: "13px",
-            fontWeight: 800,
-            cursor: "zoom-in",
+              "rgba(15,23,42,.88)",
+            color: "#ffffff",
+            fontSize: "22px",
+            lineHeight: 1,
+            cursor: "pointer",
+            boxShadow:
+              "0 5px 18px rgba(0,0,0,.22)",
+            backdropFilter: "blur(5px)",
+            WebkitBackdropFilter:
+              "blur(5px)",
           }}
         >
-          <span aria-hidden="true">
-            ⛶
-          </span>
-          Zoom Question
+          ⛶
         </button>
       </div>
 
@@ -1096,22 +1085,22 @@ function NavtaVisual({
             display: "flex",
             flexDirection: "column",
             background:
-              "rgba(2, 6, 23, 0.96)",
+              "rgba(2,6,23,.97)",
+            touchAction: "none",
           }}
         >
           <div
             style={{
               position: "relative",
               zIndex: 5,
-              minHeight: "68px",
+              minHeight: "64px",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: "8px",
-              flexWrap: "wrap",
-              padding: "10px 76px 10px 14px",
+              padding: "9px 72px 9px 12px",
               background:
-                "rgba(15, 23, 42, 0.98)",
+                "rgba(15,23,42,.98)",
               borderBottom:
                 "1px solid rgba(255,255,255,.14)",
             }}
@@ -1120,24 +1109,16 @@ function NavtaVisual({
               type="button"
               onClick={zoomOut}
               disabled={zoom <= 0.5}
-              title="Zoom out"
+              aria-label="Zoom out"
               style={{
-                minWidth: "44px",
+                width: "42px",
                 height: "42px",
                 border: 0,
                 borderRadius: "10px",
-                background: "#ffffff",
+                background: "#fff",
                 color: "#0f172a",
                 fontSize: "24px",
                 fontWeight: 900,
-                cursor:
-                  zoom <= 0.5
-                    ? "not-allowed"
-                    : "pointer",
-                opacity:
-                  zoom <= 0.5
-                    ? 0.45
-                    : 1,
               }}
             >
               −
@@ -1146,17 +1127,17 @@ function NavtaVisual({
             <button
               type="button"
               onClick={resetZoom}
-              title="Reset to 100%"
+              aria-label="Reset zoom"
               style={{
-                minWidth: "92px",
+                minWidth: "76px",
                 height: "42px",
+                padding: "0 10px",
                 border: 0,
                 borderRadius: "10px",
-                background: "#ffffff",
+                background: "#fff",
                 color: "#0f172a",
-                fontSize: "14px",
+                fontSize: "13px",
                 fontWeight: 900,
-                cursor: "pointer",
               }}
             >
               {Math.round(zoom * 100)}%
@@ -1166,92 +1147,150 @@ function NavtaVisual({
               type="button"
               onClick={zoomIn}
               disabled={zoom >= 5}
-              title="Zoom in"
+              aria-label="Zoom in"
               style={{
-                minWidth: "44px",
+                width: "42px",
                 height: "42px",
                 border: 0,
                 borderRadius: "10px",
-                background: "#ffffff",
+                background: "#fff",
                 color: "#0f172a",
                 fontSize: "24px",
                 fontWeight: 900,
-                cursor:
-                  zoom >= 5
-                    ? "not-allowed"
-                    : "pointer",
-                opacity:
-                  zoom >= 5
-                    ? 0.45
-                    : 1,
               }}
             >
               +
             </button>
-
-            <span
-              style={{
-                color: "#cbd5e1",
-                fontSize: "12px",
-                fontWeight: 700,
-              }}
-            >
-              Wheel/trackpad to zoom
-            </span>
           </div>
 
           <button
             type="button"
             onClick={closeViewer}
             aria-label="Close zoom viewer"
-            title="Close (Esc)"
+            title="Close"
             style={{
               position: "fixed",
               top: "10px",
-              right: "14px",
+              right: "12px",
               zIndex: 2147483647,
-              minWidth: "48px",
-              height: "48px",
-              padding: "0 14px",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
+              width: "46px",
+              height: "46px",
+              display: "grid",
+              placeItems: "center",
+              padding: 0,
               border:
-                "2px solid rgba(255,255,255,.7)",
+                "2px solid rgba(255,255,255,.72)",
               borderRadius: "12px",
               background: "#ef4444",
-              color: "#ffffff",
-              fontSize: "15px",
+              color: "#fff",
+              fontSize: "23px",
               fontWeight: 900,
               cursor: "pointer",
               boxShadow:
                 "0 8px 28px rgba(0,0,0,.35)",
             }}
           >
-            ✕ Close
+            ✕
           </button>
 
           <div
             onWheel={(event) => {
               event.preventDefault();
+              changeZoom(
+                event.deltaY < 0
+                  ? 0.25
+                  : -0.25
+              );
+            }}
+            onTouchStart={(event) => {
+              if (
+                event.touches.length === 2
+              ) {
+                const [a, b] =
+                  event.touches;
+                const distance =
+                  Math.hypot(
+                    a.clientX - b.clientX,
+                    a.clientY - b.clientY
+                  );
 
-              if (event.deltaY < 0) {
-                zoomIn();
-              } else {
-                zoomOut();
+                event.currentTarget.dataset.pinchDistance =
+                  String(distance);
+                event.currentTarget.dataset.pinchZoom =
+                  String(zoom);
               }
+            }}
+            onTouchMove={(event) => {
+              if (
+                event.touches.length !== 2
+              ) {
+                return;
+              }
+
+              event.preventDefault();
+
+              const [a, b] =
+                event.touches;
+              const distance =
+                Math.hypot(
+                  a.clientX - b.clientX,
+                  a.clientY - b.clientY
+                );
+
+              const initialDistance =
+                Number(
+                  event.currentTarget.dataset
+                    .pinchDistance || 0
+                );
+
+              const initialZoom =
+                Number(
+                  event.currentTarget.dataset
+                    .pinchZoom || 1
+                );
+
+              if (!initialDistance) {
+                return;
+              }
+
+              const nextZoom =
+                Math.min(
+                  5,
+                  Math.max(
+                    0.5,
+                    initialZoom *
+                      (
+                        distance /
+                        initialDistance
+                      )
+                  )
+                );
+
+              setZoom(
+                Number(
+                  nextZoom.toFixed(2)
+                )
+              );
             }}
             style={{
               flex: 1,
               width: "100%",
               overflow: "auto",
-              padding: "30px",
-              overscrollBehavior: "contain",
+              WebkitOverflowScrolling:
+                "touch",
+              overscrollBehavior:
+                "contain",
+              padding:
+                "clamp(12px,3vw,30px)",
+              touchAction: "pan-x pan-y",
             }}
           >
             <div
               style={{
+                width:
+                  zoom > 1
+                    ? `${zoom * 100}%`
+                    : "100%",
                 minWidth: "100%",
                 minHeight: "100%",
                 display: "flex",
@@ -1271,14 +1310,13 @@ function NavtaVisual({
                 draggable="false"
                 style={{
                   display: "block",
-                  width:
-                    `${zoom * 100}%`,
+                  width: "100%",
                   maxWidth: "none",
                   height: "auto",
                   objectFit: "contain",
-                  transformOrigin:
-                    "top left",
                   userSelect: "none",
+                  WebkitUserDrag: "none",
+                  touchAction: "none",
                 }}
               />
             </div>
