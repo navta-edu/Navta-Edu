@@ -1286,6 +1286,73 @@ function NavtaQuestionContent({
 // =====================================================
 
 export default function AdminNavtaTest() {
+  const [adminNavtaIsDarkMode, setAdminNavtaIsDarkMode] =
+    useState(() => {
+      if (typeof document === "undefined") return true;
+      return document.documentElement.classList.contains("dark");
+    });
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+
+    const readTheme = () => {
+      const html = document.documentElement;
+      const body = document.body;
+      const storedTheme =
+        localStorage.getItem("theme") ||
+        localStorage.getItem("navta-theme") ||
+        "";
+
+      const explicitLight =
+        html.classList.contains("light") ||
+        body.classList.contains("light") ||
+        html.getAttribute("data-theme") === "light" ||
+        body.getAttribute("data-theme") === "light" ||
+        storedTheme === "light";
+
+      const explicitDark =
+        html.classList.contains("dark") ||
+        body.classList.contains("dark") ||
+        html.getAttribute("data-theme") === "dark" ||
+        body.getAttribute("data-theme") === "dark" ||
+        storedTheme === "dark";
+
+      if (explicitLight) {
+        setAdminNavtaIsDarkMode(false);
+        return;
+      }
+
+      if (explicitDark) {
+        setAdminNavtaIsDarkMode(true);
+        return;
+      }
+
+      // NAVTA's normal theme implementation uses the root .dark class.
+      // When that class is absent, treat the site as light mode.
+      setAdminNavtaIsDarkMode(false);
+    };
+
+    readTheme();
+
+    const observer = new MutationObserver(readTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
+    });
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
+    });
+
+    window.addEventListener("storage", readTheme);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("storage", readTheme);
+    };
+  }, []);
+
+
   // ===================================================
   // MANUAL QUESTION STATE
   // ===================================================
@@ -4477,224 +4544,141 @@ export default function AdminNavtaTest() {
 
 
         /* =================================================
-           LIGHT MODE
-           Keeps the existing dark mode untouched.
+           ADMIN NAVTA TEST — REAL LIGHT MODE
+           Driven by the component's live theme state.
         ================================================= */
-        html.light .admin-navta-test-page,
-        body.light .admin-navta-test-page,
-        html.light-mode .admin-navta-test-page,
-        body.light-mode .admin-navta-test-page,
-        html[data-theme="light"] .admin-navta-test-page,
-        body[data-theme="light"] .admin-navta-test-page,
-        [data-theme="light"] .admin-navta-test-page,
-        .light-theme .admin-navta-test-page,
-        .theme-light .admin-navta-test-page {
-          background: #f8fafc;
-          color: #0f172a;
+        .admin-navta-test-page.admin-navta-light {
+          background: #f8fafc !important;
+          color: #0f172a !important;
         }
 
-        html.light .admin-navta-test-card,
-        body.light .admin-navta-test-card,
-        html.light-mode .admin-navta-test-card,
-        body.light-mode .admin-navta-test-card,
-        html[data-theme="light"] .admin-navta-test-card,
-        body[data-theme="light"] .admin-navta-test-card,
-        [data-theme="light"] .admin-navta-test-card,
-        .light-theme .admin-navta-test-card,
-        .theme-light .admin-navta-test-card {
-          background: #ffffff;
-          border-color: #d7e0ea;
-          color: #0f172a;
-          box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+        .admin-navta-light .admin-navta-test-title,
+        .admin-navta-light .admin-navta-section-title,
+        .admin-navta-light h1,
+        .admin-navta-light h2,
+        .admin-navta-light h3,
+        .admin-navta-light h4,
+        .admin-navta-light strong {
+          color: #0f172a !important;
         }
 
-        html.light .admin-navta-test-subtitle,
-        body.light .admin-navta-test-subtitle,
-        html.light-mode .admin-navta-test-subtitle,
-        body.light-mode .admin-navta-test-subtitle,
-        [data-theme="light"] .admin-navta-test-subtitle,
-        .light-theme .admin-navta-test-subtitle,
-        .theme-light .admin-navta-test-subtitle {
-          color: #64748b;
+        .admin-navta-light .admin-navta-test-subtitle {
+          color: #64748b !important;
         }
 
-        html.light .admin-navta-section-title,
-        body.light .admin-navta-section-title,
-        html.light-mode .admin-navta-section-title,
-        body.light-mode .admin-navta-section-title,
-        [data-theme="light"] .admin-navta-section-title,
-        .light-theme .admin-navta-section-title,
-        .theme-light .admin-navta-section-title {
-          color: #0f172a;
+        .admin-navta-light .admin-navta-test-card {
+          background: #ffffff !important;
+          border-color: #d7e0ea !important;
+          color: #0f172a !important;
+          box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06) !important;
         }
 
-        html.light .admin-navta-field label,
-        body.light .admin-navta-field label,
-        html.light-mode .admin-navta-field label,
-        body.light-mode .admin-navta-field label,
-        [data-theme="light"] .admin-navta-field label,
-        .light-theme .admin-navta-field label,
-        .theme-light .admin-navta-field label {
-          color: #334155;
+        .admin-navta-light .admin-navta-ai-card {
+          border-color: #bae6fd !important;
+          background:
+            radial-gradient(
+              circle at top right,
+              rgba(14, 165, 233, 0.10),
+              transparent 35%
+            ),
+            #f0f9ff !important;
         }
 
-        html.light .admin-navta-input,
-        html.light .admin-navta-select,
-        html.light .admin-navta-textarea,
-        body.light .admin-navta-input,
-        body.light .admin-navta-select,
-        body.light .admin-navta-textarea,
-        html.light-mode .admin-navta-input,
-        html.light-mode .admin-navta-select,
-        html.light-mode .admin-navta-textarea,
-        body.light-mode .admin-navta-input,
-        body.light-mode .admin-navta-select,
-        body.light-mode .admin-navta-textarea,
-        [data-theme="light"] .admin-navta-input,
-        [data-theme="light"] .admin-navta-select,
-        [data-theme="light"] .admin-navta-textarea,
-        .light-theme .admin-navta-input,
-        .light-theme .admin-navta-select,
-        .light-theme .admin-navta-textarea,
-        .theme-light .admin-navta-input,
-        .theme-light .admin-navta-select,
-        .theme-light .admin-navta-textarea {
-          background: #ffffff;
-          border-color: #cbd5e1;
-          color: #0f172a;
+        .admin-navta-light .admin-navta-label {
+          color: #334155 !important;
+        }
+
+        .admin-navta-light .admin-navta-input,
+        .admin-navta-light .admin-navta-select,
+        .admin-navta-light .admin-navta-textarea {
+          background: #ffffff !important;
+          color: #0f172a !important;
+          border-color: #cbd5e1 !important;
           color-scheme: light;
         }
 
-        html.light .admin-navta-input::placeholder,
-        html.light .admin-navta-textarea::placeholder,
-        body.light .admin-navta-input::placeholder,
-        body.light .admin-navta-textarea::placeholder,
-        [data-theme="light"] .admin-navta-input::placeholder,
-        [data-theme="light"] .admin-navta-textarea::placeholder,
-        .light-theme .admin-navta-input::placeholder,
-        .light-theme .admin-navta-textarea::placeholder,
-        .theme-light .admin-navta-input::placeholder,
-        .theme-light .admin-navta-textarea::placeholder {
-          color: #94a3b8;
+        .admin-navta-light .admin-navta-input::placeholder,
+        .admin-navta-light .admin-navta-textarea::placeholder {
+          color: #94a3b8 !important;
         }
 
-        html.light .admin-navta-ai-card,
-        body.light .admin-navta-ai-card,
-        html.light-mode .admin-navta-ai-card,
-        body.light-mode .admin-navta-ai-card,
-        [data-theme="light"] .admin-navta-ai-card,
-        .light-theme .admin-navta-ai-card,
-        .theme-light .admin-navta-ai-card {
-          background: #f0f9ff;
-          border-color: #bae6fd;
+        .admin-navta-light .admin-navta-info {
+          background: #f8fafc !important;
+          color: #475569 !important;
+          border-color: #dbe3ec !important;
         }
 
-        html.light .admin-navta-ai-info,
-        body.light .admin-navta-ai-info,
-        html.light-mode .admin-navta-ai-info,
-        body.light-mode .admin-navta-ai-info,
-        [data-theme="light"] .admin-navta-ai-info,
-        .light-theme .admin-navta-ai-info,
-        .theme-light .admin-navta-ai-info {
-          background: #ffffff;
-          border-color: #dbeafe;
-          color: #475569;
+        .admin-navta-light .admin-navta-ai-badge {
+          background: #e0f2fe !important;
+          color: #0369a1 !important;
         }
 
-        html.light .admin-navta-upload-box,
-        body.light .admin-navta-upload-box,
-        html.light-mode .admin-navta-upload-box,
-        body.light-mode .admin-navta-upload-box,
-        [data-theme="light"] .admin-navta-upload-box,
-        .light-theme .admin-navta-upload-box,
-        .theme-light .admin-navta-upload-box {
-          background: #ffffff;
-          border-color: #94a3b8;
-          color: #334155;
+        .admin-navta-light .admin-navta-file-box {
+          background: #ffffff !important;
+          color: #334155 !important;
+          border-color: #94a3b8 !important;
         }
 
-        html.light .admin-navta-summary-card,
-        body.light .admin-navta-summary-card,
-        html.light-mode .admin-navta-summary-card,
-        body.light-mode .admin-navta-summary-card,
-        [data-theme="light"] .admin-navta-summary-card,
-        .light-theme .admin-navta-summary-card,
-        .theme-light .admin-navta-summary-card {
-          background: #ffffff;
-          border-color: #d7e0ea;
-          color: #0f172a;
+        .admin-navta-light .admin-navta-secondary-button {
+          background: #ffffff !important;
+          color: #334155 !important;
+          border-color: #cbd5e1 !important;
         }
 
-        html.light .admin-navta-review-card,
-        body.light .admin-navta-review-card,
-        html.light-mode .admin-navta-review-card,
-        body.light-mode .admin-navta-review-card,
-        [data-theme="light"] .admin-navta-review-card,
-        .light-theme .admin-navta-review-card,
-        .theme-light .admin-navta-review-card {
-          background: #ffffff;
-          border-color: #d7e0ea;
-          color: #0f172a;
+        .admin-navta-light .admin-navta-secondary-button:hover {
+          color: #0369a1 !important;
+          border-color: #0ea5e9 !important;
         }
 
-        html.light .admin-navta-tabs,
-        body.light .admin-navta-tabs,
-        html.light-mode .admin-navta-tabs,
-        body.light-mode .admin-navta-tabs,
-        [data-theme="light"] .admin-navta-tabs,
-        .light-theme .admin-navta-tabs,
-        .theme-light .admin-navta-tabs {
-          border-color: #cbd5e1;
+        .admin-navta-light .admin-navta-message.success {
+          background: #ecfdf5 !important;
+          color: #047857 !important;
+          border-color: #86efac !important;
         }
 
-        html.light .admin-navta-tab:not(.active),
-        body.light .admin-navta-tab:not(.active),
-        html.light-mode .admin-navta-tab:not(.active),
-        body.light-mode .admin-navta-tab:not(.active),
-        [data-theme="light"] .admin-navta-tab:not(.active),
-        .light-theme .admin-navta-tab:not(.active),
-        .theme-light .admin-navta-tab:not(.active) {
-          color: #64748b;
+        .admin-navta-light .admin-navta-message.error {
+          background: #fef2f2 !important;
+          color: #b91c1c !important;
+          border-color: #fecaca !important;
         }
 
-        html.light .admin-navta-secondary-button,
-        body.light .admin-navta-secondary-button,
-        html.light-mode .admin-navta-secondary-button,
-        body.light-mode .admin-navta-secondary-button,
-        [data-theme="light"] .admin-navta-secondary-button,
-        .light-theme .admin-navta-secondary-button,
-        .theme-light .admin-navta-secondary-button {
-          background: #ffffff;
-          color: #334155;
-          border-color: #cbd5e1;
+        .admin-navta-light .admin-navta-import-summary-card,
+        .admin-navta-light .admin-navta-import-question-card,
+        .admin-navta-light .admin-navta-bank-card {
+          background: #ffffff !important;
+          color: #0f172a !important;
+          border-color: #d7e0ea !important;
         }
 
-        /* Generic fallbacks for nested text/controls in this page. */
-        html.light .admin-navta-test-page input,
-        html.light .admin-navta-test-page textarea,
-        html.light .admin-navta-test-page select,
-        body.light .admin-navta-test-page input,
-        body.light .admin-navta-test-page textarea,
-        body.light .admin-navta-test-page select,
-        html.light-mode .admin-navta-test-page input,
-        html.light-mode .admin-navta-test-page textarea,
-        html.light-mode .admin-navta-test-page select,
-        body.light-mode .admin-navta-test-page input,
-        body.light-mode .admin-navta-test-page textarea,
-        body.light-mode .admin-navta-test-page select,
-        [data-theme="light"] .admin-navta-test-page input,
-        [data-theme="light"] .admin-navta-test-page textarea,
-        [data-theme="light"] .admin-navta-test-page select,
-        .light-theme .admin-navta-test-page input,
-        .light-theme .admin-navta-test-page textarea,
-        .light-theme .admin-navta-test-page select,
-        .theme-light .admin-navta-test-page input,
-        .theme-light .admin-navta-test-page textarea,
-        .theme-light .admin-navta-test-page select {
-          background-color: #ffffff;
-          color: #0f172a;
-          border-color: #cbd5e1;
-          color-scheme: light;
+        .admin-navta-light .admin-navta-import-summary-label,
+        .admin-navta-light .admin-navta-import-question-meta,
+        .admin-navta-light .admin-navta-bank-meta,
+        .admin-navta-light .admin-navta-bank-options {
+          color: #64748b !important;
+        }
+
+        .admin-navta-light .admin-navta-import-tabs {
+          border-color: #cbd5e1 !important;
+        }
+
+        .admin-navta-light .admin-navta-import-tab {
+          color: #64748b !important;
+        }
+
+        .admin-navta-light .admin-navta-import-tab.active {
+          color: #0284c7 !important;
+        }
+
+        .admin-navta-light .admin-navta-image-edit-button,
+        .admin-navta-light .admin-navta-image-reset-button {
+          background: #ffffff !important;
+          color: #334155 !important;
+          border-color: #cbd5e1 !important;
+        }
+
+        .admin-navta-light select option {
+          background: #ffffff !important;
+          color: #0f172a !important;
         }
 
         @media (max-width: 700px) {
@@ -4723,7 +4707,13 @@ export default function AdminNavtaTest() {
         }
       `}</style>
 
-      <div className="admin-navta-test-page">
+      <div
+        className={`admin-navta-test-page ${
+          adminNavtaIsDarkMode
+            ? "admin-navta-dark"
+            : "admin-navta-light"
+        }`}
+      >
         <div className="admin-navta-test-container">
 
           <h1 className="admin-navta-test-title">
