@@ -1544,6 +1544,403 @@ exports.resetAIQuestionImage = async (
 
 
 // ============================================
+// ADMIN - SAVE MANUALLY CROPPED PDF QUESTION
+// ============================================
+//
+// POST /api/navta-test/questions/pdf-crop
+//
+// Expected:
+// multipart/form-data
+//
+// questionImage  -> cropped PNG/JPG file
+// subject
+// exam
+// classLevel
+// chapter
+// difficulty
+// correctAnswer  -> 0, 1, 2 or 3
+// sourcePdfName
+// sourcePage
+//
+// The complete printed question + printed A/B/C/D options
+// stay inside questionImage. The stored options are A/B/C/D so
+// the normal NAVTA TEST MCQ answer controls can still be used.
+// ============================================
+
+exports.createPDFCropQuestion = async (
+  req,
+  res
+) => {
+  try {
+    if (!req.file?.buffer) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please crop and upload a question image.",
+      });
+    }
+
+    const subject =
+      String(
+        req.body?.subject || ""
+      ).trim();
+
+    const exam =
+      String(
+        req.body?.exam || ""
+      ).trim();
+
+    const classLevel =
+      String(
+        req.body?.classLevel || ""
+      ).trim();
+
+    const chapter =
+      String(
+        req.body?.chapter || ""
+      ).trim();
+
+    const difficulty =
+      String(
+        req.body?.difficulty || ""
+      ).trim();
+
+    const sourcePdfName =
+      String(
+        req.body?.sourcePdfName || ""
+      ).trim();
+
+    const sourcePage =
+      Number(
+        req.body?.sourcePage
+      ) || null;
+
+    const answerIndex =
+      Number(
+        req.body?.correctAnswer
+      );
+
+    if (
+      !subject ||
+      !exam ||
+      !classLevel ||
+      !chapter ||
+      !difficulty
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Subject, preparation, class, chapter and difficulty are required.",
+      });
+    }
+
+    if (!allowedExams[subject]) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid subject.",
+      });
+    }
+
+    if (
+      !allowedExams[
+        subject
+      ].includes(exam)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          `${exam} is not available for ${subject}.`,
+      });
+    }
+
+    if (
+      classLevel !==
+        "Class 11" &&
+      classLevel !==
+        "Class 12"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid class.",
+      });
+    }
+
+    const chapterList =
+      allowedChapters?.[
+        subject
+      ]?.[
+        classLevel
+      ] || [];
+
+    if (
+      !chapterList.includes(
+        chapter
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid chapter for the selected subject and class.",
+      });
+    }
+
+    if (
+      !validDifficulties.includes(
+        difficulty
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid difficulty.",
+      });
+    }
+
+    if (
+      !Number.isInteger(
+        answerIndex
+      ) ||
+      answerIndex < 0 ||
+      answerIndex > 3
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Correct answer must be Option A, B, C or D.",
+      });
+    }
+
+    const mimeType =
+      String(
+        req.file.mimetype || ""
+      ).toLowerCase();
+
+    const allowedImageTypes =
+      new Set([
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "image/webp",
+      ]);
+
+    if (
+      mimeType &&
+      !allowedImageTypes.has(
+        mimeType
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "The cropped question must be a PNG, JPG or WEBP image.",
+      });
+    }
+
+    const uploaded =
+      await uploadAdminCropBuffer(
+        req.file.buffer,
+        {
+          folder:
+            "navta/pdf-question-crops",
+        }
+      );
+
+    const imageUrl =
+      String(
+        uploaded?.secure_url ||
+        uploaded?.url ||
+        ""
+      ).trim();
+
+    if (!imageUrl) {
+      throw new Error(
+        "Cloudinary did not return the cropped question image URL."
+      );
+    }
+
+    const questionImage = {
+      url:
+        imageUrl,
+
+      publicId:
+        String(
+          uploaded?.public_id ||
+          ""
+        ).trim(),
+
+      altText:
+        `${subject} ${chapter} question`,
+
+      sourcePage,
+
+      width:
+        Number(
+          uploaded?.width
+        ) || null,
+
+      height:
+        Number(
+          uploaded?.height
+        ) || null,
+    };
+
+    const payload = {
+      subject,
+      exam,
+      classLevel,
+      chapter,
+      difficulty,
+
+      questionType:
+        "mcq",
+
+      // The actual question and its printed choices are in the image.
+      // Keeping the visual marker here lets the existing NAVTA visual
+      // renderer place the crop as the question content.
+      question:
+        NAVTA_VISUAL_MARKER,
+
+      options: [
+        "A",
+        "B",
+        "C",
+        "D",
+      ],
+
+      correctAnswer:
+        answerIndex,
+
+      explanation:
+        "",
+
+      modelAnswer:
+        "",
+
+      keyPoints:
+        [],
+
+      evaluationInstructions:
+        "",
+
+      maxMarks:
+        1,
+
+      isActive:
+        true,
+
+      hasVisual:
+        true,
+
+      visualType:
+        "image",
+
+      visualDescription:
+        `${subject} ${chapter} question cropped from PDF`,
+
+      questionImage,
+
+      questionImages:
+        [questionImage],
+    };
+
+    // Add source metadata only when those paths exist in the current
+    // NavtaQuestion schema. This keeps the endpoint compatible with
+    // strict Mongoose schemas that do not yet contain these fields.
+    if (
+      NavtaQuestion.schema?.path(
+        "sourceDocument"
+      )
+    ) {
+      payload.sourceDocument = {
+        fileName:
+          sourcePdfName,
+
+        pageNumber:
+          sourcePage,
+      };
+    }
+
+    if (
+      NavtaQuestion.schema?.path(
+        "imageCropSource"
+      )
+    ) {
+      payload.imageCropSource =
+        "admin-pdf-crop";
+    }
+
+    if (
+      NavtaQuestion.schema?.path(
+        "createdBy"
+      ) &&
+      (
+        req.user?._id ||
+        req.user?.id
+      )
+    ) {
+      payload.createdBy =
+        req.user?._id ||
+        req.user?.id;
+    }
+
+    const newQuestion =
+      await NavtaQuestion.create(
+        payload
+      );
+
+    console.log(
+      "NAVTA PDF CROP QUESTION CREATED:",
+      {
+        questionId:
+          newQuestion?._id,
+
+        subject,
+        exam,
+        classLevel,
+        chapter,
+        difficulty,
+
+        sourcePdfName,
+        sourcePage,
+
+        adminUserId:
+          req.user?._id ||
+          req.user?.id ||
+          null,
+      }
+    );
+
+    return res.status(201).json({
+      success: true,
+
+      message:
+        "Cropped PDF question added to NAVTA TEST successfully.",
+
+      question:
+        newQuestion,
+
+      questionImage,
+    });
+  } catch (error) {
+    console.error(
+      "CREATE NAVTA PDF CROP QUESTION ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+
+      message:
+        error?.message ||
+        "Failed to save the cropped PDF question.",
+    });
+  }
+};
+
+
+// ============================================
 // CREATE QUESTION
 // ============================================
 
