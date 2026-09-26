@@ -557,107 +557,76 @@ const normalizeVisualType = (
 // BOUNDING BOX
 // =====================================================
 
-const normalizeBoundingBox = (
-  value
-) => {
-  if (
-    !value ||
-    typeof value !== "object"
-  ) {
-    return null;
-  }
+const normalizeBoundingBox = (value) => {
+  if (!value) return null;
 
-  let x =
-    Number(value.x);
+  let x;
+  let y;
+  let width;
+  let height;
 
-  let y =
-    Number(value.y);
+  if (Array.isArray(value) && value.length >= 4) {
+    // Gemini commonly expresses boxes as [ymin, xmin, ymax, xmax].
+    const [yMin, xMin, yMax, xMax] = value.map(Number);
+    if ([yMin, xMin, yMax, xMax].every(Number.isFinite)) {
+      x = xMin;
+      y = yMin;
+      width = xMax - xMin;
+      height = yMax - yMin;
+    }
+  } else if (typeof value === "object") {
+    const directX = Number(value.x);
+    const directY = Number(value.y);
+    const directWidth = Number(value.width);
+    const directHeight = Number(value.height);
 
-  let width =
-    Number(value.width);
+    if ([directX, directY, directWidth, directHeight].every(Number.isFinite)) {
+      x = directX;
+      y = directY;
+      width = directWidth;
+      height = directHeight;
+    } else {
+      const xMin = Number(value.xMin ?? value.xmin ?? value.left);
+      const yMin = Number(value.yMin ?? value.ymin ?? value.top);
+      const xMax = Number(value.xMax ?? value.xmax ?? value.right);
+      const yMax = Number(value.yMax ?? value.ymax ?? value.bottom);
 
-  let height =
-    Number(value.height);
-
-  if (
-    ![
-      x,
-      y,
-      width,
-      height,
-    ].every(
-      Number.isFinite
-    )
-  ) {
-    return null;
-  }
-
-  // Gemini may occasionally return percentages.
-  if (
-    x > 1 ||
-    y > 1 ||
-    width > 1 ||
-    height > 1
-  ) {
-    if (
-      x >= 0 &&
-      y >= 0 &&
-      x <= 100 &&
-      y <= 100 &&
-      width <= 100 &&
-      height <= 100
-    ) {
-      x /= 100;
-      y /= 100;
-      width /= 100;
-      height /= 100;
+      if ([xMin, yMin, xMax, yMax].every(Number.isFinite)) {
+        x = xMin;
+        y = yMin;
+        width = xMax - xMin;
+        height = yMax - yMin;
+      }
     }
   }
 
-  x = Math.min(
-    1,
-    Math.max(
-      0,
-      x
-    )
-  );
+  if (![x, y, width, height].every(Number.isFinite)) return null;
+  if (x < 0 || y < 0 || width <= 0 || height <= 0) return null;
 
-  y = Math.min(
-    1,
-    Math.max(
-      0,
-      y
-    )
-  );
+  // Accept normalized, percentage, and Gemini 0..1000 coordinate spaces.
+  const maxValue = Math.max(x, y, x + width, y + height);
+  let divisor = 1;
+  if (maxValue > 1 && maxValue <= 100) divisor = 100;
+  else if (maxValue > 100 && maxValue <= 1000) divisor = 1000;
+  else if (maxValue > 1000) return null;
 
-  width = Math.min(
-    1 - x,
-    Math.max(
-      0,
-      width
-    )
-  );
+  x /= divisor;
+  y /= divisor;
+  width /= divisor;
+  height /= divisor;
 
-  height = Math.min(
-    1 - y,
-    Math.max(
-      0,
-      height
-    )
-  );
+  const left = Math.max(0, Math.min(1, x));
+  const top = Math.max(0, Math.min(1, y));
+  const right = Math.max(left, Math.min(1, x + width));
+  const bottom = Math.max(top, Math.min(1, y + height));
 
-  if (
-    width <= 0 ||
-    height <= 0
-  ) {
-    return null;
-  }
+  if (right <= left || bottom <= top) return null;
 
   return {
-    x,
-    y,
-    width,
-    height,
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
   };
 };
 
@@ -1475,6 +1444,35 @@ VISUAL BOUNDING BOX RULE
 
 visualBoundingBox must tightly contain ONLY the genuine visual required
 to understand the question stem.
+
+MANDATORY VISUAL SCAN:
+For EVERY detected question, inspect the physical region from the end of the
+question stem down to the first answer option. Also inspect beside the stem
+when the PDF uses a two-column layout. Do this even when the text itself does
+not contain words such as "figure", "shown below", or "diagram".
+
+Treat any non-text academic object that carries information as a genuine visual:
+circuit, graph, ray diagram, geometry construction, labelled/unlabelled biology
+figure, apparatus, free-body diagram, vector drawing, map, waveform, optical
+figure, organic/skeletal structure, stereochemical drawing, reaction scheme,
+mechanism, structural answer-choice set, or other spatial scientific content.
+
+A diagram may have NO caption and the stem may have NO explicit visual keyword.
+Do not miss it for that reason.
+
+COORDINATE CONTRACT:
+Return visualBoundingBox as { "x", "y", "width", "height" } using NORMALIZED
+0..1 coordinates relative to the ENTIRE supplied page image:
+- x = left edge / page width
+- y = top edge / page height
+- width = visual width / page width
+- height = visual height / page height
+Origin is the TOP-LEFT of the page. Never swap x and y. Never return
+[ymin,xmin,ymax,xmax] in this field.
+
+If visual answer choices are necessary to answer the MCQ, the visualBoundingBox
+must include the complete visual answer-choice group as well as the associated
+question visual when required; never cut through an option.
 
 It must NOT contain:
 
@@ -2477,11 +2475,15 @@ const mergeVerifiedQuestion = (
         verified.dropReason
       ),
 
-    // Preserve the original stem and original visual placement/crop.
-    // Verification must never move/remove NAVTA_VISUAL or substitute
-    // questionBoundingBox for visualBoundingBox.
+    // Preserve the original stem unless the verifier recovered a visual
+    // that the first pass missed. In that case use the verified stem so the
+    // NAVTA_VISUAL marker is placed correctly.
     question:
-      original.question,
+      (!original.hasVisual &&
+       verified.hasVisual &&
+       verified.visualBoundingBox)
+        ? verified.question
+        : original.question,
 
     questionNumber:
       cleanString(
@@ -2500,16 +2502,36 @@ const mergeVerifiedQuestion = (
       verified.questionBoundingBox,
 
     hasVisual:
-      original.hasVisual,
+      Boolean(
+        original.hasVisual ||
+        (verified.hasVisual && verified.visualBoundingBox)
+      ),
 
     visualType:
-      original.visualType,
+      original.hasVisual
+        ? original.visualType
+        : (
+            verified.hasVisual && verified.visualBoundingBox
+              ? verified.visualType
+              : original.visualType
+          ),
 
     visualDescription:
-      original.visualDescription,
+      original.hasVisual
+        ? original.visualDescription
+        : (
+            verified.hasVisual && verified.visualBoundingBox
+              ? verified.visualDescription
+              : original.visualDescription
+          ),
 
     visualBoundingBox:
-      original.visualBoundingBox,
+      original.visualBoundingBox ||
+      (
+        verified.hasVisual
+          ? verified.visualBoundingBox
+          : null
+      ),
   };
 };
 
@@ -2617,6 +2639,22 @@ ${
     : "No whitelist supplied"
 }
 
+VISUAL RECOVERY — MANDATORY:
+For every uncertain question, inspect the original page again for a missed
+diagram/graph/circuit/geometry figure/biology figure/apparatus/organic structure/
+reaction scheme or visual answer-choice set.
+
+If a genuine required visual was missed, you MUST return:
+- hasVisual = true
+- the correct visualType
+- visualDescription
+- a tight visualBoundingBox in normalized 0..1 {x,y,width,height} coordinates
+- sourcePage
+- question containing exactly one [[NAVTA_VISUAL]] marker at the visual location.
+
+Do not use questionBoundingBox as visualBoundingBox. Do not crop ordinary prose.
+A visual can exist even when the stem contains no visual keyword.
+
 Return the same questions only, with corrected:
 
 - subject
@@ -2630,6 +2668,11 @@ Return the same questions only, with corrected:
 - answerConfidence
 - classificationConfidence
 - difficultyConfidence
+- hasVisual
+- visualType
+- visualDescription
+- visualBoundingBox
+- sourcePage
 - needsReview
 - drop
 - dropReason
@@ -2655,6 +2698,24 @@ ${JSON.stringify(
 
       options:
         question.options,
+
+      hasVisual:
+        question.hasVisual,
+
+      visualType:
+        question.visualType,
+
+      visualDescription:
+        question.visualDescription,
+
+      visualBoundingBox:
+        question.visualBoundingBox,
+
+      questionBoundingBox:
+        question.questionBoundingBox,
+
+      sourcePage:
+        question.sourcePage,
 
       subject:
         question.subject,
