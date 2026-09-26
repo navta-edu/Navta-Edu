@@ -811,6 +811,49 @@ function renderNavtaContent(
 const NAVTA_VISUAL_MARKER =
   "[[NAVTA_VISUAL]]";
 
+const NAVTA_VISUAL_MARKER_PATTERN =
+  /\[+\s*NAVTA[_\s-]*VISUAL\s*\]+/gi;
+
+function cleanNavtaVisualTextSegment(
+  input = "",
+  position = "both"
+) {
+  let value = String(input ?? "");
+
+  // Remove any complete visual markers that may have been
+  // stored with extra brackets, spaces or underscores.
+  value = value.replace(
+    NAVTA_VISUAL_MARKER_PATTERN,
+    ""
+  );
+
+  // PDF-cropped questions can occasionally be stored as:
+  // [[[ [[NAVTA_VISUAL]] ]]]
+  // After removing the marker, the outer [[[ / ]]] must not
+  // be shown to students.
+  if (
+    position === "before" ||
+    position === "both"
+  ) {
+    value = value.replace(
+      /(?:\s*\[{2,}\s*)+$/g,
+      ""
+    );
+  }
+
+  if (
+    position === "after" ||
+    position === "both"
+  ) {
+    value = value.replace(
+      /^(?:\s*\]{2,}\s*)+/g,
+      ""
+    );
+  }
+
+  return value.trim();
+}
+
 function getNavtaQuestionImage(question) {
   const visualType = String(
     question?.visualType || "none"
@@ -886,47 +929,236 @@ function NavtaVisual({
   className = "",
   shellClassName = "",
 }) {
+  const [isEnlarged, setIsEnlarged] =
+    useState(false);
+
   const image =
     getNavtaQuestionImage(
       question
     );
+
+  useEffect(() => {
+    if (!isEnlarged) {
+      return undefined;
+    }
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      "hidden";
+
+    const handleKeyDown = (
+      event
+    ) => {
+      if (event.key === "Escape") {
+        setIsEnlarged(false);
+      }
+    };
+
+    window.addEventListener(
+      "keydown",
+      handleKeyDown
+    );
+
+    return () => {
+      document.body.style.overflow =
+        previousOverflow;
+
+      window.removeEventListener(
+        "keydown",
+        handleKeyDown
+      );
+    };
+  }, [isEnlarged]);
 
   if (!image?.url) {
     return null;
   }
 
   return (
-    <div
-      className={
-        shellClassName
-      }
-      style={{
-        width: "100%",
-        display: "flex",
-        justifyContent: "center",
-        margin: "12px 0 16px",
-      }}
-    >
-      <img
-        src={image.url}
-        alt={image.altText}
-        className={className}
-        loading="eager"
-        decoding="async"
+    <>
+      <div
+        className={
+          shellClassName
+        }
         style={{
-          display: "block",
-          maxWidth: "100%",
-          width: "auto",
-          height: "auto",
-          maxHeight: "420px",
-          objectFit: "contain",
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "10px",
+          margin: "12px 0 16px",
         }}
-        onError={(event) => {
-          event.currentTarget.style.display =
-            "none";
-        }}
-      />
-    </div>
+      >
+        <button
+          type="button"
+          onClick={() =>
+            setIsEnlarged(true)
+          }
+          aria-label="Enlarge question image"
+          title="Click to enlarge image"
+          style={{
+            display: "block",
+            width: "100%",
+            padding: 0,
+            border: 0,
+            background: "transparent",
+            cursor: "zoom-in",
+          }}
+        >
+          <img
+            src={image.url}
+            alt={image.altText}
+            className={className}
+            loading="eager"
+            decoding="async"
+            style={{
+              display: "block",
+              maxWidth: "100%",
+              width: "auto",
+              height: "auto",
+              maxHeight: "420px",
+              objectFit: "contain",
+              margin: "0 auto",
+            }}
+            onError={(event) => {
+              event.currentTarget.style.display =
+                "none";
+            }}
+          />
+        </button>
+
+        <button
+          type="button"
+          onClick={() =>
+            setIsEnlarged(true)
+          }
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "7px",
+            minHeight: "38px",
+            padding: "8px 14px",
+            borderRadius: "10px",
+            border:
+              "1px solid rgba(59, 130, 246, 0.28)",
+            background:
+              "rgba(59, 130, 246, 0.08)",
+            color: "#2563eb",
+            fontSize: "13px",
+            fontWeight: 700,
+            cursor: "zoom-in",
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              fontSize: "16px",
+              lineHeight: 1,
+            }}
+          >
+            ⛶
+          </span>
+          Enlarge Image
+        </button>
+      </div>
+
+      {isEnlarged && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Enlarged question image"
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              setIsEnlarged(false);
+            }
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 99999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding:
+              "clamp(14px, 3vw, 36px)",
+            background:
+              "rgba(2, 6, 23, 0.88)",
+            backdropFilter: "blur(5px)",
+            WebkitBackdropFilter:
+              "blur(5px)",
+          }}
+        >
+          <div
+            style={{
+              position: "relative",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "min(1200px, 96vw)",
+              height: "min(850px, 92vh)",
+              padding:
+                "clamp(12px, 2vw, 24px)",
+              borderRadius: "18px",
+              background: "#ffffff",
+              boxShadow:
+                "0 24px 80px rgba(0, 0, 0, 0.35)",
+              overflow: "auto",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setIsEnlarged(false)
+              }
+              aria-label="Close enlarged image"
+              title="Close"
+              style={{
+                position: "absolute",
+                top: "12px",
+                right: "12px",
+                zIndex: 2,
+                width: "42px",
+                height: "42px",
+                display: "grid",
+                placeItems: "center",
+                border: 0,
+                borderRadius: "50%",
+                background:
+                  "rgba(15, 23, 42, 0.9)",
+                color: "#ffffff",
+                fontSize: "25px",
+                lineHeight: 1,
+                cursor: "pointer",
+                boxShadow:
+                  "0 8px 24px rgba(0, 0, 0, 0.2)",
+              }}
+            >
+              ×
+            </button>
+
+            <img
+              src={image.url}
+              alt={image.altText}
+              style={{
+                display: "block",
+                width: "auto",
+                height: "auto",
+                maxWidth: "100%",
+                maxHeight: "100%",
+                objectFit: "contain",
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -949,26 +1181,28 @@ function NavtaQuestionContent({
     return (
       <>
         {renderNavtaContent(
-          text
-            .split(
-              NAVTA_VISUAL_MARKER
-            )
-            .join("")
-            .trim()
+          cleanNavtaVisualTextSegment(
+            text,
+            "both"
+          )
         )}
       </>
     );
   }
 
-  if (
-    !text.includes(
-      NAVTA_VISUAL_MARKER
-    )
-  ) {
+  const markerMatch =
+    text.match(
+      NAVTA_VISUAL_MARKER_PATTERN
+    );
+
+  if (!markerMatch) {
     return (
       <>
         {renderNavtaContent(
-          text
+          cleanNavtaVisualTextSegment(
+            text,
+            "both"
+          )
         )}
 
         <NavtaVisual
@@ -984,16 +1218,31 @@ function NavtaQuestionContent({
     );
   }
 
-  const [
-    beforeVisual,
-    ...afterParts
-  ] =
-    text.split(
-      NAVTA_VISUAL_MARKER
+  const markerIndex =
+    text.search(
+      NAVTA_VISUAL_MARKER_PATTERN
+    );
+
+  const matchedMarker =
+    markerMatch[0];
+
+  const beforeVisual =
+    cleanNavtaVisualTextSegment(
+      text.slice(
+        0,
+        markerIndex
+      ),
+      "before"
     );
 
   const afterVisual =
-    afterParts.join("");
+    cleanNavtaVisualTextSegment(
+      text.slice(
+        markerIndex +
+          matchedMarker.length
+      ),
+      "after"
+    );
 
   return (
     <>
@@ -1017,6 +1266,7 @@ function NavtaQuestionContent({
     </>
   );
 }
+
 
 
 function shouldUseNavtaQuestionScreenshot(question) {
