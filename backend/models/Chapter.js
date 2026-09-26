@@ -4,26 +4,33 @@ const ChapterSchema = new mongoose.Schema({
   subject: {
     type: mongoose.Schema.ObjectId,
     ref: 'Subject',
-    required: true
+    required: true,
+    index: true
   },
+
   title: {
     type: String,
-    required: [true, 'Please add a chapter title']
+    required: [true, 'Please add a chapter title'],
+    trim: true
   },
-  chapterNumber: {
-    type: Number,
-    required: true
-  },
+
   description: {
-    type: String
+    type: String,
+    trim: true,
+    default: ''
   },
+
   createdAt: {
     type: Date,
     default: Date.now
   }
 });
 
-// Avoid duplicate chapter numbers within the same subject
-ChapterSchema.index({ subject: 1, chapterNumber: 1 }, { unique: true });
+// Prevent the same chapter title from being added twice
+// under the same subject.
+ChapterSchema.index(
+  { subject: 1, title: 1 },
+  { unique: true }
+);
 
 module.exports = mongoose.model('Chapter', ChapterSchema);
