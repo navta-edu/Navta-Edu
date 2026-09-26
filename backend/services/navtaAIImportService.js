@@ -285,6 +285,26 @@ const cleanString = (
   ).trim();
 };
 
+// =====================================================
+// NAVTA AI QUESTION TEXT CLEANUP
+// =====================================================
+// Keep internal visual markers out of AI-imported question text.
+// Visuals are stored separately in questionImage/questionImages.
+const NAVTA_VISUAL_MARKER_PATTERN =
+  /\[+\s*NAVTA[_\s-]*VISUAL\s*\]+/gi;
+
+const cleanImportedQuestionText = (value = "") => {
+  return cleanString(value)
+    .replace(NAVTA_VISUAL_MARKER_PATTERN, " ")
+    .replace(/\[\s*\[\s*\[\s*/g, " ")
+    .replace(/\s*\]\s*\]\s*\]/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+};
+
 const safeArray = (
   value
 ) => {
@@ -805,7 +825,7 @@ const stripDuplicatedOptionsFromQuestion = (
   options = []
 ) => {
   const text =
-    cleanString(
+    cleanImportedQuestionText(
       questionText
     );
 
@@ -1042,7 +1062,7 @@ const validateDetectedQuestion = (
     ...rawQuestion,
 
     question:
-      cleanString(
+      cleanImportedQuestionText(
         rawQuestion?.question
       ),
 
@@ -1677,7 +1697,9 @@ const buildImportQuestion = ({
       ),
 
     question:
-      question.question,
+      cleanImportedQuestionText(
+        question.question
+      ),
 
     subject:
       question.subject,
