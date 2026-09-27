@@ -634,12 +634,12 @@ const resolveBestVisualCropBox = (
     };
   }
 
+  // Keep Gemini's visual box unchanged here.
+  // navtaDiagramCropService applies the single, tiny crop padding.
+  // Padding in both services caused nearby prose/options to leak into diagrams.
   return {
     box:
-      expandBoundingBox(
-        visualBox,
-        NAVTA_AI_VISUAL_CROP_PADDING
-      ),
+      visualBox,
 
     originalBox:
       visualBox,
@@ -1545,6 +1545,9 @@ const processQuestionVisual =
 
           pageBuffer:
             renderedPage.buffer,
+
+          padding:
+            NAVTA_AI_VISUAL_CROP_PADDING,
         });
 
       if (
