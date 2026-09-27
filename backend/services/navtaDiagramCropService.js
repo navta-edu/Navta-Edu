@@ -9,8 +9,8 @@ const { createCanvas, loadImage } = require("@napi-rs/canvas");
 const DEFAULT_PADDING = Math.max(
   0,
   Math.min(
-    0.03,
-    Number(process.env.NAVTA_AI_VISUAL_CROP_PADDING || 0.005) || 0.005
+    0.01,
+    Number(process.env.NAVTA_AI_VISUAL_CROP_PADDING || 0) || 0
   )
 );
 
@@ -100,7 +100,7 @@ const addVisualPadding = (box, padding = DEFAULT_PADDING) => {
   // Padding is deliberately tiny. The AI bounding box is expected to contain
   // the complete diagram already; large percentage padding was pulling prose
   // and answer choices into student-facing images.
-  const safePadding = clamp(Number(padding) || 0, 0, 0.03);
+  const safePadding = clamp(Number(padding) || 0, 0, 0.01);
   const padX = normalized.width * safePadding;
   const padY = normalized.height * safePadding;
 
