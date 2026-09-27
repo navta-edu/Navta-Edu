@@ -2463,8 +2463,17 @@ const shouldVerifyQuestion = (
     return true;
   }
 
-  // FAST MODE: accept a valid first-pass visualBoundingBox.
-  // Only genuinely uncertain questions use the expensive verifier.
+  // DIAGRAM SAFETY: every detected visual gets a second page-image pass.
+  // A first-pass box can be syntactically valid while still containing nearby
+  // prose/options or clipping labels, so visual crops must be verified even
+  // when classification/answer confidence is high.
+  if (
+    question.hasVisual &&
+    question.visualBoundingBox
+  ) {
+    return true;
+  }
+
   if (
     question.questionType === "mcq" &&
     hasPlaceholderOnlyMcqOptions(
@@ -2692,13 +2701,13 @@ const mergeVerifiedQuestion = (
               : original.visualDescription
           ),
 
+    // For a visual question the verifier has just re-inspected the original
+    // page specifically to correct the crop. Prefer that corrected box instead
+    // of permanently keeping the first-pass box.
     visualBoundingBox:
-      original.visualBoundingBox ||
-      (
-        verified.hasVisual
-          ? verified.visualBoundingBox
-          : null
-      ),
+      (verified.hasVisual && verified.visualBoundingBox)
+        ? verified.visualBoundingBox
+        : original.visualBoundingBox,
   };
 };
 
@@ -2763,8 +2772,14 @@ VISUAL CROP VERIFICATION:
 For every supplied question with hasVisual=true, inspect the original page again.
 Return a corrected visualBoundingBox that tightly surrounds ONLY the genuine
 diagram/graph/circuit/figure. Exclude question prose, question number, options,
-headers, footers and unrelated nearby text. Keep labels/dimensions that are part
-of the diagram. Never use questionBoundingBox as visualBoundingBox.
+headers, footers and unrelated nearby text. Keep EVERY label, coordinate, axis,
+arrow, dimension, legend, symbol and annotation that actually belongs to the
+visual. The TOP edge must start immediately before the first real visual mark;
+the BOTTOM edge must stop immediately after the final visual label and BEFORE
+answer choices. The LEFT/RIGHT edges must include all visual labels but no nearby
+prose. If the first-pass box includes prose/options, SHRINK it. If it clips any
+real visual label/line, EXPAND only that necessary edge. Never use
+questionBoundingBox as visualBoundingBox.
 
 Do not create new questions.
 
