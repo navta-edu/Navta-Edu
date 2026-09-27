@@ -5,6 +5,12 @@ const { createCanvas, loadImage } = require("@napi-rs/canvas");
 // =====================================================
 // Uses @napi-rs/canvas only. No sharp dependency.
 // IMPORTANT: Never falls back to questionBoundingBox.
+//
+// Diagram-only refinement:
+// After the AI visualBoundingBox is cropped, this service removes obvious
+// detached horizontal text bands at the TOP of the crop. It deliberately
+// avoids trimming the bottom/left/right so diagram labels, axes, dimensions,
+// masses, coordinates and option-independent annotations remain intact.
 
 const DEFAULT_PADDING = Math.max(
   0,
@@ -97,9 +103,6 @@ const addVisualPadding = (box, padding = DEFAULT_PADDING) => {
   const normalized = normalizeBox(box);
   if (!normalized) return null;
 
-  // Padding is deliberately tiny. The AI bounding box is expected to contain
-  // the complete diagram already; large percentage padding was pulling prose
-  // and answer choices into student-facing images.
   const safePadding = clamp(Number(padding) || 0, 0, 0.01);
   const padX = normalized.width * safePadding;
   const padY = normalized.height * safePadding;
@@ -156,6 +159,194 @@ const boundingBoxToPixels = ({
   };
 };
 
+// Returns true when a pixel is visibly non-white / non-background.
+const isInkPixel = (data, index) => {
+  const alpha = data[index + 3];
+  if (alpha < 20) return false;
+
+  const r = data[index];
+  const g = data[index + 1];
+  const b = data[index + 2];
+
+  // PDF pages are rendered on white. This threshold keeps anti-aliased
+  // black/grey diagram strokes while ignoring near-white background noise.
+  return r < 238 || g < 238 || b < 238;
+};
+
+const getRowInkStats = (imageData, width, height) => {
+  const rows = new Array(height);
+
+  for (let y = 0; y < height; y += 1) {
+    let ink = 0;
+    let firstX = width;
+    let lastX = -1;
+
+    const rowStart = y * width * 4;
+
+    for (let x = 0; x < width; x += 1) {
+      const index = rowStart + x * 4;
+      if (!isInkPixel(imageData.data, index)) continue;
+
+      ink += 1;
+      if (x < firstX) firstX = x;
+      if (x > lastX) lastX = x;
+    }
+
+    rows[y] = {
+      ink,
+      density: width > 0 ? ink / width : 0,
+      span:
+        lastX >= firstX && width > 0
+          ? (lastX - firstX + 1) / width
+          : 0,
+    };
+  }
+
+  return rows;
+};
+
+const findTopDiagramTrim = (canvas) => {
+  const width = Number(canvas.width);
+  const height = Number(canvas.height);
+
+  // Do not refine very small crops. They are already likely diagram-only.
+  if (width < 120 || height < 120) return 0;
+
+  const context = canvas.getContext("2d");
+  const imageData = context.getImageData(0, 0, width, height);
+  const rows = getRowInkStats(imageData, width, height);
+
+  // Only inspect the upper portion. This prevents the heuristic from
+  // accidentally trimming labels belonging to the lower diagram.
+  const searchEnd = Math.max(
+    1,
+    Math.min(height - 1, Math.floor(height * 0.48))
+  );
+
+  const activeThreshold = Math.max(2, Math.floor(width * 0.003));
+  const blankThreshold = Math.max(1, Math.floor(width * 0.0015));
+  const minGap = Math.max(8, Math.floor(height * 0.025));
+  const maxGap = Math.max(minGap, Math.floor(height * 0.16));
+
+  let lastTopInk = -1;
+  let gapStart = -1;
+
+  for (let y = 0; y < searchEnd; y += 1) {
+    const row = rows[y];
+    const active =
+      row.ink >= activeThreshold ||
+      row.density >= 0.004 ||
+      row.span >= 0.08;
+
+    if (active) {
+      if (gapStart >= 0 && lastTopInk >= 0) {
+        const gapSize = y - gapStart;
+
+        if (gapSize >= minGap && gapSize <= maxGap) {
+          // Measure the content before the gap. A detached prose/corrupt-glyph
+          // band usually has many ink pixels and a wide horizontal span.
+          let topInk = 0;
+          let topWideRows = 0;
+          let topActiveRows = 0;
+
+          for (let ty = 0; ty <= lastTopInk; ty += 1) {
+            const topRow = rows[ty];
+            topInk += topRow.ink;
+
+            if (topRow.ink >= activeThreshold) {
+              topActiveRows += 1;
+            }
+
+            if (topRow.span >= 0.28) {
+              topWideRows += 1;
+            }
+          }
+
+          // Measure the content after the gap. Require meaningful diagram ink
+          // so an empty/accidental region is never selected as the new top.
+          let lowerInk = 0;
+          const lowerEnd = Math.min(
+            height,
+            y + Math.max(30, Math.floor(height * 0.2))
+          );
+
+          for (let ly = y; ly < lowerEnd; ly += 1) {
+            lowerInk += rows[ly].ink;
+          }
+
+          const looksLikeDetachedTextBand =
+            topInk >= width * 0.25 &&
+            topActiveRows >= 3 &&
+            (topWideRows >= 1 || topInk >= width * 0.6);
+
+          const hasDiagramBelow = lowerInk >= width * 0.12;
+
+          if (looksLikeDetachedTextBand && hasDiagramBelow) {
+            // Keep a tiny amount of whitespace above the real diagram.
+            return Math.max(
+              0,
+              gapStart - Math.max(2, Math.floor(height * 0.008))
+            );
+          }
+        }
+      }
+
+      lastTopInk = y;
+      gapStart = -1;
+    } else if (
+      lastTopInk >= 0 &&
+      gapStart < 0 &&
+      row.ink <= blankThreshold
+    ) {
+      gapStart = y;
+    }
+  }
+
+  return 0;
+};
+
+const refineTopOfVisualCrop = (canvas) => {
+  const trimTop = findTopDiagramTrim(canvas);
+  if (!trimTop || trimTop <= 0 || trimTop >= canvas.height - 1) {
+    return {
+      canvas,
+      trimTop: 0,
+    };
+  }
+
+  const refinedHeight = canvas.height - trimTop;
+
+  // Safety: never throw away most of the proposed visual.
+  if (refinedHeight < Math.max(70, Math.floor(canvas.height * 0.5))) {
+    return {
+      canvas,
+      trimTop: 0,
+    };
+  }
+
+  const refinedCanvas = createCanvas(canvas.width, refinedHeight);
+  const refinedContext = refinedCanvas.getContext("2d");
+  refinedContext.fillStyle = "#ffffff";
+  refinedContext.fillRect(0, 0, refinedCanvas.width, refinedCanvas.height);
+
+  refinedContext.drawImage(
+    canvas,
+    0,
+    trimTop,
+    canvas.width,
+    refinedHeight,
+    0,
+    0,
+    canvas.width,
+    refinedHeight
+  );
+
+  return {
+    canvas: refinedCanvas,
+    trimTop,
+  };
+};
+
 const cropVisualFromPage = async ({
   pageBuffer,
   boundingBox,
@@ -180,12 +371,12 @@ const cropVisualFromPage = async ({
     padding,
   });
 
-  const canvas = createCanvas(crop.width, crop.height);
-  const context = canvas.getContext("2d");
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, crop.width, crop.height);
+  const initialCanvas = createCanvas(crop.width, crop.height);
+  const initialContext = initialCanvas.getContext("2d");
+  initialContext.fillStyle = "#ffffff";
+  initialContext.fillRect(0, 0, crop.width, crop.height);
 
-  context.drawImage(
+  initialContext.drawImage(
     sourceImage,
     crop.x,
     crop.y,
@@ -197,19 +388,50 @@ const cropVisualFromPage = async ({
     crop.height
   );
 
-  const buffer = await canvas.encode("png");
+  // Remove only an obvious detached text/glyph band ABOVE the real diagram.
+  // If the heuristic is not confident, the original AI crop is preserved.
+  const refined = refineTopOfVisualCrop(initialCanvas);
+  const finalCanvas = refined.canvas;
+
+  const buffer = await finalCanvas.encode("png");
 
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
     throw new Error("NAVTA could not encode the cropped visual.");
   }
 
+  const topShiftNormalized =
+    refined.trimTop > 0
+      ? (refined.trimTop / imageHeight)
+      : 0;
+
+  const finalBoundingBox = {
+    x: crop.normalizedBoundingBox.x,
+    y: clamp(
+      crop.normalizedBoundingBox.y + topShiftNormalized,
+      0,
+      1
+    ),
+    width: crop.normalizedBoundingBox.width,
+    height: clamp(
+      crop.normalizedBoundingBox.height - topShiftNormalized,
+      0,
+      1
+    ),
+  };
+
   return {
     buffer,
     mimeType: "image/png",
-    width: crop.width,
-    height: crop.height,
-    crop,
-    boundingBox: crop.normalizedBoundingBox,
+    width: finalCanvas.width,
+    height: finalCanvas.height,
+    crop: {
+      ...crop,
+      y: crop.y + refined.trimTop,
+      height: finalCanvas.height,
+      normalizedBoundingBox: finalBoundingBox,
+      autoTrimTop: refined.trimTop,
+    },
+    boundingBox: finalBoundingBox,
     originalBoundingBox: crop.originalBoundingBox,
   };
 };
@@ -240,11 +462,51 @@ const createOptionDiagram = async ({
   const optionBox = normalizeBox(boundingBox);
   if (!optionBox || !isUsableVisualBox(optionBox)) return null;
 
-  return cropVisualFromPage({
-    pageBuffer,
+  // Option images should remain exact. Do not run question-diagram top-band
+  // refinement on answer-option artwork.
+  if (!Buffer.isBuffer(pageBuffer) || pageBuffer.length === 0) {
+    throw new Error("A valid rendered PDF page buffer is required.");
+  }
+
+  const sourceImage = await loadImage(pageBuffer);
+  const imageWidth = Number(sourceImage.width);
+  const imageHeight = Number(sourceImage.height);
+
+  const crop = boundingBoxToPixels({
     boundingBox: optionBox,
+    imageWidth,
+    imageHeight,
     padding,
   });
+
+  const canvas = createCanvas(crop.width, crop.height);
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, crop.width, crop.height);
+
+  context.drawImage(
+    sourceImage,
+    crop.x,
+    crop.y,
+    crop.width,
+    crop.height,
+    0,
+    0,
+    crop.width,
+    crop.height
+  );
+
+  const buffer = await canvas.encode("png");
+
+  return {
+    buffer,
+    mimeType: "image/png",
+    width: crop.width,
+    height: crop.height,
+    crop,
+    boundingBox: crop.normalizedBoundingBox,
+    originalBoundingBox: crop.originalBoundingBox,
+  };
 };
 
 module.exports = {
