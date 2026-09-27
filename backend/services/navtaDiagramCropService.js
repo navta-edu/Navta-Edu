@@ -1,16 +1,16 @@
 const { createCanvas, loadImage } = require("@napi-rs/canvas");
 
 // =====================================================
-// NAVTA DIAGRAM CROP SERVICE - 503 SAFE
+// NAVTA DIAGRAM CROP SERVICE - TIGHT VISUAL CROP
 // =====================================================
 // Uses @napi-rs/canvas only. No sharp dependency.
-// Never falls back to questionBoundingBox.
+// IMPORTANT: Never falls back to questionBoundingBox.
 
 const DEFAULT_PADDING = Math.max(
   0,
   Math.min(
-    0.08,
-    Number(process.env.NAVTA_AI_VISUAL_CROP_PADDING || 0.025) || 0.025
+    0.03,
+    Number(process.env.NAVTA_AI_VISUAL_CROP_PADDING || 0.008) || 0.008
   )
 );
 
@@ -82,9 +82,13 @@ const normalizeBox = (box) => {
 const isUsableVisualBox = (box) => {
   const normalized = normalizeBox(box);
   if (!normalized) return false;
+
+  const area = normalized.width * normalized.height;
+
   return (
     normalized.width >= 0.003 &&
     normalized.height >= 0.003 &&
+    area >= 0.00002 &&
     !(normalized.width >= 0.985 && normalized.height >= 0.985)
   );
 };
@@ -93,7 +97,10 @@ const addVisualPadding = (box, padding = DEFAULT_PADDING) => {
   const normalized = normalizeBox(box);
   if (!normalized) return null;
 
-  const safePadding = clamp(Number(padding) || 0, 0, 0.08);
+  // Padding is deliberately tiny. The AI bounding box is expected to contain
+  // the complete diagram already; large percentage padding was pulling prose
+  // and answer choices into student-facing images.
+  const safePadding = clamp(Number(padding) || 0, 0, 0.03);
   const padX = normalized.width * safePadding;
   const padY = normalized.height * safePadding;
 
