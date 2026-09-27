@@ -2802,17 +2802,47 @@ export default function AdminNavtaTest() {
           );
         }
 
+        const fetchWithNetworkRetry = async (
+          url,
+          options,
+          { retries = 3, retryDelay = 1800 } = {}
+        ) => {
+          let lastError = null;
+
+          for (let attempt = 0; attempt <= retries; attempt += 1) {
+            try {
+              return await fetch(url, options);
+            } catch (error) {
+              lastError = error;
+              const errorText = String(error?.message || "").toLowerCase();
+              const isNetworkError =
+                error instanceof TypeError ||
+                errorText.includes("failed to fetch") ||
+                errorText.includes("network");
+
+              if (!isNetworkError || attempt >= retries) throw error;
+
+              setImportMessage(
+                `Network changed. Reconnecting to NAVTA AI... (${attempt + 1}/${retries})`
+              );
+              setImportMessageType("success");
+              await wait(retryDelay * (attempt + 1));
+            }
+          }
+
+          throw lastError || new Error("Unable to connect to NAVTA AI.");
+        };
+
         const response =
-          await fetch(
+          await fetchWithNetworkRetry(
             "/api/navta-test/import",
             {
               method: "POST",
-              credentials:
-                "include",
-              headers:
-                buildAdminHeaders(),
+              credentials: "include",
+              headers: buildAdminHeaders(),
               body: formData,
-            }
+            },
+            { retries: 2, retryDelay: 2000 }
           );
 
         let data = {};
@@ -2878,19 +2908,40 @@ export default function AdminNavtaTest() {
         ) {
           await wait(2000);
 
-          const jobResponse =
-            await fetch(
-              `/api/navta-test/import/jobs/${encodeURIComponent(
-                jobId
-              )}`,
-              {
-                method: "GET",
-                credentials:
-                  "include",
-                headers:
-                  buildAdminHeaders(),
-              }
-            );
+          let jobResponse;
+
+          try {
+            jobResponse =
+              await fetchWithNetworkRetry(
+                `/api/navta-test/import/jobs/${encodeURIComponent(
+                  jobId
+                )}`,
+                {
+                  method: "GET",
+                  credentials: "include",
+                  headers: buildAdminHeaders(),
+                },
+                { retries: 3, retryDelay: 1500 }
+              );
+          } catch (pollNetworkError) {
+            const errorText = String(
+              pollNetworkError?.message || ""
+            ).toLowerCase();
+
+            if (
+              pollNetworkError instanceof TypeError ||
+              errorText.includes("failed to fetch") ||
+              errorText.includes("network")
+            ) {
+              setImportMessage(
+                "NAVTA AI is still processing. Network reconnecting..."
+              );
+              setImportMessageType("success");
+              continue;
+            }
+
+            throw pollNetworkError;
+          }
 
           let jobData = {};
 
