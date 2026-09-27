@@ -10,7 +10,7 @@ const DEFAULT_PADDING = Math.max(
   0,
   Math.min(
     0.03,
-    Number(process.env.NAVTA_AI_VISUAL_CROP_PADDING || 0.008) || 0.008
+    Number(process.env.NAVTA_AI_VISUAL_CROP_PADDING || 0.005) || 0.005
   )
 );
 
