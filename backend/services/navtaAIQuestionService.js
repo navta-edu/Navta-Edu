@@ -46,6 +46,17 @@ const NAVTA_AI_EMPTY_BATCH_RETRIES = Math.max(
   )
 );
 
+// Run a second independent extraction pass per page by default.
+// Results are merged and de-duplicated. This is intentionally more thorough
+// than retrying only pages that return zero questions.
+const NAVTA_AI_COMPLETENESS_PASSES = Math.max(
+  1,
+  Math.min(
+    3,
+    Number(process.env.NAVTA_AI_COMPLETENESS_PASSES || 2) || 2
+  )
+);
+
 const NAVTA_VISUAL_MARKER = "[[NAVTA_VISUAL]]";
 
 const NAVTA_AI_VERIFY_LOW_CONFIDENCE =
@@ -1115,6 +1126,17 @@ long
 YOUR JOB:
 Detect every COMPLETE and READABLE academic question on the supplied page images.
 
+COMPLETENESS AUDIT — MANDATORY:
+- Scan each supplied page from TOP to BOTTOM before returning JSON.
+- Do not stop after finding the first few questions.
+- Detect every readable question number and every complete question on the page.
+- A page may contain many questions; return ALL of them.
+- Re-scan the bottom of the page before finishing.
+- If a question begins near the bottom and continues on the next supplied page,
+  combine it only when the continuation is actually visible; never silently omit it.
+- Before returning JSON, compare the number of question-number regions you can see
+  with the number of question objects you are returning.
+
 =======================================================
 CRITICAL QUESTION TEXT RULES
 =======================================================
@@ -1466,6 +1488,16 @@ VISUAL BOUNDING BOX RULE
 
 visualBoundingBox must tightly contain ONLY the genuine visual required
 to understand the question stem.
+
+TIGHT-CROP AUDIT — MANDATORY:
+- Treat visualBoundingBox as a student-facing crop, not a rough locator.
+- Put each edge immediately outside the actual diagram/graph/circuit/figure ink.
+- Keep only labels, dimensions, arrows and symbols that belong to the visual itself.
+- EXCLUDE the question sentence above the figure even if it is close to the diagram.
+- EXCLUDE answer choices below/alongside the figure.
+- EXCLUDE question numbers, headers, footers and unrelated prose.
+- Do not add generous whitespace around the visual.
+- Re-check all four edges before returning the box.
 
 MANDATORY VISUAL SCAN:
 For EVERY detected question, inspect the physical region from the end of the
@@ -2413,6 +2445,15 @@ const shouldVerifyQuestion = (
     return true;
   }
 
+  // Every visual gets a second look because the visualBoundingBox directly
+  // controls the student-facing crop.
+  if (
+    question.hasVisual &&
+    question.visualBoundingBox
+  ) {
+    return true;
+  }
+
   if (
     question.questionType === "mcq" &&
     hasPlaceholderOnlyMcqOptions(
@@ -2706,6 +2747,13 @@ IMPORTANT EFFICIENCY RULE:
 
 
 Verify only the uncertain questions listed below against the supplied original PDF page images.
+
+VISUAL CROP VERIFICATION:
+For every supplied question with hasVisual=true, inspect the original page again.
+Return a corrected visualBoundingBox that tightly surrounds ONLY the genuine
+diagram/graph/circuit/figure. Exclude question prose, question number, options,
+headers, footers and unrelated nearby text. Keep labels/dimensions that are part
+of the diagram. Never use questionBoundingBox as visualBoundingBox.
 
 Do not create new questions.
 
@@ -3701,6 +3749,43 @@ const analyseRenderedPages =
             );
           }
         }
+      }
+
+      // Completeness passes: independently scan the same page/batch again,
+      // then merge + de-duplicate. This catches questions a single Gemini pass
+      // can overlook even when that first pass returned a non-zero result.
+      if (!lastError && NAVTA_AI_COMPLETENESS_PASSES > 1) {
+        const completenessQuestions = [...batchQuestions];
+
+        for (
+          let pass = 2;
+          pass <= NAVTA_AI_COMPLETENESS_PASSES;
+          pass += 1
+        ) {
+          try {
+            const extraQuestions = await analyseRenderedPageBatch({
+              pages: batch,
+              text,
+              hints,
+            });
+
+            completenessQuestions.push(...extraQuestions);
+
+            console.log(
+              `NAVTA AI completeness pass ${pass}/${NAVTA_AI_COMPLETENESS_PASSES} ` +
+              `for page batch ${pageNumbers}: detected ${extraQuestions.length} question(s).`
+            );
+          } catch (error) {
+            // The primary extraction already succeeded. A failed completeness
+            // pass must not discard those valid questions.
+            console.warn(
+              `NAVTA AI completeness pass ${pass} failed for ${pageNumbers}:`,
+              error?.message || error
+            );
+          }
+        }
+
+        batchQuestions = removeQuestionDuplicates(completenessQuestions);
       }
 
       if (lastError) {
