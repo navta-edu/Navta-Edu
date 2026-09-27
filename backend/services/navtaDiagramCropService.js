@@ -212,71 +212,121 @@ const rowIsActive = (row, width) => {
 };
 
 const findTopDiagramTrim = (rows, width, height) => {
+  // Search only the upper half. A diagram's genuine lower labels must never
+  // be affected by this top cleanup.
   const searchEnd = Math.max(
     1,
-    Math.min(height - 1, Math.floor(height * 0.48))
+    Math.min(height - 1, Math.floor(height * 0.52))
   );
 
   const blankThreshold = Math.max(1, Math.floor(width * 0.0015));
-  const minGap = Math.max(8, Math.floor(height * 0.025));
-  const maxGap = Math.max(minGap, Math.floor(height * 0.16));
+  const minGap = Math.max(5, Math.floor(height * 0.012));
+  const safety = Math.max(4, Math.floor(height * 0.012));
 
-  let lastTopInk = -1;
-  let gapStart = -1;
+  // Build active row runs separated by real whitespace.
+  const runs = [];
+  let runStart = -1;
+  let lastActive = -1;
 
   for (let y = 0; y < searchEnd; y += 1) {
-    const row = rows[y];
+    const active = rowIsActive(rows[y], width);
 
-    if (rowIsActive(row, width)) {
-      if (gapStart >= 0 && lastTopInk >= 0) {
-        const gapSize = y - gapStart;
+    if (active) {
+      if (runStart < 0) runStart = y;
+      lastActive = y;
+      continue;
+    }
 
-        if (gapSize >= minGap && gapSize <= maxGap) {
-          let topInk = 0;
-          let topWideRows = 0;
-          let topActiveRows = 0;
-
-          for (let ty = 0; ty <= lastTopInk; ty += 1) {
-            const topRow = rows[ty];
-            topInk += topRow.ink;
-            if (rowIsActive(topRow, width)) topActiveRows += 1;
-            if (topRow.span >= 0.28) topWideRows += 1;
-          }
-
-          let lowerInk = 0;
-          const lowerEnd = Math.min(
-            height,
-            y + Math.max(30, Math.floor(height * 0.2))
-          );
-
-          for (let ly = y; ly < lowerEnd; ly += 1) {
-            lowerInk += rows[ly].ink;
-          }
-
-          const looksLikeDetachedTextBand =
-            topInk >= width * 0.25 &&
-            topActiveRows >= 3 &&
-            (topWideRows >= 1 || topInk >= width * 0.6);
-
-          const hasDiagramBelow = lowerInk >= width * 0.12;
-
-          if (looksLikeDetachedTextBand && hasDiagramBelow) {
-            return Math.max(
-              0,
-              gapStart - Math.max(3, Math.floor(height * 0.012))
-            );
-          }
-        }
+    if (
+      runStart >= 0 &&
+      rows[y].ink <= blankThreshold
+    ) {
+      let gapEnd = y;
+      while (
+        gapEnd < searchEnd &&
+        !rowIsActive(rows[gapEnd], width)
+      ) {
+        gapEnd += 1;
       }
 
-      lastTopInk = y;
-      gapStart = -1;
-    } else if (
-      lastTopInk >= 0 &&
-      gapStart < 0 &&
-      row.ink <= blankThreshold
+      if (gapEnd - y >= minGap) {
+        runs.push({
+          start: runStart,
+          end: lastActive,
+        });
+        runStart = -1;
+        lastActive = -1;
+        y = gapEnd - 1;
+      }
+    }
+  }
+
+  if (runStart >= 0) {
+    runs.push({
+      start: runStart,
+      end: lastActive,
+    });
+  }
+
+  if (runs.length < 2) return 0;
+
+  const scoreRun = (run) => {
+    let ink = 0;
+    let wideRows = 0;
+    let activeRows = 0;
+    let maxSpan = 0;
+
+    for (let y = run.start; y <= run.end; y += 1) {
+      const row = rows[y];
+      ink += row.ink;
+      if (rowIsActive(row, width)) activeRows += 1;
+      if (row.span >= 0.30) wideRows += 1;
+      maxSpan = Math.max(maxSpan, row.span);
+    }
+
+    return {
+      ...run,
+      ink,
+      wideRows,
+      activeRows,
+      maxSpan,
+      height: run.end - run.start + 1,
+    };
+  };
+
+  const scored = runs.map(scoreRun);
+
+  // Exam-question prose / broken-font text normally forms one or more shallow,
+  // wide runs near the top. The real figure below tends to be taller and/or
+  // structurally denser. Find the first run that looks like the start of the
+  // actual visual and discard only preceding detached text runs.
+  for (let i = 1; i < scored.length; i += 1) {
+    const candidate = scored[i];
+    const before = scored.slice(0, i);
+
+    const precedingLooksTextLike =
+      before.every((run) =>
+        run.height <= Math.max(42, Math.floor(height * 0.16)) &&
+        (
+          run.maxSpan >= 0.22 ||
+          run.wideRows >= 1 ||
+          run.ink >= width * 0.20
+        )
+      );
+
+    const candidateLooksStructural =
+      candidate.height >= Math.max(18, Math.floor(height * 0.055)) ||
+      candidate.ink >= width * 0.22;
+
+    const gap =
+      candidate.start - before[before.length - 1].end - 1;
+
+    if (
+      precedingLooksTextLike &&
+      candidateLooksStructural &&
+      gap >= minGap
     ) {
-      gapStart = y;
+      return Math.max(0, candidate.start - safety);
     }
   }
 
