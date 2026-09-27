@@ -2781,6 +2781,14 @@ prose. If the first-pass box includes prose/options, SHRINK it. If it clips any
 real visual label/line, EXPAND only that necessary edge. Never use
 questionBoundingBox as visualBoundingBox.
 
+FINAL DIAGRAM-ONLY EDGE CHECK — MANDATORY:
+- Mentally erase all ordinary question prose and all answer choices before choosing the box.
+- visualBoundingBox must begin at the first pixel/mark belonging to the figure itself, not at text that describes the figure.
+- A line of prose, OCR text, question number, option row, or unrelated glyph boxes above/below the figure makes the box INVALID.
+- Preserve text only when it is physically part of the figure: axis names, point labels, masses, lengths, angles, coordinates, legends, circuit labels, reaction labels, dimensions and arrows.
+- Prefer a slightly larger box around genuine figure labels over clipping them, but NEVER use that margin to include prose/options.
+- Re-check all four edges against the original page image before returning the corrected visualBoundingBox.
+
 Do not create new questions.
 
 Do not remove a readable question merely because the answer is uncertain.
