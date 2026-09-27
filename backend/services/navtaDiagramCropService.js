@@ -168,8 +168,6 @@ const isInkPixel = (data, index) => {
   const g = data[index + 1];
   const b = data[index + 2];
 
-  // PDF pages are rendered on white. This threshold keeps anti-aliased
-  // black/grey diagram strokes while ignoring near-white background noise.
   return r < 238 || g < 238 || b < 238;
 };
 
@@ -180,7 +178,6 @@ const getRowInkStats = (imageData, width, height) => {
     let ink = 0;
     let firstX = width;
     let lastX = -1;
-
     const rowStart = y * width * 4;
 
     for (let x = 0; x < width; x += 1) {
@@ -205,25 +202,21 @@ const getRowInkStats = (imageData, width, height) => {
   return rows;
 };
 
-const findTopDiagramTrim = (canvas) => {
-  const width = Number(canvas.width);
-  const height = Number(canvas.height);
+const rowIsActive = (row, width) => {
+  const activeThreshold = Math.max(2, Math.floor(width * 0.003));
+  return (
+    row.ink >= activeThreshold ||
+    row.density >= 0.004 ||
+    row.span >= 0.08
+  );
+};
 
-  // Do not refine very small crops. They are already likely diagram-only.
-  if (width < 120 || height < 120) return 0;
-
-  const context = canvas.getContext("2d");
-  const imageData = context.getImageData(0, 0, width, height);
-  const rows = getRowInkStats(imageData, width, height);
-
-  // Only inspect the upper portion. This prevents the heuristic from
-  // accidentally trimming labels belonging to the lower diagram.
+const findTopDiagramTrim = (rows, width, height) => {
   const searchEnd = Math.max(
     1,
     Math.min(height - 1, Math.floor(height * 0.48))
   );
 
-  const activeThreshold = Math.max(2, Math.floor(width * 0.003));
   const blankThreshold = Math.max(1, Math.floor(width * 0.0015));
   const minGap = Math.max(8, Math.floor(height * 0.025));
   const maxGap = Math.max(minGap, Math.floor(height * 0.16));
@@ -233,18 +226,12 @@ const findTopDiagramTrim = (canvas) => {
 
   for (let y = 0; y < searchEnd; y += 1) {
     const row = rows[y];
-    const active =
-      row.ink >= activeThreshold ||
-      row.density >= 0.004 ||
-      row.span >= 0.08;
 
-    if (active) {
+    if (rowIsActive(row, width)) {
       if (gapStart >= 0 && lastTopInk >= 0) {
         const gapSize = y - gapStart;
 
         if (gapSize >= minGap && gapSize <= maxGap) {
-          // Measure the content before the gap. A detached prose/corrupt-glyph
-          // band usually has many ink pixels and a wide horizontal span.
           let topInk = 0;
           let topWideRows = 0;
           let topActiveRows = 0;
@@ -252,18 +239,10 @@ const findTopDiagramTrim = (canvas) => {
           for (let ty = 0; ty <= lastTopInk; ty += 1) {
             const topRow = rows[ty];
             topInk += topRow.ink;
-
-            if (topRow.ink >= activeThreshold) {
-              topActiveRows += 1;
-            }
-
-            if (topRow.span >= 0.28) {
-              topWideRows += 1;
-            }
+            if (rowIsActive(topRow, width)) topActiveRows += 1;
+            if (topRow.span >= 0.28) topWideRows += 1;
           }
 
-          // Measure the content after the gap. Require meaningful diagram ink
-          // so an empty/accidental region is never selected as the new top.
           let lowerInk = 0;
           const lowerEnd = Math.min(
             height,
@@ -282,10 +261,9 @@ const findTopDiagramTrim = (canvas) => {
           const hasDiagramBelow = lowerInk >= width * 0.12;
 
           if (looksLikeDetachedTextBand && hasDiagramBelow) {
-            // Keep a tiny amount of whitespace above the real diagram.
             return Math.max(
               0,
-              gapStart - Math.max(2, Math.floor(height * 0.008))
+              gapStart - Math.max(3, Math.floor(height * 0.012))
             );
           }
         }
@@ -305,45 +283,165 @@ const findTopDiagramTrim = (canvas) => {
   return 0;
 };
 
-const refineTopOfVisualCrop = (canvas) => {
-  const trimTop = findTopDiagramTrim(canvas);
-  if (!trimTop || trimTop <= 0 || trimTop >= canvas.height - 1) {
+const findBottomDiagramTrim = (rows, width, height, topTrim = 0) => {
+  // Look for a clear whitespace separator followed by a detached lower block.
+  // This targets answer-choice rows below a diagram without cropping labels
+  // that remain visually connected to the diagram itself.
+  const searchStart = Math.max(
+    topTrim + Math.floor((height - topTrim) * 0.42),
+    Math.floor(height * 0.35)
+  );
+  const searchEnd = Math.min(height - 1, Math.floor(height * 0.94));
+
+  const blankThreshold = Math.max(1, Math.floor(width * 0.0015));
+  const minGap = Math.max(9, Math.floor(height * 0.025));
+  const maxGap = Math.max(minGap, Math.floor(height * 0.18));
+  const bottomSafety = Math.max(8, Math.floor(height * 0.025));
+
+  let lastUpperInk = -1;
+  let gapStart = -1;
+
+  for (let y = searchStart; y < searchEnd; y += 1) {
+    const row = rows[y];
+
+    if (rowIsActive(row, width)) {
+      if (gapStart >= 0 && lastUpperInk >= 0) {
+        const gapSize = y - gapStart;
+
+        if (gapSize >= minGap && gapSize <= maxGap) {
+          // Ensure substantial diagram content exists above this gap.
+          let upperInk = 0;
+          const upperStart = Math.max(
+            topTrim,
+            lastUpperInk - Math.floor(height * 0.30)
+          );
+          for (let uy = upperStart; uy <= lastUpperInk; uy += 1) {
+            upperInk += rows[uy].ink;
+          }
+
+          // Measure detached content below the gap. MCQ choices commonly form
+          // several active rows / glyph clusters after a whitespace separator.
+          let lowerInk = 0;
+          let lowerActiveRows = 0;
+          let lowerWideRows = 0;
+          const lowerEnd = Math.min(
+            height,
+            y + Math.max(45, Math.floor(height * 0.28))
+          );
+
+          for (let ly = y; ly < lowerEnd; ly += 1) {
+            const lowerRow = rows[ly];
+            lowerInk += lowerRow.ink;
+            if (rowIsActive(lowerRow, width)) lowerActiveRows += 1;
+            if (lowerRow.span >= 0.16) lowerWideRows += 1;
+          }
+
+          const hasDiagramAbove = upperInk >= width * 0.16;
+          const looksLikeDetachedLowerBlock =
+            lowerInk >= width * 0.18 &&
+            lowerActiveRows >= 4 &&
+            (lowerWideRows >= 1 || lowerInk >= width * 0.45);
+
+          if (hasDiagramAbove && looksLikeDetachedLowerBlock) {
+            // Stop in the whitespace gap, but keep a safety margin beneath
+            // genuine diagram labels/coordinates.
+            return Math.min(
+              height,
+              Math.max(
+                lastUpperInk + bottomSafety,
+                gapStart + Math.floor(gapSize * 0.35)
+              )
+            );
+          }
+        }
+      }
+
+      lastUpperInk = y;
+      gapStart = -1;
+    } else if (
+      lastUpperInk >= 0 &&
+      gapStart < 0 &&
+      row.ink <= blankThreshold
+    ) {
+      gapStart = y;
+    }
+  }
+
+  return height;
+};
+
+const refineVisualCrop = (canvas) => {
+  const width = Number(canvas.width);
+  const height = Number(canvas.height);
+
+  if (width < 120 || height < 120) {
     return {
       canvas,
       trimTop: 0,
+      trimBottom: 0,
     };
   }
 
-  const refinedHeight = canvas.height - trimTop;
+  const context = canvas.getContext("2d");
+  const imageData = context.getImageData(0, 0, width, height);
+  const rows = getRowInkStats(imageData, width, height);
 
-  // Safety: never throw away most of the proposed visual.
-  if (refinedHeight < Math.max(70, Math.floor(canvas.height * 0.5))) {
+  const trimTop = findTopDiagramTrim(rows, width, height);
+  const bottomEdge = findBottomDiagramTrim(
+    rows,
+    width,
+    height,
+    trimTop
+  );
+
+  const safeBottomEdge = clamp(bottomEdge, trimTop + 1, height);
+  const refinedHeight = safeBottomEdge - trimTop;
+
+  // Never allow the heuristic to remove most of the proposed diagram.
+  if (
+    refinedHeight < Math.max(70, Math.floor(height * 0.48))
+  ) {
     return {
       canvas,
       trimTop: 0,
+      trimBottom: 0,
     };
   }
 
-  const refinedCanvas = createCanvas(canvas.width, refinedHeight);
+  if (trimTop === 0 && safeBottomEdge === height) {
+    return {
+      canvas,
+      trimTop: 0,
+      trimBottom: 0,
+    };
+  }
+
+  const refinedCanvas = createCanvas(width, refinedHeight);
   const refinedContext = refinedCanvas.getContext("2d");
   refinedContext.fillStyle = "#ffffff";
-  refinedContext.fillRect(0, 0, refinedCanvas.width, refinedCanvas.height);
+  refinedContext.fillRect(
+    0,
+    0,
+    refinedCanvas.width,
+    refinedCanvas.height
+  );
 
   refinedContext.drawImage(
     canvas,
     0,
     trimTop,
-    canvas.width,
+    width,
     refinedHeight,
     0,
     0,
-    canvas.width,
+    width,
     refinedHeight
   );
 
   return {
     canvas: refinedCanvas,
     trimTop,
+    trimBottom: height - safeBottomEdge,
   };
 };
 
@@ -388,9 +486,9 @@ const cropVisualFromPage = async ({
     crop.height
   );
 
-  // Remove only an obvious detached text/glyph band ABOVE the real diagram.
-  // If the heuristic is not confident, the original AI crop is preserved.
-  const refined = refineTopOfVisualCrop(initialCanvas);
+  // Remove confident detached text/glyph bands above or below the real
+  // diagram. If the heuristic is not confident, the original crop is kept.
+  const refined = refineVisualCrop(initialCanvas);
   const finalCanvas = refined.canvas;
 
   const buffer = await finalCanvas.encode("png");
@@ -401,7 +499,12 @@ const cropVisualFromPage = async ({
 
   const topShiftNormalized =
     refined.trimTop > 0
-      ? (refined.trimTop / imageHeight)
+      ? refined.trimTop / imageHeight
+      : 0;
+
+  const bottomShiftNormalized =
+    refined.trimBottom > 0
+      ? refined.trimBottom / imageHeight
       : 0;
 
   const finalBoundingBox = {
@@ -413,7 +516,9 @@ const cropVisualFromPage = async ({
     ),
     width: crop.normalizedBoundingBox.width,
     height: clamp(
-      crop.normalizedBoundingBox.height - topShiftNormalized,
+      crop.normalizedBoundingBox.height -
+        topShiftNormalized -
+        bottomShiftNormalized,
       0,
       1
     ),
@@ -430,6 +535,7 @@ const cropVisualFromPage = async ({
       height: finalCanvas.height,
       normalizedBoundingBox: finalBoundingBox,
       autoTrimTop: refined.trimTop,
+      autoTrimBottom: refined.trimBottom,
     },
     boundingBox: finalBoundingBox,
     originalBoundingBox: crop.originalBoundingBox,
