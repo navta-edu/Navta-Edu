@@ -1503,8 +1503,9 @@ TIGHT-CROP AUDIT — MANDATORY:
 - Keep only labels, dimensions, arrows and symbols that belong to the visual itself.
 - EXCLUDE the question sentence above the figure even if it is close to the diagram.
 - EXCLUDE answer choices below/alongside the figure.
-- visualBoundingBox is NEVER allowed to include MCQ answer choices. Option visuals
-  belong only in optionVisualBoundingBoxes.
+- visualBoundingBox is NEVER allowed to include MCQ answer choices.
+- If answer choices themselves contain visual drawings, do NOT enlarge the question
+  diagram crop to include them; keep the question visual crop limited to the stem visual.
 - If the diagram is above the options, the BOTTOM edge of visualBoundingBox must
   stop immediately after the diagram's own labels/dimensions and BEFORE option A.
 - EXCLUDE question numbers, headers, footers and unrelated prose.
@@ -1536,9 +1537,9 @@ Return visualBoundingBox as { "x", "y", "width", "height" } using NORMALIZED
 Origin is the TOP-LEFT of the page. Never swap x and y. Never return
 [ymin,xmin,ymax,xmax] in this field.
 
-If visual answer choices are necessary to answer the MCQ, the visualBoundingBox
-must include the complete visual answer-choice group as well as the associated
-question visual when required; never cut through an option.
+If answer choices themselves contain drawings, do NOT merge those drawings into
+the question visualBoundingBox. Keep visualBoundingBox limited to the genuine
+question-stem visual. Never extend it downward merely to capture answer choices.
 
 It must NOT contain:
 
