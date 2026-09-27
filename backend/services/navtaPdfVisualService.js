@@ -38,8 +38,8 @@ const validatePdfBuffer = (buffer) => {
 
 const normalizeScale = (scale) => {
   const value = Number(scale);
-  if (!Number.isFinite(value)) return 1.8;
-  return Math.min(2.6, Math.max(1, value));
+  if (!Number.isFinite(value)) return 2.4;
+  return Math.min(3.2, Math.max(1.4, value));
 };
 
 const normalizeMaxPages = (maxPages) => {
@@ -48,7 +48,7 @@ const normalizeMaxPages = (maxPages) => {
   return Math.floor(value);
 };
 
-const renderPdfPageToPng = async ({ page, scale = 1.8 }) => {
+const renderPdfPageToPng = async ({ page, scale = 2.4 }) => {
   if (!page || typeof page.getViewport !== "function") {
     throw new Error("A valid PDF page is required.");
   }
@@ -63,10 +63,15 @@ const renderPdfPageToPng = async ({ page, scale = 1.8 }) => {
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, width, height);
 
+  // Keep image smoothing enabled for diagrams/curves while rendering at a
+  // higher source resolution. PDF.js still draws vector geometry directly.
+  context.imageSmoothingEnabled = true;
+
   const renderTask = page.render({
     canvasContext: context,
     viewport,
     background: "#ffffff",
+    intent: "display",
   });
 
   await renderTask.promise;
@@ -86,10 +91,19 @@ const openPdf = async (buffer) => {
 
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(buffer),
-    useSystemFonts: false,
+
+    // IMPORTANT FOR NAVTA DIAGRAM LABELS:
+    // Some exam PDFs use non-embedded/custom fonts. With useSystemFonts=false,
+    // PDF.js can render those missing glyphs as rectangular boxes. Allowing
+    // system-font fallback gives PDF.js a usable replacement while embedded
+    // fonts are still used whenever the PDF provides them.
+    useSystemFonts: true,
     disableFontFace: false,
+
     cMapPacked: true,
     isEvalSupported: false,
+    useWasm: true,
+    stopEvent: false,
     ...resources,
   });
 
@@ -104,7 +118,7 @@ const closePdf = async (pdf) => {
 
 const renderPdfPages = async ({
   buffer,
-  scale = 1.8,
+  scale = 2.4,
   maxPages = 250,
 }) => {
   validatePdfBuffer(buffer);
@@ -140,7 +154,7 @@ const renderPdfPages = async ({
 const renderSelectedPdfPages = async ({
   buffer,
   pageNumbers = [],
-  scale = 1.8,
+  scale = 2.4,
 }) => {
   validatePdfBuffer(buffer);
 
