@@ -57,6 +57,14 @@ const NAVTA_AI_COMPLETENESS_PASSES = Math.max(
   )
 );
 
+const NAVTA_AI_PAGE_CONCURRENCY = Math.max(
+  1,
+  Math.min(
+    4,
+    Number(process.env.NAVTA_AI_PAGE_CONCURRENCY || 3) || 3
+  )
+);
+
 const NAVTA_VISUAL_MARKER = "[[NAVTA_VISUAL]]";
 
 const NAVTA_AI_VERIFY_LOW_CONFIDENCE =
@@ -1495,6 +1503,10 @@ TIGHT-CROP AUDIT — MANDATORY:
 - Keep only labels, dimensions, arrows and symbols that belong to the visual itself.
 - EXCLUDE the question sentence above the figure even if it is close to the diagram.
 - EXCLUDE answer choices below/alongside the figure.
+- visualBoundingBox is NEVER allowed to include MCQ answer choices. Option visuals
+  belong only in optionVisualBoundingBoxes.
+- If the diagram is above the options, the BOTTOM edge of visualBoundingBox must
+  stop immediately after the diagram's own labels/dimensions and BEFORE option A.
 - EXCLUDE question numbers, headers, footers and unrelated prose.
 - Do not add generous whitespace around the visual.
 - Re-check all four edges before returning the box.
@@ -3646,211 +3658,75 @@ const analyseRenderedPages =
       );
     }
 
-    const allQuestions =
-      [];
+    const allQuestions = [];
 
-    for (
-      let start = 0;
-      start <
-      validPages.length;
-      start +=
-        NAVTA_AI_PAGES_PER_REQUEST
-    ) {
-      const batch =
-        validPages.slice(
-          start,
-          start +
-            NAVTA_AI_PAGES_PER_REQUEST
-        );
+    // FAST + COMPLETE MODE:
+    // One page per Gemini request prevents questions on one page from crowding
+    // questions on another page out of the JSON response. Several pages are
+    // analysed concurrently, so this remains fast.
+    const analyseOnePage = async (page) => {
+      const pageNumber = page.pageNumber;
+      const attempts = 1 + NAVTA_AI_EMPTY_BATCH_RETRIES;
+      let lastError = null;
 
-      const pageNumbers =
-        batch
-          .map(
-            (page) =>
-              page.pageNumber
-          )
-          .join(", ");
-
-      console.log(
-        `NAVTA AI analysing page batch: ${pageNumbers}`
-      );
-
-      let batchQuestions =
-        [];
-
-      let lastError =
-        null;
-
-      const attempts =
-        1 +
-        NAVTA_AI_EMPTY_BATCH_RETRIES;
-
-      for (
-        let attempt = 1;
-        attempt <=
-          attempts;
-        attempt += 1
-      ) {
+      for (let attempt = 1; attempt <= attempts; attempt += 1) {
         try {
-          batchQuestions =
-            await analyseRenderedPageBatch({
-              pages:
-                batch,
+          const questions = await analyseRenderedPageBatch({
+            pages: [page],
+            text,
+            hints,
+          });
 
-              text,
+          lastError = null;
 
-              hints,
-            });
-
-          lastError =
-            null;
-
-          if (
-            batchQuestions.length >
-              0
-          ) {
-            break;
-          }
-
-          if (
-            attempt <
-            attempts
-          ) {
-            console.warn(
-              `NAVTA AI batch ${pageNumbers} returned 0 questions; retrying once for completeness.`
+          if (questions.length > 0 || attempt >= attempts) {
+            console.log(
+              `NAVTA AI page ${pageNumber}: detected ${questions.length} question(s).`
             );
+            return questions;
           }
-        } catch (
-          error
-        ) {
-          lastError =
-            error;
+        } catch (error) {
+          lastError = error;
 
-          const isJsonRecoveryError =
+          const recoverable =
             error?.code === "NAVTA_INVALID_JSON" ||
             error?.code === "NAVTA_EMPTY_JSON";
 
-          // HTTP/capacity/network retries already happen inside callGemini().
-          // Do not repeat the entire page batch after those retries are exhausted.
-          if (!isJsonRecoveryError) {
+          if (!recoverable || attempt >= attempts) {
             throw error;
           }
-
-          if (attempt < attempts) {
-            console.warn(
-              `NAVTA AI batch ${pageNumbers} returned invalid/incomplete JSON on attempt ${attempt}; retrying the same batch.`
-            );
-          }
         }
       }
 
-      // Completeness passes: independently scan the same page/batch again,
-      // then merge + de-duplicate. This catches questions a single Gemini pass
-      // can overlook even when that first pass returned a non-zero result.
-      if (!lastError && NAVTA_AI_COMPLETENESS_PASSES > 1) {
-        const completenessQuestions = [...batchQuestions];
+      if (lastError) throw lastError;
+      return [];
+    };
 
-        for (
-          let pass = 2;
-          pass <= NAVTA_AI_COMPLETENESS_PASSES;
-          pass += 1
-        ) {
-          try {
-            const extraQuestions = await analyseRenderedPageBatch({
-              pages: batch,
-              text,
-              hints,
-            });
+    let nextPageIndex = 0;
+    const pageResults = new Array(validPages.length);
 
-            completenessQuestions.push(...extraQuestions);
+    const worker = async () => {
+      while (true) {
+        const index = nextPageIndex;
+        nextPageIndex += 1;
 
-            console.log(
-              `NAVTA AI completeness pass ${pass}/${NAVTA_AI_COMPLETENESS_PASSES} ` +
-              `for page batch ${pageNumbers}: detected ${extraQuestions.length} question(s).`
-            );
-          } catch (error) {
-            // The primary extraction already succeeded. A failed completeness
-            // pass must not discard those valid questions.
-            console.warn(
-              `NAVTA AI completeness pass ${pass} failed for ${pageNumbers}:`,
-              error?.message || error
-            );
-          }
-        }
+        if (index >= validPages.length) return;
 
-        batchQuestions = removeQuestionDuplicates(completenessQuestions);
+        pageResults[index] = await analyseOnePage(validPages[index]);
       }
+    };
 
-      if (lastError) {
-        const canSplitBatch =
-          batch.length > 1 &&
-          (
-            lastError?.code === "NAVTA_INVALID_JSON" ||
-            lastError?.code === "NAVTA_EMPTY_JSON"
-          );
+    const workerCount = Math.min(
+      NAVTA_AI_PAGE_CONCURRENCY,
+      validPages.length
+    );
 
-        if (!canSplitBatch) {
-          throw lastError;
-        }
+    await Promise.all(
+      Array.from({ length: workerCount }, () => worker())
+    );
 
-        console.warn(
-          `NAVTA AI batch ${pageNumbers} still returned invalid JSON; falling back to one-page extraction.`
-        );
-
-        batchQuestions = [];
-
-        for (const singlePage of batch) {
-          const singlePageNumber = singlePage.pageNumber;
-          let singlePageQuestions = [];
-          let singlePageError = null;
-
-          for (let singleAttempt = 1; singleAttempt <= attempts; singleAttempt += 1) {
-            try {
-              singlePageQuestions = await analyseRenderedPageBatch({
-                pages: [singlePage],
-                text,
-                hints,
-              });
-
-              singlePageError = null;
-
-              if (singlePageQuestions.length > 0 || singleAttempt >= attempts) {
-                break;
-              }
-            } catch (error) {
-              singlePageError = error;
-
-              const isJsonRecoveryError =
-                error?.code === "NAVTA_INVALID_JSON" ||
-                error?.code === "NAVTA_EMPTY_JSON";
-
-              if (!isJsonRecoveryError || singleAttempt >= attempts) {
-                throw error;
-              }
-
-              console.warn(
-                `NAVTA AI page ${singlePageNumber} returned invalid/incomplete JSON; retrying page alone.`
-              );
-            }
-          }
-
-          if (singlePageError) {
-            throw singlePageError;
-          }
-
-          batchQuestions.push(...singlePageQuestions);
-        }
-
-        lastError = null;
-      }
-
-      allQuestions.push(
-        ...batchQuestions
-      );
-
-      console.log(
-        `NAVTA AI batch ${pageNumbers}: detected ${batchQuestions.length} question(s).`
-      );
+    for (const questions of pageResults) {
+      allQuestions.push(...safeArray(questions));
     }
 
     const deduplicated =
