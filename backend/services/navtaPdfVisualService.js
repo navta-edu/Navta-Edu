@@ -97,8 +97,12 @@ const openPdf = async (buffer) => {
     // PDF.js can render those missing glyphs as rectangular boxes. Allowing
     // system-font fallback gives PDF.js a usable replacement while embedded
     // fonts are still used whenever the PDF provides them.
+    // Render PDF glyph outlines directly whenever possible. In Node,
+    // relying on canvas font-face substitution can turn custom exam-PDF
+    // symbols/labels into empty rectangular boxes.
     useSystemFonts: true,
-    disableFontFace: false,
+    disableFontFace: true,
+    fontExtraProperties: true,
 
     cMapPacked: true,
     isEvalSupported: false,
