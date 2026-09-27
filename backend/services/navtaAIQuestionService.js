@@ -1260,6 +1260,28 @@ JSON + LATEX SAFETY — MANDATORY:
 - Before returning JSON, verify all $ delimiters, braces and \left...\right pairs are balanced.
 - Do not simplify or rewrite the mathematics; preserve the printed meaning.
 
+PHYSICS VECTOR NOTATION — MANDATORY:
+
+- A printed vector MUST remain a vector. Never silently convert a vector into an ordinary scalar letter.
+- Use \\overrightarrow{...} for vector quantities. Prefer this over \\vec{...} for NAVTA output.
+- Unit vectors must use \\hat{i}, \\hat{j}, \\hat{k}.
+- Vector equations and vector-valued answer choices MUST be inside $...$ delimiters.
+- Never return bare text such as overrightarrow{P}, vec{P}, P⃗, or a LaTeX vector command outside math delimiters.
+- Never replace a vector arrow with a normal reaction/direction arrow such as →.
+- Preserve dot and cross products as \\cdot and \\times.
+- Preserve the zero vector as \\vec{0} or \\overrightarrow{0}; do not reduce it to scalar 0 when the source means a vector.
+- Before returning every Physics question and option, verify that every vector arrow visible in the source is represented in the decoded JSON string.
+
+Required decoded examples:
+
+"If $\\overrightarrow{P}=2\\hat{i}-3\\hat{j}$ and $\\overrightarrow{Q}=6\\hat{i}-9\\hat{j}$, which statement is false?"
+
+"$\\overrightarrow{P}\\times\\overrightarrow{Q}=\\vec{0}$"
+
+"$\\overrightarrow{A}\\cdot\\overrightarrow{B}=AB\\cos\\theta$"
+
+Remember: because the response itself is JSON, JSON must escape each LaTeX backslash correctly so that after JSON.parse the stored string still contains \\overrightarrow, \\hat, \\times, \\cdot and \\vec.
+
 Examples:
 
 $x^2+y^2=r^2$
@@ -1683,7 +1705,7 @@ const normalizeMatchColumns = (value = null) => {
     safeArray(rows)
       .map((row) => ({
         label: cleanString(row?.label),
-        text: formatNavtaQuestionContent(row?.text),
+        text: formatNavtaScienceContent(row?.text),
       }))
       .filter((row) => Boolean(row.label || row.text));
 
@@ -1891,9 +1913,102 @@ const repairNavtaScienceContent = (input = "") => {
   return value.trim();
 };
 
+// =====================================================
+// NAVTA PHYSICS VECTOR NORMALIZER
+// =====================================================
+// Gemini/OCR occasionally preserves the vector letter but loses either:
+//   1) the leading LaTeX slash,
+//   2) the $...$ math delimiters, or
+//   3) the combining vector-arrow representation.
+//
+// Keep this conservative: it only repairs explicit vector notation. It does
+// NOT guess that an ordinary capital letter is a vector.
+const normalizeNavtaVectorNotation = (input = "") => {
+  let value = String(input ?? "");
+
+  if (!value) {
+    return "";
+  }
+
+  // Unicode combining right-arrow-above: P⃗ -> \overrightarrow{P}
+  value = value.replace(
+    /([A-Za-z0-9])\u20D7/g,
+    "\\overrightarrow{$1}"
+  );
+
+  // Repair explicit command names when OCR/Gemini dropped the slash.
+  value = value
+    .replace(
+      /(^|[^\\A-Za-z])overrightarrow\s*\{\s*([^{}]+?)\s*\}/g,
+      "$1\\overrightarrow{$2}"
+    )
+    .replace(
+      /(^|[^\\A-Za-z])vec\s*\{\s*([^{}]+?)\s*\}/g,
+      "$1\\overrightarrow{$2}"
+    );
+
+  // NAVTA standard: use the longer arrow form for named vectors.
+  value = value.replace(
+    /\\vec\s*\{\s*([^{}]+?)\s*\}/g,
+    (_, content) => {
+      const cleaned = String(content ?? "").trim();
+
+      // Keep \vec{0} as the conventional zero-vector notation.
+      if (cleaned === "0") {
+        return "\\vec{0}";
+      }
+
+      return `\\overrightarrow{${cleaned}}`;
+    }
+  );
+
+  // Repair explicit vector/unit-vector LaTeX that Gemini left outside math
+  // delimiters. Existing $...$ and $$...$$ regions are never touched.
+  const parts = value.split(
+    /(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g
+  );
+
+  return parts
+    .map((part) => {
+      if (!part) {
+        return "";
+      }
+
+      if (
+        (part.startsWith("$$") && part.endsWith("$$")) ||
+        (part.startsWith("$") && part.endsWith("$"))
+      ) {
+        return part;
+      }
+
+      // Render explicit vector/unit-vector symbols even if the model forgot
+      // the surrounding math delimiters. This guarantees the arrow survives
+      // the Admin review renderer instead of appearing as raw text.
+      return part
+        .replace(
+          /\\overrightarrow\s*\{([^{}]+)\}/g,
+          (_, content) => `$\\overrightarrow{${content.trim()}}$`
+        )
+        .replace(
+          /\\vec\s*\{([^{}]+)\}/g,
+          (_, content) => `$\\vec{${content.trim()}}$`
+        )
+        .replace(
+          /\\hat\s*\{([^{}]+)\}/g,
+          (_, content) => `$\\hat{${content.trim()}}$`
+        );
+    })
+    .join("")
+    // Avoid accidental adjacent math blocks produced by repairs.
+    .replace(/\$\s*\$/g, "")
+    .trim();
+};
+
 const formatNavtaScienceContent = (input = "") =>
   formatNavtaQuestionContent(
-    repairNavtaScienceContent(input)
+    normalizeNavtaVectorNotation(
+      repairNavtaScienceContent(input)
+    )
   );
 
 // =====================================================
