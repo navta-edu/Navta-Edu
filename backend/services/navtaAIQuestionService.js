@@ -41,7 +41,7 @@ const NAVTA_AI_EMPTY_BATCH_RETRIES = Math.max(
   Math.min(
     2,
     Number(
-      process.env.NAVTA_AI_EMPTY_BATCH_RETRIES || 1
+      process.env.NAVTA_AI_EMPTY_BATCH_RETRIES || 0
     ) || 1
   )
 );
@@ -60,8 +60,8 @@ const NAVTA_AI_COMPLETENESS_PASSES = Math.max(
 const NAVTA_AI_PAGE_CONCURRENCY = Math.max(
   1,
   Math.min(
-    4,
-    Number(process.env.NAVTA_AI_PAGE_CONCURRENCY || 3) || 3
+    6,
+    Number(process.env.NAVTA_AI_PAGE_CONCURRENCY || 4) || 4
   )
 );
 
