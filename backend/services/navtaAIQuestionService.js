@@ -1511,6 +1511,11 @@ TIGHT-CROP AUDIT — MANDATORY:
 - EXCLUDE question numbers, headers, footers and unrelated prose.
 - Do not add generous whitespace around the visual.
 - Re-check all four edges before returning the box.
+- For an MCQ, locate the FIRST answer-option label (A/B/C/D or 1/2/3/4).
+  The bottom edge of visualBoundingBox MUST stay above the option region.
+- If visualBoundingBox reaches the answer-option block, it is INVALID: shrink its
+  bottom edge upward to the last label/dimension belonging to the stem diagram.
+- Do not count surrounding whitespace as part of the visual.
 
 MANDATORY VISUAL SCAN:
 For EVERY detected question, inspect the physical region from the end of the
