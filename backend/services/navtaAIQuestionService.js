@@ -52,8 +52,8 @@ const NAVTA_AI_EMPTY_BATCH_RETRIES = Math.max(
 const NAVTA_AI_COMPLETENESS_PASSES = Math.max(
   1,
   Math.min(
-    3,
-    Number(process.env.NAVTA_AI_COMPLETENESS_PASSES || 2) || 2
+    2,
+    Number(process.env.NAVTA_AI_COMPLETENESS_PASSES || 1) || 1
   )
 );
 
@@ -2445,15 +2445,8 @@ const shouldVerifyQuestion = (
     return true;
   }
 
-  // Every visual gets a second look because the visualBoundingBox directly
-  // controls the student-facing crop.
-  if (
-    question.hasVisual &&
-    question.visualBoundingBox
-  ) {
-    return true;
-  }
-
+  // FAST MODE: accept a valid first-pass visualBoundingBox.
+  // Only genuinely uncertain questions use the expensive verifier.
   if (
     question.questionType === "mcq" &&
     hasPlaceholderOnlyMcqOptions(
