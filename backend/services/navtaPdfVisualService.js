@@ -38,8 +38,8 @@ const validatePdfBuffer = (buffer) => {
 
 const normalizeScale = (scale) => {
   const value = Number(scale);
-  if (!Number.isFinite(value)) return 2.8;
-  return Math.min(3.6, Math.max(1, value));
+  if (!Number.isFinite(value)) return 2.2;
+  return Math.min(3.0, Math.max(1, value));
 };
 
 const normalizeMaxPages = (maxPages) => {
@@ -48,7 +48,7 @@ const normalizeMaxPages = (maxPages) => {
   return Math.floor(value);
 };
 
-const renderPdfPageToPng = async ({ page, scale = 2.8 }) => {
+const renderPdfPageToPng = async ({ page, scale = 2.2 }) => {
   if (!page || typeof page.getViewport !== "function") {
     throw new Error("A valid PDF page is required.");
   }
@@ -104,7 +104,7 @@ const closePdf = async (pdf) => {
 
 const renderPdfPages = async ({
   buffer,
-  scale = 2.8,
+  scale = 2.2,
   maxPages = 250,
 }) => {
   validatePdfBuffer(buffer);
@@ -140,7 +140,7 @@ const renderPdfPages = async ({
 const renderSelectedPdfPages = async ({
   buffer,
   pageNumbers = [],
-  scale = 2.8,
+  scale = 2.2,
 }) => {
   validatePdfBuffer(buffer);
 
