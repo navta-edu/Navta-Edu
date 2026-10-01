@@ -99,6 +99,41 @@ export default function PDFQuestionCropper() {
   );
 
   useEffect(() => {
+    const updateViewport = () => {
+      setIsMobileViewport(window.innerWidth <= 767);
+    };
+
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport || !pdfDocumentRef.current || !pageCount) return;
+    const node = pdfStageViewportRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+
+    let timer = null;
+    const observer = new ResizeObserver(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        renderPage(pageNumber, scale).catch((error) => {
+          if (error?.name !== "RenderingCancelledException") {
+            console.error("Responsive PDF render error:", error);
+          }
+        });
+      }, 120);
+    });
+
+    observer.observe(node);
+    return () => {
+      window.clearTimeout(timer);
+      observer.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobileViewport, pageCount]);
+
+  useEffect(() => {
     return () => {
       if (renderTaskRef.current) {
         try {
@@ -188,7 +223,7 @@ export default function PDFQuestionCropper() {
       setPdfError("Unable to render this PDF page.");
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageNumber, scale, pageCount]);
+  }, [pageNumber, scale, pageCount, isMobileViewport, fitToWidth]);
 
   const handlePdfFile = async (event) => {
     const file = event.target.files?.[0];
@@ -232,6 +267,7 @@ export default function PDFQuestionCropper() {
       setPageCount(pdf.numPages);
       setPageNumber(1);
       setScale(1.35);
+      setFitToWidth(true);
 
       requestAnimationFrame(() => {
         renderPage(1, 1.35).catch((error) => {
@@ -290,6 +326,7 @@ export default function PDFQuestionCropper() {
 
   const handlePointerMove = (event) => {
     if (!dragging || !dragStartRef.current) return;
+    event.preventDefault();
 
     const point = getPointerPosition(event);
     if (!point) return;
@@ -393,7 +430,17 @@ export default function PDFQuestionCropper() {
   };
 
   const changeScale = (nextScale) => {
-    setScale(clamp(Number(nextScale.toFixed(2)), 0.7, 2.5));
+    const safeScale = clamp(Number(nextScale.toFixed(2)), 0.7, 2.5);
+
+    if (isMobileViewport && safeScale > scale) {
+      setFitToWidth(false);
+    }
+
+    if (isMobileViewport && safeScale <= 0.85) {
+      setFitToWidth(true);
+    }
+
+    setScale(safeScale);
   };
 
   const dataUrlToBlob = async (dataUrl) => {
@@ -678,11 +725,28 @@ export default function PDFQuestionCropper() {
                     <RotateCcw className="w-4 h-4" />
                     Reset
                   </button>
+
+                  {isMobileViewport && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFitToWidth(true);
+                        setScale(1.35);
+                      }}
+                      className={`h-10 rounded-xl border px-3 text-xs font-bold ${
+                        fitToWidth
+                          ? "border-primary-500 bg-primary-500/10 text-primary-600"
+                          : "border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300"
+                      }`}
+                    >
+                      Fit Width
+                    </button>
+                  )}
                 </div>
               )}
             </div>
 
-            <div className="min-h-[560px] bg-slate-100 dark:bg-slate-900/60 overflow-auto p-4 md:p-6">
+            <div className="min-h-[360px] md:min-h-[560px] bg-slate-100 dark:bg-slate-900/60 overflow-auto p-2 sm:p-4 md:p-6">
               {pdfLoading ? (
                 <div className="min-h-[500px] flex items-center justify-center">
                   <div className="text-center">
@@ -707,9 +771,9 @@ export default function PDFQuestionCropper() {
                   </div>
                 </div>
               ) : (
-                <div className="w-max min-w-full flex justify-center">
-                  <div className="relative inline-block shadow-xl bg-white select-none">
-                    <canvas ref={canvasRef} className="block" />
+                <div className="w-full min-w-0 md:w-max md:min-w-full flex justify-center">
+                  <div className="relative inline-block w-fit max-w-full shadow-xl bg-white select-none">
+                    <canvas ref={canvasRef} className="block max-w-full h-auto md:max-w-none" />
 
                     <div
                       ref={overlayRef}
