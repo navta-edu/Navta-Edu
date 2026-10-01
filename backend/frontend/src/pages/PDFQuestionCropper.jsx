@@ -56,9 +56,13 @@ export default function PDFQuestionCropper() {
 
   const canvasRef = useRef(null);
   const overlayRef = useRef(null);
+  const pdfStageViewportRef = useRef(null);
   const pdfDocumentRef = useRef(null);
   const renderTaskRef = useRef(null);
   const dragStartRef = useRef(null);
+
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [fitToWidth, setFitToWidth] = useState(false);
 
   const [pdfFile, setPdfFile] = useState(null);
   const [pdfName, setPdfName] = useState("");
@@ -771,7 +775,10 @@ export default function PDFQuestionCropper() {
                   </div>
                 </div>
               ) : (
-                <div className="w-full min-w-0 md:w-max md:min-w-full flex justify-center">
+                <div
+                  ref={pdfStageViewportRef}
+                  className="w-full min-w-0 md:w-max md:min-w-full flex justify-center overflow-x-auto"
+                >
                   <div className="relative inline-block w-fit max-w-full shadow-xl bg-white select-none">
                     <canvas ref={canvasRef} className="block max-w-full h-auto md:max-w-none" />
 
