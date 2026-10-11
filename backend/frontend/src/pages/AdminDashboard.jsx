@@ -895,6 +895,55 @@ const fetchData = async () => {
   })();
 
 
+  // Dedicated options for the chapter-creation flow. This flow starts with
+  // Class, then filters preparation methods, then subjects. The legacy
+  // subject-first selectors elsewhere in the dashboard remain unchanged.
+  const chapterAvailableMethods = (() => {
+    const className = String(selectedClass || '').trim().toLowerCase();
+    const methods = preparationMethods.filter((method) => {
+      const linkedClasses = Array.isArray(method?.classes) ? method.classes : [];
+      const names = linkedClasses.map((item) => String(
+        typeof item === 'string' ? item : item?.name || item?.className || ''
+      ).trim().toLowerCase()).filter(Boolean);
+      return !className || !names.length || names.includes(className);
+    });
+    if (methods.length) return methods;
+    const legacyNames = [...new Set(Object.values(SUBJECT_RULES).flat())];
+    return legacyNames.map((name) => ({ name, legacy: true }));
+  })();
+
+  const chapterAvailableSubjects = (() => {
+    const methodName = String(selectedExam || '').trim().toLowerCase();
+    const className = String(selectedClass || '').trim().toLowerCase();
+    const linkedRows = curriculumSubjects.filter((item) => {
+      const classes = Array.isArray(item?.classes) ? item.classes : [];
+      const methods = Array.isArray(item?.preparationMethods) ? item.preparationMethods : [];
+      const classNames = classes.map((value) => String(
+        typeof value === 'string' ? value : value?.name || value?.className || ''
+      ).trim().toLowerCase()).filter(Boolean);
+      const methodNames = methods.map((value) => String(
+        typeof value === 'string' ? value : value?.name || ''
+      ).trim().toLowerCase()).filter(Boolean);
+      const classMatches = !className || !classNames.length || classNames.includes(className);
+      const methodMatches = !methodName || !methodNames.length || methodNames.includes(methodName);
+      return classMatches && methodMatches;
+    });
+
+    // If curriculum mappings exist for the chosen combination, only show
+    // those mapped subjects. Otherwise retain legacy subjects for migration.
+    if (className && methodName && linkedRows.length) {
+      const linkedNames = new Set(linkedRows.map((item) => String(item?.name || '').trim().toLowerCase()));
+      return subjects.filter((item) => linkedNames.has(String(item?.name || '').trim().toLowerCase()));
+    }
+
+    const matchingLegacy = subjects.filter((item) => {
+      const rules = SUBJECT_RULES[item?.name] || SUBJECT_RULES[String(item?.name || '').replace(/s$/, '')];
+      return !methodName || !rules || rules.some((name) => name.toLowerCase() === methodName);
+    });
+    return matchingLegacy.length ? matchingLegacy : subjects;
+  })();
+
+
   /*
   |--------------------------------------------------------------------------
   | Existing Study Notes / PDF Management
@@ -1002,9 +1051,23 @@ const fetchData = async () => {
 
   /*
   |--------------------------------------------------------------------------
-  | Subject Change
+  | Chapter Curriculum Selection
   |--------------------------------------------------------------------------
   */
+
+  const handleChapterClassChange = (value) => {
+    setSelectedClass(value);
+    setSelectedExam('');
+    setSelectedSubject('');
+    setSelectedChapter('');
+    setNotePdfFile(null);
+  };
+
+  const handleChapterMethodChange = (value) => {
+    setSelectedExam(value);
+    setSelectedSubject('');
+    setSelectedChapter('');
+  };
 
   const handleSubjectChange = (value) => {
 
@@ -1557,7 +1620,7 @@ const fetchData = async () => {
     if (!selectedSubject) {
 
       alert(
-        'Please select a subject first.'
+        'Please select a class, preparation method, and subject first.'
       );
 
       return;
@@ -1566,7 +1629,7 @@ const fetchData = async () => {
     if (!selectedExam) {
 
       alert(
-        'Please select an examination.'
+        'Please select a preparation method.'
       );
 
       return;
@@ -3155,7 +3218,7 @@ const fetchData = async () => {
 
         <Card
           title="Create Chapter"
-          subtitle="Create a chapter under Subject → Exam → Class"
+          subtitle="Create a chapter under Class → Preparation Method → Subject"
         >
 
           <form
@@ -3166,120 +3229,53 @@ const fetchData = async () => {
             <div className="grid md:grid-cols-3 gap-4">
 
               <div>
-
-                <label className={labelClass}>
-                  Subject
-                </label>
-
-                <select
-                  value={selectedSubject}
-                  onChange={(e) =>
-                    handleSubjectChange(
-                      e.target.value
-                    )
-                  }
-                  className={inputClass}
-                >
-
-                  <option value="">
-                    Select Subject
-                  </option>
-
-                  {subjects.map((s) => (
-
-                    <option
-                      key={s._id || s.id}
-                      value={s._id || s.id}
-                    >
-                      {s.name}
-                    </option>
-
-                  ))}
-
-                </select>
-
-              </div>
-
-
-              <div>
-
-                <label className={labelClass}>
-                  Examination
-                </label>
-
-                <select
-                  value={selectedExam}
-                  onChange={(e) =>
-                    handleExamChange(
-                      e.target.value
-                    )
-                  }
-                  disabled={
-                    !selectedSubject
-                  }
-                  className={inputClass}
-                >
-
-                  <option value="">
-                    Select Exam
-                  </option>
-
-                  {availableExams.map(
-                    (exam) => (
-
-                      <option
-                        key={exam}
-                        value={exam}
-                      >
-                        {exam}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-              </div>
-
-
-              <div>
-
-                <label className={labelClass}>
-                  Class
-                </label>
-
+                <label className={labelClass}>Class</label>
                 <select
                   value={selectedClass}
-                  onChange={(e) =>
-                    setSelectedClass(
-                      e.target.value
-                    )
-                  }
-                  disabled={
-                    !selectedExam
-                  }
+                  onChange={(e) => handleChapterClassChange(e.target.value)}
                   className={inputClass}
+                  required
                 >
-
-                  <option value="">
-                    Select Class
-                  </option>
-
-                  {availableClasses.map(
-                    (item) => (
-
-                      <option
-                        key={item}
-                        value={item}
-                      >
-                        {item}
-                      </option>
-
-                    )
-                  )}
-
+                  <option value="">Select Class</option>
+                  {(curriculumClasses.length ? curriculumClasses.map((item) => item.name).filter(Boolean) : CLASS_OPTIONS).map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
                 </select>
+              </div>
 
+              <div>
+                <label className={labelClass}>Preparation Method</label>
+                <select
+                  value={selectedExam}
+                  onChange={(e) => handleChapterMethodChange(e.target.value)}
+                  disabled={!selectedClass}
+                  className={inputClass}
+                  required
+                >
+                  <option value="">Select Preparation Method</option>
+                  {chapterAvailableMethods.map((method) => (
+                    <option key={method._id || method.name} value={method.name}>{method.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className={labelClass}>Subject</label>
+                <select
+                  value={selectedSubject}
+                  onChange={(e) => {
+                    setSelectedSubject(e.target.value);
+                    setSelectedChapter('');
+                  }}
+                  disabled={!selectedExam}
+                  className={inputClass}
+                  required
+                >
+                  <option value="">Select Subject</option>
+                  {chapterAvailableSubjects.map((subject) => (
+                    <option key={subject._id || subject.id} value={subject._id || subject.id}>{subject.name}</option>
+                  ))}
+                </select>
               </div>
 
             </div>
