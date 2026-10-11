@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { curriculumAPI } from '../utils/api';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import { GraduationCap, Mail, Lock, AlertCircle } from 'lucide-react';
@@ -10,12 +11,26 @@ const GOOGLE_CLIENT_ID = '936476255415-6lglsb7amgin8bk7h66g0u29vjmh24vv.apps.goo
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [classOptions, setClassOptions] = useState([]);
+  const [selectedClass, setSelectedClass] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const { googleLogin, login } = useAuth();
   const navigate = useNavigate();
   const googleBtnRef = useRef(null);
   const googleInitialized = useRef(false);
+  const selectedClassRef = useRef(selectedClass);
+  selectedClassRef.current = selectedClass;
+
+  useEffect(() => {
+    let cancelled = false;
+    curriculumAPI.getClasses().then((response) => {
+      const rows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+      const names = rows.map((item) => typeof item === 'string' ? item : item?.name).filter(Boolean);
+      if (!cancelled) setClassOptions([...new Set(names)]);
+    }).catch((error) => console.warn('Could not load class options on login:', error?.message || error));
+    return () => { cancelled = true; };
+  }, []);
 
   const navigateByRole = useCallback((user) => {
     if (!user.isProfileComplete && user.role !== 'admin') {
@@ -46,7 +61,11 @@ export default function Login() {
           callback: async (response) => {
             setErrorMsg('');
             try {
-              const loggedUser = await googleLogin(response.credential);
+              const loggedUser = await googleLogin(response.credential, selectedClassRef.current);
+              if (loggedUser?.role === 'student' && !(selectedClassRef.current || loggedUser.classLevel)) {
+                setErrorMsg('Please select your class before continuing.');
+                return;
+              }
               navigateByRole(loggedUser);
             } catch (err) {
               setErrorMsg(err.message || 'Google sign-in failed.');
@@ -72,7 +91,7 @@ export default function Login() {
     // Retry after script loads (only if not yet initialized)
     const timer = setTimeout(initGoogle, 1500);
     return () => clearTimeout(timer);
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [googleLogin, navigateByRole]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -84,7 +103,11 @@ export default function Login() {
     setLoading(true);
     setErrorMsg('');
     try {
-      const loggedUser = await login(email, password);
+      const loggedUser = await login(email, password, selectedClass);
+      if (loggedUser?.role === 'student' && !(selectedClassRef.current || loggedUser.classLevel)) {
+        setErrorMsg('Please select your class before continuing.');
+        return;
+      }
       navigateByRole(loggedUser);
     } catch (err) {
       setErrorMsg(err.message || 'Invalid email or password.');
@@ -131,6 +154,20 @@ export default function Login() {
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+              Your Class (for students)
+            </label>
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200/70 bg-white/50 dark:border-slate-800 dark:bg-slate-950/50 text-slate-800 dark:text-slate-100 focus:border-primary-500 focus:outline-none transition-colors text-sm"
+            >
+              <option value="">Select class (students)</option>
+              {classOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-slate-400">Your class helps NAVTA show the relevant chapters and Study Notes.</p>
+          </div>
           <div>
             <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
               Email Address
