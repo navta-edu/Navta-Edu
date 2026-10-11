@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+ import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { adminAPI, contentAPI, curriculumAPI } from '../utils/api';
@@ -261,6 +261,8 @@ export default function AdminDashboard() {
   const [subCode, setSubCode] = useState('');
   const [subDesc, setSubDesc] = useState('');
   const [subCat, setSubCat] = useState('Science');
+  const [newSubjectClasses, setNewSubjectClasses] = useState([]);
+  const [newSubjectMethods, setNewSubjectMethods] = useState([]);
 
 
   /*
@@ -718,7 +720,8 @@ const fetchData = async () => {
         const res =
           await contentAPI.getNavtaChapters(
             subjectName,
-            selectedClass
+            selectedClass,
+            selectedExam
           );
 
         const chapterData =
@@ -822,6 +825,7 @@ const fetchData = async () => {
 
   }, [
     selectedSubject,
+    selectedExam,
     selectedClass,
     subjects
   ]);
@@ -924,13 +928,14 @@ const fetchData = async () => {
       const methodNames = methods.map((value) => String(
         typeof value === 'string' ? value : value?.name || ''
       ).trim().toLowerCase()).filter(Boolean);
+      const hasAnyMapping = classNames.length > 0 || methodNames.length > 0;
       const classMatches = !className || !classNames.length || classNames.includes(className);
       const methodMatches = !methodName || !methodNames.length || methodNames.includes(methodName);
-      return classMatches && methodMatches;
+      return hasAnyMapping && classMatches && methodMatches;
     });
 
-    // If curriculum mappings exist for the chosen combination, only show
-    // those mapped subjects. Otherwise retain legacy subjects for migration.
+    // If any mapped subjects match this class/method combination, show only
+    // those subjects; otherwise keep the legacy subject rules for older data.
     if (className && methodName && linkedRows.length) {
       const linkedNames = new Set(linkedRows.map((item) => String(item?.name || '').trim().toLowerCase()));
       return subjects.filter((item) => linkedNames.has(String(item?.name || '').trim().toLowerCase()));
@@ -1417,7 +1422,9 @@ const fetchData = async () => {
         name: subName,
         code: subCode,
         description: subDesc,
-        category: subCat
+        category: subCat,
+        classes: newSubjectClasses,
+        preparationMethods: newSubjectMethods
       });
 
       alert(
@@ -1427,7 +1434,10 @@ const fetchData = async () => {
       setSubName('');
       setSubCode('');
       setSubDesc('');
+      setNewSubjectClasses([]);
+      setNewSubjectMethods([]);
 
+      await refreshCurriculum();
       fetchData();
 
     } catch (err) {
@@ -3174,6 +3184,23 @@ const fetchData = async () => {
 
               </div>
 
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Available in classes</label>
+                  <div className="mt-2 space-y-2 max-h-40 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 p-3">
+                    {curriculumClasses.filter((item) => item._id).map((item) => <label key={item._id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={newSubjectClasses.includes(String(item._id))} onChange={(e) => setNewSubjectClasses((old) => e.target.checked ? [...old, String(item._id)] : old.filter((id) => id !== String(item._id)))} />{item.name}</label>)}
+                    {!curriculumClasses.some((item) => item._id) && <p className="text-xs text-slate-500">Create classes in Curriculum Setup first.</p>}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelClass}>Preparation methods</label>
+                  <div className="mt-2 space-y-2 max-h-40 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 p-3">
+                    {preparationMethods.filter((item) => item._id).map((item) => <label key={item._id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={newSubjectMethods.includes(String(item._id))} onChange={(e) => setNewSubjectMethods((old) => e.target.checked ? [...old, String(item._id)] : old.filter((id) => id !== String(item._id)))} />{item.name}</label>)}
+                    {!preparationMethods.some((item) => item._id) && <p className="text-xs text-slate-500">Create preparation methods in Curriculum Setup first.</p>}
+                  </div>
+                </div>
+              </div>
 
               <div>
 
