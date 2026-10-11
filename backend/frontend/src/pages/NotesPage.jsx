@@ -388,6 +388,8 @@ useRef(false);
 
 const [subjects, setSubjects] = useState([]);
 const [curriculumClasses, setCurriculumClasses] = useState(CLASSES);
+const [curriculumSubjects, setCurriculumSubjects] = useState([]);
+const [curriculumPreparationMethods, setCurriculumPreparationMethods] = useState([]);
 
 const [selectedSubject, setSelectedSubject] = useState(null);
 const [selectedExam, setSelectedExam] = useState("");
@@ -415,15 +417,64 @@ FETCH SUBJECTS
 
 useEffect(() => {
   let cancelled = false;
-  curriculumAPI.getClasses()
-    .then((response) => {
-      const rows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
-      const names = rows.map((item) => typeof item === "string" ? item : item?.name).filter(Boolean);
-      if (!cancelled && names.length) setCurriculumClasses([...new Set(names)]);
+  Promise.all([
+    curriculumAPI.getClasses(),
+    curriculumAPI.getPreparationMethods(),
+    curriculumAPI.getSubjects()
+  ])
+    .then(([classResponse, methodResponse, subjectResponse]) => {
+      const classRows = Array.isArray(classResponse?.data) ? classResponse.data : Array.isArray(classResponse) ? classResponse : [];
+      const methodRows = Array.isArray(methodResponse?.data) ? methodResponse.data : Array.isArray(methodResponse) ? methodResponse : [];
+      const subjectRows = Array.isArray(subjectResponse?.data) ? subjectResponse.data : Array.isArray(subjectResponse) ? subjectResponse : [];
+      const names = classRows.map((item) => typeof item === "string" ? item : item?.name).filter(Boolean);
+      if (!cancelled) {
+        if (names.length) setCurriculumClasses([...new Set(names)]);
+        setCurriculumPreparationMethods(methodRows);
+        setCurriculumSubjects(subjectRows);
+      }
     })
-    .catch((error) => console.warn("Using legacy class list for Study Notes:", error?.message || error));
+    .catch((error) => console.warn("Using legacy curriculum defaults for Study Notes:", error?.message || error));
   return () => { cancelled = true; };
 }, []);
+
+useEffect(() => {
+  if (!curriculumSubjects.length) return;
+  setSubjects((current) => {
+    const merged = [...current];
+    for (const item of curriculumSubjects) {
+      if (!merged.some((existing) => String(existing?.name || "").trim().toLowerCase() === String(item?.name || "").trim().toLowerCase())) merged.push(item);
+    }
+    return merged;
+  });
+}, [curriculumSubjects]);
+
+const selectedCurriculumSubject = curriculumSubjects.find((item) =>
+  String(item?._id || item?.id || "") === String(selectedSubject?._id || selectedSubject?.id || "") ||
+  String(item?.name || "").trim().toLowerCase() === String(selectedSubject?.name || "").trim().toLowerCase()
+);
+const selectedCurriculumMethods = (selectedCurriculumSubject?.preparationMethods || [])
+  .map((item) => typeof item === "string"
+    ? curriculumPreparationMethods.find((method) => String(method?._id || method?.id) === item)?.name || item
+    : item?.name || curriculumPreparationMethods.find((method) => String(method?._id || method?.id) === String(item?._id || item))?.name)
+  .filter(Boolean);
+const availableNotePreparations = selectedCurriculumMethods.length
+  ? selectedCurriculumMethods
+  : (SUBJECT_CONFIG[getSubjectConfigKey(selectedSubject?.name)]?.preparations || []);
+const selectedCurriculumMethod = curriculumPreparationMethods.find((item) =>
+  String(item?.name || "").trim().toLowerCase() === String(selectedExam || "").trim().toLowerCase()
+);
+const noteClassNamesForSelection = (() => {
+  let names = [...curriculumClasses];
+  const methodClasses = (selectedCurriculumMethod?.classes || []).map((item) => typeof item === "string"
+    ? curriculumClasses.find((entry) => String(entry?._id || entry?.id) === item)?.name || item
+    : item?.name || curriculumClasses.find((entry) => String(entry?._id || entry?.id) === String(item?._id || item))?.name).filter(Boolean);
+  const subjectClasses = (selectedCurriculumSubject?.classes || []).map((item) => typeof item === "string"
+    ? curriculumClasses.find((entry) => String(entry?._id || entry?.id) === item)?.name || item
+    : item?.name || curriculumClasses.find((entry) => String(entry?._id || entry?.id) === String(item?._id || item))?.name).filter(Boolean);
+  if (methodClasses.length) names = names.filter((name) => methodClasses.includes(name));
+  if (subjectClasses.length) names = names.filter((name) => subjectClasses.includes(name));
+  return names.length ? names : curriculumClasses;
+})();
 
 useEffect(() => {
 const fetchSubjects = async () => {
@@ -444,7 +495,13 @@ const subjectData =
           ? res.data.subjects
           : [];
 
-setSubjects(subjectData);
+const mergedSubjects = [...subjectData];
+for (const curriculumSubject of curriculumSubjects) {
+  if (!mergedSubjects.some((item) => String(item?.name || "").trim().toLowerCase() === String(curriculumSubject?.name || "").trim().toLowerCase())) {
+    mergedSubjects.push(curriculumSubject);
+  }
+}
+setSubjects(mergedSubjects);
 } catch (err) {
 console.error(
   "Failed to load NAVTA Test subjects for Study Notes:",
@@ -1407,7 +1464,7 @@ return (
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 sm:gap-4">
 
-        {(SUBJECT_CONFIG[getSubjectConfigKey(selectedSubject.name)]?.preparations || []).map(
+        {availableNotePreparations.map(
           (preparation) => (
             <button
               key={preparation}
@@ -1475,7 +1532,7 @@ return (
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 max-w-2xl">
 
-          {curriculumClasses.map((className) => (
+          {noteClassNamesForSelection.map((className) => (
             <button
               key={className}
               onClick={() => handleClassSelect(className)}
