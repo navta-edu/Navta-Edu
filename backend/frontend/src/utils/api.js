@@ -2835,24 +2835,24 @@ export const adminAPI = {
 
   createChapter:
     async (data) => {
-      try {
-        const response =
-          await api.post(
-            '/teacher/chapters',
-            data
-          );
+      // AdminDashboard must use the admin-protected chapter endpoint.
+      // Normalize the legacy form field names to the Chapter model fields.
+      const payload = {
+        ...data,
+        subjectId: data.subjectId ?? data.subject,
+        examination: data.examination ?? data.exam ?? data.preparation,
+        classLevel: data.classLevel ?? data.className ?? data.class,
+        title: data.title ?? data.chapterTitle ?? data.name,
+        description: data.description ?? data.chapterDescription ?? ''
+      };
 
+      try {
+        const response = await api.post('/admin/chapters', payload);
         return response.data;
       } catch (error) {
-        if (
-          import.meta.env.DEV &&
-          !error.response
-        ) {
-          return mockAPI.admin.createChapter(
-            data
-          );
+        if (import.meta.env.DEV && !error.response) {
+          return mockAPI.admin.createChapter(payload);
         }
-
         throw error;
       }
     },
