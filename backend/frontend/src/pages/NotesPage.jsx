@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { contentAPI } from "../utils/api";
+import { contentAPI, curriculumAPI } from "../utils/api";
 import { Link, useLocation } from "react-router-dom";
 import Card from "../components/Card";
 import Button from "../components/Button";
@@ -387,6 +387,7 @@ const panicAutoOpenAttempted =
 useRef(false);
 
 const [subjects, setSubjects] = useState([]);
+const [curriculumClasses, setCurriculumClasses] = useState(CLASSES);
 
 const [selectedSubject, setSelectedSubject] = useState(null);
 const [selectedExam, setSelectedExam] = useState("");
@@ -411,6 +412,18 @@ FETCH SUBJECTS
 --------------------------------------------------------------------------
 
 */
+
+useEffect(() => {
+  let cancelled = false;
+  curriculumAPI.getClasses()
+    .then((response) => {
+      const rows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+      const names = rows.map((item) => typeof item === "string" ? item : item?.name).filter(Boolean);
+      if (!cancelled && names.length) setCurriculumClasses([...new Set(names)]);
+    })
+    .catch((error) => console.warn("Using legacy class list for Study Notes:", error?.message || error));
+  return () => { cancelled = true; };
+}, []);
 
 useEffect(() => {
 const fetchSubjects = async () => {
@@ -1462,7 +1475,7 @@ return (
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 max-w-2xl">
 
-          {CLASSES.map((className) => (
+          {curriculumClasses.map((className) => (
             <button
               key={className}
               onClick={() => handleClassSelect(className)}
