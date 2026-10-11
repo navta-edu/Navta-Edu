@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { contentAPI, curriculumAPI } from "../utils/api";
+import { useAuth } from "../context/AuthContext";
 import { Link, useLocation } from "react-router-dom";
 import Card from "../components/Card";
 import Button from "../components/Button";
@@ -355,6 +356,7 @@ COMPONENT
 */
 
 export default function NotesPage() {
+const { user } = useAuth();
 const location = useLocation();
 
 const panicState =
@@ -369,11 +371,7 @@ const panicChapter =
 panicState?.chapter || "";
 
 const panicClassLevel =
-CLASSES.includes(
-panicState?.classLevel
-)
-? panicState.classLevel
-: "";
+String(panicState?.classLevel || "").trim();
 
 const panicExam =
 normalizeExamName(
@@ -393,7 +391,7 @@ const [curriculumPreparationMethods, setCurriculumPreparationMethods] = useState
 
 const [selectedSubject, setSelectedSubject] = useState(null);
 const [selectedExam, setSelectedExam] = useState("");
-const [selectedClass, setSelectedClass] = useState("");
+const [selectedClass, setSelectedClass] = useState(user?.classLevel || "");
 
 const [chapters, setChapters] = useState([]);
 const [selectedChapter, setSelectedChapter] = useState("");
@@ -428,7 +426,7 @@ useEffect(() => {
       const subjectRows = Array.isArray(subjectResponse?.data) ? subjectResponse.data : Array.isArray(subjectResponse) ? subjectResponse : [];
       const names = classRows.map((item) => typeof item === "string" ? item : item?.name).filter(Boolean);
       if (!cancelled) {
-        if (names.length) setCurriculumClasses([...new Set(names)]);
+        if (names.length) setCurriculumClasses([...new Set([...(user?.classLevel ? [user.classLevel] : []), ...names])]);
         setCurriculumPreparationMethods(methodRows);
         setCurriculumSubjects(subjectRows);
       }
@@ -603,17 +601,19 @@ if (
   !inferredClass &&
   panicChapter
 ) {
-  for (const className of CLASSES) {
+  for (const className of curriculumClasses) {
     try {
       const classResponse =
         typeof contentAPI.getNavtaChapters === "function"
           ? await contentAPI.getNavtaChapters(
               subjectName,
-              className
+              className,
+              panicExam
             )
           : await contentAPI.getChapters(
               subjectName,
-              className
+              className,
+              panicExam
             );
 
       const classChapters =
@@ -722,11 +722,13 @@ try {
     typeof contentAPI.getNavtaChapters === "function"
       ? await contentAPI.getNavtaChapters(
           subjectName,
-          selectedClass
+          selectedClass,
+          selectedExam
         )
       : await contentAPI.getChapters(
           subjectName,
-          selectedClass
+          selectedClass,
+          selectedExam
         );
 
   const rawChapters =
@@ -870,6 +872,7 @@ cancelled = true;
 selectedSubject,
 selectedExam,
 selectedClass,
+curriculumClasses,
 panicState,
 panicChapter,
 ]);
