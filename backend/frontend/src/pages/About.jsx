@@ -1,6 +1,14 @@
 import React from 'react';
 import Card from '../components/Card';
-import { ShieldCheck, Target, Heart, GraduationCap } from 'lucide-react';
+import {
+  ShieldCheck,
+  Target,
+  Heart,
+  GraduationCap,
+  Code2,
+  Users,
+  Linkedin
+} from 'lucide-react';
 
 export default function About() {
   const values = [
@@ -139,6 +147,91 @@ export default function About() {
         </div>
 
       </div>
+
+      {/* TEAM */}
+      <section className="mt-20">
+        <div className="mx-auto mb-10 max-w-3xl text-center">
+          <p className="text-sm font-bold uppercase tracking-[0.22em] text-primary-500">
+            The people behind Navta
+          </p>
+          <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-4xl">
+            Meet the Team
+          </h2>
+          <p className="mt-4 text-base leading-relaxed text-slate-500 dark:text-slate-400">
+            Meet the people building and managing a more connected learning experience.
+          </p>
+        </div>
+
+        <div className="mx-auto grid max-w-4xl gap-6 md:grid-cols-2">
+          <article className="group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white/80 p-7 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-primary-400/50 hover:shadow-xl dark:border-slate-800/80 dark:bg-slate-950/50 sm:p-8">
+            <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-sky-500/10 blur-3xl transition group-hover:bg-sky-500/20" />
+            <div className="relative flex items-start gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-sky-400/20 bg-sky-500/10 text-sky-500">
+                <Code2 size={30} aria-hidden="true" />
+              </div>
+              <div className="min-w-0 pt-1">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-500">
+                  Development
+                </p>
+                <h3 className="mt-1 text-xl font-extrabold text-slate-900 dark:text-white">
+                  Hardik Sahu
+                </h3>
+                <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                  Developer
+                </p>
+              </div>
+            </div>
+            <p className="relative mt-6 text-sm leading-6 text-slate-600 dark:text-slate-400">
+              Building and developing the Navta platform to bring learning resources, practice, and assessment together.
+            </p>
+            <a
+              href="https://www.linkedin.com/in/hardik-sahu-9797h1608p/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Connect with Hardik Sahu on LinkedIn (opens in a new tab)"
+              className="relative mt-6 inline-flex items-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2.5 text-sm font-bold text-sky-600 transition hover:border-sky-500/60 hover:bg-sky-500/15 dark:text-sky-400"
+            >
+              <Linkedin size={17} aria-hidden="true" />
+              Connect on LinkedIn
+              <span aria-hidden="true">↗</span>
+            </a>
+          </article>
+
+          <article className="group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white/80 p-7 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-primary-400/50 hover:shadow-xl dark:border-slate-800/80 dark:bg-slate-950/50 sm:p-8">
+            <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-indigo-500/10 blur-3xl transition group-hover:bg-indigo-500/20" />
+            <div className="relative flex items-start gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-indigo-400/20 bg-indigo-500/10 text-indigo-500">
+                <Users size={30} aria-hidden="true" />
+              </div>
+              <div className="min-w-0 pt-1">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">
+                  Management
+                </p>
+                <h3 className="mt-1 text-xl font-extrabold text-slate-900 dark:text-white">
+                  Harshit Vashisht
+                </h3>
+                <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                  Head of Management
+                </p>
+              </div>
+            </div>
+            <p className="relative mt-6 text-sm leading-6 text-slate-600 dark:text-slate-400">
+              Supporting the planning, coordination, and management that help keep the Navta team moving forward.
+            </p>
+            <a
+              href="https://www.linkedin.com/in/harshit-vashisht-rjvns/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Connect with Harshit Vashisht on LinkedIn (opens in a new tab)"
+              className="relative mt-6 inline-flex items-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-2.5 text-sm font-bold text-indigo-600 transition hover:border-indigo-500/60 hover:bg-indigo-500/15 dark:text-indigo-400"
+            >
+              <Linkedin size={17} aria-hidden="true" />
+              Connect on LinkedIn
+              <span aria-hidden="true">↗</span>
+            </a>
+          </article>
+        </div>
+      </section>
 
     </div>
   );
