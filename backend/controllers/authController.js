@@ -28,7 +28,8 @@ const sendTokenResponse = (user, statusCode, res) => {
       email: user.email,
       role: user.role,
       isVerified: user.isVerified,
-      isProfileComplete: user.isProfileComplete
+      isProfileComplete: user.isProfileComplete,
+      classLevel: user.classLevel || ''
     }
   });
 };
@@ -87,7 +88,7 @@ exports.register = async (req, res, next) => {
 // @access  Public
 exports.login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, classLevel } = req.body;
 
     // Validate email & password
     if (!email || !password) {
@@ -104,6 +105,12 @@ exports.login = async (req, res, next) => {
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    // Save the student's class selected on the login screen.
+    if (user.role === 'student' && typeof classLevel === 'string' && classLevel.trim()) {
+      user.classLevel = classLevel.trim();
+      await user.save();
     }
 
     // Update streak if student
@@ -162,7 +169,8 @@ exports.getMe = async (req, res, next) => {
         email: user.email,
         role: user.role,
         isVerified: user.isVerified,
-        isProfileComplete: user.isProfileComplete
+        isProfileComplete: user.isProfileComplete,
+        classLevel: user.classLevel || ''
       },
       profile,
       streak
@@ -210,7 +218,7 @@ exports.forgotPassword = async (req, res, next) => {
 // @access  Public
 exports.googleAuth = async (req, res, next) => {
   try {
-    const { credential } = req.body;
+    const { credential, classLevel } = req.body;
 
     if (!credential) {
       return res.status(400).json({ success: false, message: 'Google credential is required' });
@@ -313,6 +321,11 @@ exports.googleAuth = async (req, res, next) => {
       });
     }
 
+    if (user.role === 'student' && typeof classLevel === 'string' && classLevel.trim()) {
+      user.classLevel = classLevel.trim();
+      await user.save();
+    }
+
     console.log('Google Auth: Success for', email, '- role:', user.role);
     sendTokenResponse(user, 200, res);
   } catch (err) {
@@ -326,7 +339,7 @@ exports.googleAuth = async (req, res, next) => {
 // @access  Private
 exports.completeProfile = async (req, res, next) => {
   try {
-    const { role, stream, department, schoolName, address } = req.body;
+    const { role, stream, department, schoolName, address, classLevel } = req.body;
     
     let user = await User.findById(req.user.id);
     if (!user) {
@@ -338,6 +351,7 @@ exports.completeProfile = async (req, res, next) => {
     if (department) user.department = department;
     if (schoolName) user.schoolName = schoolName;
     if (address) user.address = address;
+    if (typeof classLevel === 'string') user.classLevel = classLevel.trim();
 
     // Optional: Update Student/Teacher profiles if role changes
     if (role === 'student') {
