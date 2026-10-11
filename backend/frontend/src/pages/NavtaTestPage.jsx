@@ -273,8 +273,8 @@ const BOSS_WIN_PERCENTAGE = 70;
 
 function getQuestionCount(preparation, questionType, duration) {
   const config = TEST_CONFIG[preparation]?.[questionType];
-  if (!config || !duration) return 0;
-  return Math.floor(Number(duration) / config.minutesPerQuestion);
+  if (!duration) return 0;
+  return Math.floor(Number(duration) / (config?.minutesPerQuestion || 1));
 }
 
 function getQuestionTypeLabel(questionType) {
@@ -1415,18 +1415,68 @@ export default function NavtaTestPage() {
   const [step, setStep] = useState("mode");
   const [testMode, setTestMode] = useState("");
   const [curriculumClasses, setCurriculumClasses] = useState(CLASSES);
+  const [curriculumSubjects, setCurriculumSubjects] = useState([]);
+  const [curriculumPreparationMethods, setCurriculumPreparationMethods] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
-    curriculumAPI.getClasses()
-      .then((response) => {
-        const rows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
-        const names = rows.map((item) => typeof item === "string" ? item : item?.name).filter(Boolean);
-        if (!cancelled && names.length) setCurriculumClasses([...new Set(names)]);
+    Promise.all([
+      curriculumAPI.getClasses(),
+      curriculumAPI.getPreparationMethods(),
+      curriculumAPI.getSubjects()
+    ])
+      .then(([classResponse, methodResponse, subjectResponse]) => {
+        const classRows = Array.isArray(classResponse?.data) ? classResponse.data : Array.isArray(classResponse) ? classResponse : [];
+        const methodRows = Array.isArray(methodResponse?.data) ? methodResponse.data : Array.isArray(methodResponse) ? methodResponse : [];
+        const subjectRows = Array.isArray(subjectResponse?.data) ? subjectResponse.data : Array.isArray(subjectResponse) ? subjectResponse : [];
+        const names = classRows.map((item) => typeof item === "string" ? item : item?.name).filter(Boolean);
+        if (!cancelled) {
+          if (names.length) setCurriculumClasses([...new Set(names)]);
+          setCurriculumPreparationMethods(methodRows);
+          setCurriculumSubjects(subjectRows);
+        }
       })
-      .catch((error) => console.warn("Using legacy class list for NAVTA Test:", error?.message || error));
+      .catch((error) => console.warn("Using legacy curriculum options for NAVTA Test:", error?.message || error));
     return () => { cancelled = true; };
   }, []);
+
+  const testSubjectNames = useMemo(() => {
+    const names = [...Object.keys(PREPARATION_OPTIONS)];
+    for (const item of curriculumSubjects) {
+      const name = String(item?.name || "").trim();
+      if (name && !names.some((existing) => existing.toLowerCase() === name.toLowerCase())) names.push(name);
+    }
+    return names;
+  }, [curriculumSubjects]);
+
+  const selectedCurriculumSubject = curriculumSubjects.find((item) =>
+    String(item?.name || "").trim().toLowerCase() === String(subject || "").trim().toLowerCase()
+  );
+  const availableTestPreparations = useMemo(() => {
+    const linked = (selectedCurriculumSubject?.preparationMethods || []).map((item) => {
+      if (typeof item === "string") return curriculumPreparationMethods.find((method) => String(method?._id || method?.id) === item)?.name || item;
+      return item?.name || curriculumPreparationMethods.find((method) => String(method?._id || method?.id) === String(item?._id || item))?.name;
+    }).filter(Boolean);
+    if (linked.length) return linked.map((name) => PREPARATION_OPTIONS[subject]?.[name] || ({ title: name, description: `${name} preparation`, icon: "🎯" })).reduce((acc, option, index) => {
+      const name = linked[index];
+      acc[name] = option;
+      return acc;
+    }, {});
+    return PREPARATION_OPTIONS[subject] || {};
+  }, [selectedCurriculumSubject, curriculumPreparationMethods, subject]);
+
+  const availableTestClasses = useMemo(() => {
+    let names = [...curriculumClasses];
+    const method = curriculumPreparationMethods.find((item) => String(item?.name || "").trim().toLowerCase() === String(preparation || "").trim().toLowerCase());
+    const resolveNames = (list = []) => list.map((item) => typeof item === "string"
+      ? curriculumClasses.find((entry) => String(entry?._id || entry?.id) === item)?.name || item
+      : item?.name || curriculumClasses.find((entry) => String(entry?._id || entry?.id) === String(item?._id || item))?.name).filter(Boolean);
+    const methodClasses = resolveNames(method?.classes || []);
+    const subjectClasses = resolveNames(selectedCurriculumSubject?.classes || []);
+    if (methodClasses.length) names = names.filter((name) => methodClasses.includes(name));
+    if (subjectClasses.length) names = names.filter((name) => subjectClasses.includes(name));
+    return names.length ? names : curriculumClasses;
+  }, [curriculumClasses, curriculumPreparationMethods, preparation, selectedCurriculumSubject]);
 
   const [subject, setSubject] = useState("");
   const [preparation, setPreparation] = useState("");
@@ -1493,7 +1543,7 @@ export default function NavtaTestPage() {
       : "mcq";
 
   const currentConfig =
-    TEST_CONFIG[preparation]?.[resolvedQuestionType];
+    TEST_CONFIG[preparation]?.[resolvedQuestionType] || { minutesPerQuestion: 1 };
 
   const requestedQuestionCount = useMemo(() => {
     if (isBoss) return bossSize;
@@ -4219,7 +4269,7 @@ export default function NavtaTestPage() {
           </div>
 
           <div className="navta-grid">
-            {Object.keys(PREPARATION_OPTIONS).map((item) => (
+            {testSubjectNames.map((item) => (
               <button
                 key={item}
                 type="button"
@@ -4235,6 +4285,7 @@ export default function NavtaTestPage() {
                   {item === "Chemistry" && "🧪"}
                   {item === "Maths" && "∑"}
                   {item === "Biology" && "🧬"}
+                  {!Object.prototype.hasOwnProperty.call(PREPARATION_OPTIONS, item) && "📘"}
                 </div>
 
                 <h2>{item}</h2>
@@ -4275,7 +4326,7 @@ export default function NavtaTestPage() {
 
           <div className="navta-preparation-grid">
             {Object.entries(
-              PREPARATION_OPTIONS[subject] || {}
+              availableTestPreparations
             ).map(([key, option]) => (
               <button
                 key={key}
@@ -4321,7 +4372,7 @@ export default function NavtaTestPage() {
           </div>
 
           <div className="navta-class-grid">
-            {curriculumClasses.map((item) => (
+            {availableTestClasses.map((item) => (
               <button
                 key={item}
                 type="button"
