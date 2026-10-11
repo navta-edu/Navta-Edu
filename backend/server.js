@@ -16,6 +16,7 @@ const contentRoutes = require("./routes/contentRoutes");
 const studentRoutes = require("./routes/studentRoutes");
 const teacherRoutes = require("./routes/teacherRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const curriculumRoutes = require("./routes/curriculumRoutes");
 const navtaTestRoutes = require("./routes/navtaTestRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 
@@ -184,6 +185,11 @@ app.use(
 app.use(
   "/api/admin",
   adminRoutes
+);
+
+app.use(
+  "/api/curriculum",
+  curriculumRoutes
 );
 
 // ============================================
