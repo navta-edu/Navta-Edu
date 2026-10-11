@@ -138,9 +138,9 @@ exports.deleteUser = async (req, res) => {
 // @access  Private (Admin)
 exports.createSubject = async (req, res) => {
   try {
-    const { name, code, description, category } = req.body;
+    const { name, code, description, category, classes, preparationMethods } = req.body;
 
-    const subjectExists = await Subject.findOne({ code });
+    const subjectExists = await Subject.findOne({ $or: [{ code }, { name }] });
     if (subjectExists) {
       return res.status(400).json({ success: false, message: 'Subject with this code already exists' });
     }
@@ -149,7 +149,9 @@ exports.createSubject = async (req, res) => {
       name,
       code,
       description,
-      category: category || 'General'
+      category: category || 'General',
+      classes: Array.isArray(classes) ? classes : [],
+      preparationMethods: Array.isArray(preparationMethods) ? preparationMethods : []
     });
 
     res.status(201).json({ success: true, data: subject });
