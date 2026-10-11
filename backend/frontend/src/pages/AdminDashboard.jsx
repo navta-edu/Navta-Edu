@@ -852,10 +852,47 @@ const fetchData = async () => {
     getSelectedSubjectObject();
 
 
-  const availableExams =
-    SUBJECT_RULES[
-      selectedSubjectObject?.name
-    ] || [];
+  // Prefer administrator-configured curriculum links; retain the legacy
+  // subject rules as a fallback for existing subjects that have not been mapped.
+  const linkedSubjectObject = curriculumSubjects.find((item) =>
+    String(item?._id || item?.id || '') === String(selectedSubject) ||
+    String(item?.name || '').trim().toLowerCase() ===
+      String(selectedSubjectObject?.name || '').trim().toLowerCase()
+  );
+
+  const linkedPreparationMethods = Array.isArray(linkedSubjectObject?.preparationMethods)
+    ? linkedSubjectObject.preparationMethods
+    : [];
+
+  const availableExams = linkedPreparationMethods.length
+    ? linkedPreparationMethods
+        .map((item) => typeof item === 'string' ? item : item?.name)
+        .filter(Boolean)
+    : (SUBJECT_RULES[selectedSubjectObject?.name] || preparationMethods.map((item) => item.name).filter(Boolean));
+
+  const selectedPreparationMethod = preparationMethods.find((item) =>
+    String(item?.name || '').trim().toLowerCase() === String(selectedExam || '').trim().toLowerCase()
+  );
+
+  const methodClassNames = Array.isArray(selectedPreparationMethod?.classes)
+    ? selectedPreparationMethod.classes
+        .map((item) => typeof item === 'string' ? item : item?.name)
+        .filter(Boolean)
+    : [];
+
+  const linkedClassNames = Array.isArray(linkedSubjectObject?.classes)
+    ? linkedSubjectObject.classes
+        .map((item) => typeof item === 'string' ? item : item?.name)
+        .filter(Boolean)
+    : [];
+
+  const availableClasses = (() => {
+    let names = curriculumClasses.map((item) => item?.name).filter(Boolean);
+    if (!names.length) names = CLASS_OPTIONS;
+    if (methodClassNames.length) names = names.filter((name) => methodClassNames.includes(name));
+    if (linkedClassNames.length) names = names.filter((name) => linkedClassNames.includes(name));
+    return names.length ? names : (methodClassNames.length ? methodClassNames : CLASS_OPTIONS);
+  })();
 
 
   /*
@@ -3222,7 +3259,7 @@ const fetchData = async () => {
                     Select Class
                   </option>
 
-                  {CLASS_OPTIONS.map(
+                  {availableClasses.map(
                     (item) => (
 
                       <option
@@ -3424,7 +3461,7 @@ const fetchData = async () => {
                   }}
                   placeholder="Select Class"
                   disabled={!selectedExam}
-                  options={CLASS_OPTIONS.map((item) => ({
+                  options={availableClasses.map((item) => ({
                     value: item,
                     label: item
                   }))}
