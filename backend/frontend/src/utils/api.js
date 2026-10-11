@@ -245,7 +245,8 @@ const mockAPI = {
           isVerified:
             user.isVerified,
           isProfileComplete:
-            user.isProfileComplete
+            user.isProfileComplete,
+          classLevel: user.classLevel || ''
         }
       };
     },
@@ -268,6 +269,9 @@ const mockAPI = {
         );
       }
 
+      if (data.classLevel) user.classLevel = data.classLevel;
+      saveMockDB(db);
+
       return {
         success: true,
 
@@ -282,7 +286,8 @@ const mockAPI = {
           isVerified:
             user.isVerified,
           isProfileComplete:
-            user.isProfileComplete
+            user.isProfileComplete,
+          classLevel: user.classLevel || ''
         }
       };
     },
@@ -331,7 +336,8 @@ const mockAPI = {
     },
 
     googleLogin: async (
-      credential
+      credential,
+      classLevel = ''
     ) => {
       const db = getMockDB();
 
@@ -347,6 +353,8 @@ const mockAPI = {
 
         role:
           'student',
+
+        classLevel: classLevel || '',
 
         isVerified:
           true,
@@ -395,7 +403,8 @@ const mockAPI = {
           email: user.email,
           role: user.role,
           isVerified: true,
-          isProfileComplete: false
+          isProfileComplete: false,
+          classLevel: user.classLevel || ''
         }
       };
     },
@@ -1554,13 +1563,14 @@ export const authAPI = {
   },
 
   googleLogin:
-    async (credential) => {
+    async (credential, classLevel = '') => {
       try {
         const response =
           await api.post(
             '/auth/google',
             {
-              credential
+              credential,
+              classLevel
             }
           );
 
@@ -1827,7 +1837,8 @@ export const contentAPI = {
 
   getChapters: async (
     subjectOrId,
-    classLevel = ''
+    classLevel = '',
+    examination = ''
   ) => {
     const rawSubject =
       String(subjectOrId || '').trim();
@@ -1867,6 +1878,7 @@ export const contentAPI = {
         params.classLevel =
           classLevel;
       }
+      if (examination) params.examination = examination;
 
       const response =
         await api.get(
@@ -2008,11 +2020,13 @@ export const contentAPI = {
   // Explicit alias used by the Study Notes/Admin flow.
   getNavtaChapters: async (
     subject,
-    classLevel = ''
+    classLevel = '',
+    examination = ''
   ) => {
     return contentAPI.getChapters(
       subject,
-      classLevel
+      classLevel,
+      examination
     );
   },
 
