@@ -241,7 +241,8 @@ export const AuthProvider = ({ children }) => {
   const login =
     async (
       email,
-      password
+      password,
+      classLevel = ''
     ) => {
       setLoading(true);
       setError(null);
@@ -250,7 +251,8 @@ export const AuthProvider = ({ children }) => {
         const loginResponse =
           await authAPI.login({
             email,
-            password
+            password,
+            classLevel
           });
 
         localStorage.setItem(
@@ -319,7 +321,8 @@ export const AuthProvider = ({ children }) => {
 
   const googleLogin =
     async (
-      credential
+      credential,
+      classLevel = ''
     ) => {
       setLoading(true);
       setError(null);
@@ -327,7 +330,8 @@ export const AuthProvider = ({ children }) => {
       try {
         const loginResponse =
           await authAPI.googleLogin(
-            credential
+            credential,
+            classLevel
           );
 
         localStorage.setItem(
