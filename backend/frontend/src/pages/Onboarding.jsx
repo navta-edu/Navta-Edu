@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { authAPI } from '../utils/api';
+import { authAPI, curriculumAPI } from '../utils/api';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import { AlertCircle, Building2, BookOpen, MapPin, Briefcase } from 'lucide-react';
@@ -12,12 +12,24 @@ export default function Onboarding() {
 
   const [role, setRole] = useState(user?.role !== 'student' && user?.role !== 'teacher' ? 'student' : user.role);
   const [stream, setStream] = useState('Science');
+  const [classOptions, setClassOptions] = useState([]);
+  const [classLevel, setClassLevel] = useState(user?.classLevel || '');
   const [department, setDepartment] = useState('');
   const [schoolName, setSchoolName] = useState('');
   const [address, setAddress] = useState('');
   
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    curriculumAPI.getClasses().then((response) => {
+      const rows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+      const names = rows.map((item) => typeof item === 'string' ? item : item?.name).filter(Boolean);
+      if (!cancelled) setClassOptions([...new Set(names)]);
+    }).catch((error) => console.warn('Could not load class options:', error?.message || error));
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,7 +38,12 @@ export default function Onboarding() {
 
     try {
       // Assuming authAPI has completeProfile exported
-      const data = { role, stream, department, schoolName, address };
+      if (role === 'student' && !classLevel) {
+        setErrorMsg('Please select your class to continue.');
+        setLoading(false);
+        return;
+      }
+      const data = { role, stream, department, schoolName, address, classLevel: role === 'student' ? classLevel : '' };
       const res = await authAPI.completeProfile(data);
       
       // Navigate to correct dashboard after profile is completed
@@ -86,6 +103,16 @@ export default function Onboarding() {
               <option value="teacher">Teacher</option>
             </select>
           </div>
+
+          {role === 'student' && (
+            <div>
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Class *</label>
+              <select required value={classLevel} onChange={(e) => setClassLevel(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-slate-200/70 bg-white dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus:border-primary-500 focus:outline-none text-sm">
+                <option value="">Select your class</option>
+                {classOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
