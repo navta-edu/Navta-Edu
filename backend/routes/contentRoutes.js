@@ -25,6 +25,9 @@ const chapterConfig = require(
   "../config/navtaChapters"
 );
 
+const Subject = require("../models/Subject");
+const Chapter = require("../models/Chapter");
+
 const router =
   express.Router();
 
@@ -88,55 +91,28 @@ router.get(
 
 router.get(
   "/navta-subjects",
-  (req, res) => {
+  async (req, res) => {
     try {
-      const subjects =
-        chapterConfig
-          .getSubjectNames()
-          .map(
-            (
-              name,
-              index
-            ) => ({
-              _id:
-                `navta-subject-${index + 1}`,
-
-              name,
-
-              // Make Maths friendly to pages
-              // expecting Mathematics.
-              displayName:
-                name === "Maths"
-                  ? "Mathematics"
-                  : name
-            })
-          );
-
-      return res.status(200).json({
-        success:
-          true,
-
-        count:
-          subjects.length,
-
-        data:
-          subjects,
-
-        subjects
-      });
+      const staticNames = chapterConfig.getSubjectNames();
+      const databaseSubjects = await Subject.find({ isActive: { $ne: false } }).select('_id name code category classes preparationMethods').populate('classes', 'name code').populate('preparationMethods', 'name code').sort({ name: 1 }).lean();
+      const byName = new Map();
+      staticNames.forEach((name, index) => byName.set(String(name).toLowerCase(), {
+        _id: `navta-subject-${index + 1}`,
+        name,
+        displayName: name === 'Maths' ? 'Mathematics' : name,
+        legacy: true
+      }));
+      databaseSubjects.forEach((subject) => byName.set(String(subject.name).toLowerCase(), {
+        ...byName.get(String(subject.name).toLowerCase()),
+        ...subject,
+        displayName: subject.name === 'Maths' ? 'Mathematics' : subject.name,
+        legacy: false
+      }));
+      const subjects = [...byName.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      return res.status(200).json({ success: true, count: subjects.length, data: subjects, subjects });
     } catch (error) {
-      console.error(
-        "NAVTA subject config error:",
-        error
-      );
-
-      return res.status(500).json({
-        success:
-          false,
-
-        message:
-          "Unable to load NAVTA subjects."
-      });
+      console.error('NAVTA subject list error:', error);
+      return res.status(500).json({ success: false, message: 'Unable to load NAVTA subjects.', data: [], subjects: [] });
     }
   }
 );
@@ -169,114 +145,67 @@ router.get(
 
 router.get(
   "/navta-chapters",
-  (req, res) => {
+  async (req, res) => {
     try {
-      const subject =
-        cleanString(
-          req.query.subject
-        );
+      const subjectInput = cleanString(req.query.subject);
+      const classLevel = cleanString(req.query.classLevel || req.query.className || req.query.class);
+      const examination = cleanString(req.query.examination || req.query.exam || req.query.preparation);
 
-      const classLevel =
-        cleanString(
-          req.query.classLevel ||
-          req.query.className ||
-          req.query.class
-        );
-
-      // ---------------------------------------
-      // Validate subject when provided
-      // ---------------------------------------
-
-      if (subject) {
-        const normalizedSubject =
-          chapterConfig
-            .normalizeSubjectName(
-              subject
-            );
-
-        if (!normalizedSubject) {
-          return res.status(400).json({
-            success:
-              false,
-
-            message:
-              `Invalid subject: ${subject}`,
-
-            data:
-              []
-          });
-        }
+      let databaseSubject = null;
+      if (subjectInput) {
+        if (/^[a-f\d]{24}$/i.test(subjectInput)) databaseSubject = await Subject.findById(subjectInput).lean();
+        if (!databaseSubject) databaseSubject = await Subject.findOne({ name: { $regex: `^${subjectInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } }).lean();
       }
 
-      // ---------------------------------------
-      // Validate class when provided
-      // ---------------------------------------
+      const dbQuery = {};
+      if (databaseSubject) dbQuery.subject = databaseSubject._id;
+      else if (subjectInput) {
+        // Legacy static subjects are still served from chapterConfig; a custom subject with no DB match has no DB chapters.
+        dbQuery.subject = { $exists: false };
+      }
+      if (classLevel) dbQuery.classLevel = classLevel;
+      if (examination) dbQuery.examination = examination;
 
-      if (classLevel) {
-        const normalizedClass =
-          chapterConfig
-            .normalizeClassName(
-              classLevel
-            );
-
-        if (!normalizedClass) {
-          return res.status(400).json({
-            success:
-              false,
-
-            message:
-              `Invalid class: ${classLevel}`,
-
-            data:
-              []
-          });
-        }
+      let dbChapters = [];
+      if (databaseSubject || !subjectInput) {
+        dbChapters = await Chapter.find(dbQuery).populate('subject', 'name code').sort({ title: 1 }).lean();
       }
 
-      const chapterList =
-        chapterConfig
-          .getStructuredChapters(
-            subject,
-            classLevel
-          );
+      let staticChapters = [];
+      try {
+        staticChapters = chapterConfig.getStructuredChapters(subjectInput && databaseSubject ? databaseSubject.name : subjectInput, classLevel) || [];
+      } catch (_) {
+        staticChapters = [];
+      }
 
-      return res.status(200).json({
-        success:
-          true,
+      const normalize = (item, index, source) => {
+        const title = typeof item === 'string' ? item : (item?.title || item?.name || item?.chapter || '');
+        if (!String(title).trim()) return null;
+        return {
+          ...(typeof item === 'object' && item ? item : {}),
+          _id: item?._id || item?.id || `${source}-${index}-${String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+          id: item?._id || item?.id || `${source}-${index}-${String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+          title: String(title).trim(),
+          name: String(title).trim(),
+          subject: item?.subject?.name || item?.subject || databaseSubject?.name || subjectInput || '',
+          classLevel: item?.classLevel || classLevel || '',
+          examination: item?.examination || examination || '',
+          source
+        };
+      };
 
-        count:
-          chapterList.length,
-
-        subject:
-          subject ||
-          "All",
-
-        classLevel:
-          classLevel ||
-          "All",
-
-        data:
-          chapterList,
-
-        chapters:
-          chapterList
+      const merged = [];
+      const seen = new Set();
+      [...dbChapters.map((item, i) => normalize(item, i, 'database')), ...staticChapters.map((item, i) => normalize(item, i, 'legacy'))].forEach((item) => {
+        if (!item) return;
+        const key = `${String(item.subject).toLowerCase()}|${String(item.classLevel).toLowerCase()}|${String(item.examination).toLowerCase()}|${String(item.title).toLowerCase()}`;
+        if (!seen.has(key)) { seen.add(key); merged.push(item); }
       });
+
+      return res.status(200).json({ success: true, count: merged.length, subject: subjectInput || 'All', classLevel: classLevel || 'All', data: merged, chapters: merged });
     } catch (error) {
-      console.error(
-        "NAVTA chapter config error:",
-        error
-      );
-
-      return res.status(500).json({
-        success:
-          false,
-
-        message:
-          "Unable to load NAVTA chapters.",
-
-        data:
-          []
-      });
+      console.error('NAVTA chapter list error:', error);
+      return res.status(500).json({ success: false, message: 'Unable to load NAVTA chapters.', data: [], chapters: [] });
     }
   }
 );
