@@ -19,6 +19,10 @@ const SubjectSchema = new mongoose.Schema({
     enum: ['Science', 'Commerce', 'Arts', 'General'],
     default: 'General'
   },
+  // Optional curriculum links; legacy subjects remain valid without these.
+  classes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'CurriculumClass' }],
+  preparationMethods: [{ type: mongoose.Schema.Types.ObjectId, ref: 'PreparationMethod' }],
+  isActive: { type: Boolean, default: true },
   createdAt: {
     type: Date,
     default: Date.now
