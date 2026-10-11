@@ -1283,6 +1283,12 @@ const fetchData = async () => {
   };
 
   useEffect(() => {
+    // Load curriculum links on dashboard entry so chapter/note forms can
+    // use the same mappings even before the Curriculum Setup tab is opened.
+    refreshCurriculum();
+  }, []);
+
+  useEffect(() => {
     if (activeSection === 'curriculum') refreshCurriculum();
   }, [activeSection]);
 
