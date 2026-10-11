@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { adminAPI, contentAPI } from '../utils/api';
+import { adminAPI, contentAPI, curriculumAPI } from '../utils/api';
 import Card from '../components/Card';
 import Button from '../components/Button';
 
@@ -27,7 +27,8 @@ import {
   FlaskConical,
   Dna,
   ChevronDown,
-  Crop
+  Crop,
+  Layers3
 } from 'lucide-react';
 
 
@@ -208,6 +209,17 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [questions, setQuestions] = useState([]);
+  const [curriculumClasses, setCurriculumClasses] = useState([]);
+  const [preparationMethods, setPreparationMethods] = useState([]);
+  const [curriculumSubjects, setCurriculumSubjects] = useState([]);
+  const [curriculumLoading, setCurriculumLoading] = useState(false);
+  const [newClassName, setNewClassName] = useState('');
+  const [newMethodName, setNewMethodName] = useState('');
+  const [newMethodClasses, setNewMethodClasses] = useState([]);
+  const [mappingSubjectId, setMappingSubjectId] = useState('');
+  const [mappingClasses, setMappingClasses] = useState([]);
+  const [mappingMethods, setMappingMethods] = useState([]);
+
 
   const [loading, setLoading] = useState(true);
 
@@ -634,6 +646,7 @@ const fetchData = async () => {
       'stats',
       'users',
       'studyMaterial',
+      'curriculum',
       'chapter',
       'note',
       'pyq',
@@ -1204,6 +1217,83 @@ const fetchData = async () => {
     }
   };
 
+
+  /*
+  |--------------------------------------------------------------------------
+  | Dynamic Curriculum Management
+  |--------------------------------------------------------------------------
+  */
+
+  const refreshCurriculum = async () => {
+    setCurriculumLoading(true);
+    try {
+      const [classResult, methodResult, subjectResult] = await Promise.all([
+        curriculumAPI.getClasses(),
+        curriculumAPI.getPreparationMethods(),
+        curriculumAPI.getSubjects()
+      ]);
+      setCurriculumClasses(Array.isArray(classResult?.data) ? classResult.data : []);
+      setPreparationMethods(Array.isArray(methodResult?.data) ? methodResult.data : []);
+      const rows = Array.isArray(subjectResult?.data) ? subjectResult.data : [];
+      setCurriculumSubjects(rows);
+      if (!mappingSubjectId && rows.length) setMappingSubjectId(String(rows[0]._id));
+    } catch (error) {
+      console.error('Could not load curriculum settings:', error);
+      alert(error?.response?.data?.message || error.message || 'Could not load curriculum settings.');
+    } finally {
+      setCurriculumLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSection === 'curriculum') refreshCurriculum();
+  }, [activeSection]);
+
+  useEffect(() => {
+    const current = curriculumSubjects.find((item) => String(item._id) === String(mappingSubjectId));
+    setMappingClasses((current?.classes || []).map((item) => String(item._id || item)));
+    setMappingMethods((current?.preparationMethods || []).map((item) => String(item._id || item)));
+  }, [mappingSubjectId, curriculumSubjects]);
+
+  const handleCreateCurriculumClass = async (event) => {
+    event.preventDefault();
+    try {
+      await curriculumAPI.createClass({ name: newClassName.trim() });
+      setNewClassName('');
+      await refreshCurriculum();
+      alert('Class created successfully.');
+    } catch (error) {
+      alert(error?.response?.data?.message || error.message || 'Could not create class.');
+    }
+  };
+
+  const handleCreatePreparationMethod = async (event) => {
+    event.preventDefault();
+    try {
+      await curriculumAPI.createPreparationMethod({ name: newMethodName.trim(), classes: newMethodClasses });
+      setNewMethodName('');
+      setNewMethodClasses([]);
+      await refreshCurriculum();
+      alert('Preparation method created successfully.');
+    } catch (error) {
+      alert(error?.response?.data?.message || error.message || 'Could not create preparation method.');
+    }
+  };
+
+  const handleSaveSubjectMapping = async (event) => {
+    event.preventDefault();
+    if (!mappingSubjectId) return alert('Select a database subject first.');
+    try {
+      await curriculumAPI.updateSubjectLinks(mappingSubjectId, {
+        classes: mappingClasses,
+        preparationMethods: mappingMethods
+      });
+      await refreshCurriculum();
+      alert('Subject curriculum links saved.');
+    } catch (error) {
+      alert(error?.response?.data?.message || error.message || 'Could not save subject links.');
+    }
+  };
 
   /*
   |--------------------------------------------------------------------------
@@ -2173,6 +2263,12 @@ const fetchData = async () => {
           },
 
           {
+            id: 'curriculum',
+            label: 'Curriculum Setup',
+            icon: Layers3
+          },
+
+          {
             id: 'chapter',
             label: 'Add Chapter',
             icon: PlusCircle
@@ -2710,6 +2806,88 @@ const fetchData = async () => {
 
       )}
 
+
+      {/* ================================================================
+          DYNAMIC CURRICULUM
+      ================================================================= */}
+
+      {activeSection === 'curriculum' && (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Curriculum Setup</h2>
+              <p className="text-sm text-slate-500 mt-1">Create class levels and preparation methods, then link database subjects to them.</p>
+            </div>
+            <Button onClick={refreshCurriculum} disabled={curriculumLoading}>
+              {curriculumLoading ? 'Refreshing…' : 'Refresh curriculum'}
+            </Button>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-6">
+            <Card title="Create Class" subtitle="Examples: Class 9, Class 10, Class 11, Class 12">
+              <form onSubmit={handleCreateCurriculumClass} className="mt-4 flex gap-2">
+                <input required value={newClassName} onChange={(e) => setNewClassName(e.target.value)} placeholder="e.g. Class 10" className={inputClass} />
+                <Button type="submit">Add class</Button>
+              </form>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {curriculumClasses.map((item, index) => <span key={item._id || `${item.name}-${index}`} className="rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold">{item.name}{item.legacy ? ' · existing' : ''}</span>)}
+                {!curriculumClasses.length && <p className="text-sm text-slate-500">No classes found yet.</p>}
+              </div>
+            </Card>
+
+            <Card title="Create Preparation Method" subtitle="Examples: NEET, JEE, Boards, Olympiad">
+              <form onSubmit={handleCreatePreparationMethod} className="space-y-3 mt-4">
+                <input required value={newMethodName} onChange={(e) => setNewMethodName(e.target.value)} placeholder="e.g. Olympiad" className={inputClass} />
+                <label className={labelClass}>Applicable classes (optional)</label>
+                <select multiple value={newMethodClasses} onChange={(e) => setNewMethodClasses(Array.from(e.target.selectedOptions, (option) => option.value))} className={`${inputClass} min-h-24`}>
+                  {curriculumClasses.filter((item) => item._id).map((item) => <option key={item._id} value={item._id}>{item.name}</option>)}
+                </select>
+                <p className="text-xs text-slate-500">On desktop, use Cmd-click (Mac) or Ctrl-click (Windows) to select multiple classes.</p>
+                <Button type="submit">Add preparation method</Button>
+              </form>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {preparationMethods.map((item, index) => <span key={item._id || `${item.name}-${index}`} className="rounded-full bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 text-xs font-semibold">{item.name}{item.legacy ? ' · existing' : ''}</span>)}
+              </div>
+            </Card>
+          </div>
+
+          <Card title="Link Subjects to Curriculum" subtitle="These mappings are stored on database subjects and can be used by content forms.">
+            <form onSubmit={handleSaveSubjectMapping} className="space-y-4 mt-4">
+              <div>
+                <label className={labelClass}>Database subject</label>
+                <select value={mappingSubjectId} onChange={(e) => setMappingSubjectId(e.target.value)} className={inputClass} required>
+                  <option value="">Select subject</option>
+                  {curriculumSubjects.map((item) => <option key={item._id} value={item._id}>{item.name} ({item.code})</option>)}
+                </select>
+                {!curriculumSubjects.length && <p className="text-xs text-amber-600 mt-2">No database subjects found. Add subjects first in the Study Material tab.</p>}
+              </div>
+              <div className="grid md:grid-cols-2 gap-5">
+                <div>
+                  <label className={labelClass}>Classes</label>
+                  <div className="mt-2 space-y-2 max-h-52 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 p-3">
+                    {curriculumClasses.filter((item) => item._id).map((item) => <label key={item._id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={mappingClasses.includes(String(item._id))} onChange={(e) => setMappingClasses((old) => e.target.checked ? [...old, String(item._id)] : old.filter((id) => id !== String(item._id)))} />{item.name}</label>)}
+                    {!curriculumClasses.some((item) => item._id) && <p className="text-xs text-slate-500">Create a class first to add mappings.</p>}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelClass}>Preparation methods</label>
+                  <div className="mt-2 space-y-2 max-h-52 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 p-3">
+                    {preparationMethods.filter((item) => item._id).map((item) => <label key={item._id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={mappingMethods.includes(String(item._id))} onChange={(e) => setMappingMethods((old) => e.target.checked ? [...old, String(item._id)] : old.filter((id) => id !== String(item._id)))} />{item.name}</label>)}
+                    {!preparationMethods.some((item) => item._id) && <p className="text-xs text-slate-500">Create a preparation method first to add mappings.</p>}
+                  </div>
+                </div>
+              </div>
+              <Button type="submit" disabled={!mappingSubjectId}>Save subject links</Button>
+            </form>
+            <div className="overflow-x-auto mt-6">
+              <table className="w-full text-left text-sm">
+                <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase text-slate-500"><th className="py-2 pr-3">Subject</th><th className="py-2 pr-3">Classes</th><th className="py-2">Preparation methods</th></tr></thead>
+                <tbody>{curriculumSubjects.map((item) => <tr key={item._id} className="border-b border-slate-100 dark:border-slate-800/50"><td className="py-3 pr-3 font-semibold">{item.name}</td><td className="py-3 pr-3">{(item.classes || []).map((value) => value.name || value).join(', ') || '—'}</td><td className="py-3">{(item.preparationMethods || []).map((value) => value.name || value).join(', ') || '—'}</td></tr>)}</tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* ================================================================
           SUBJECTS
