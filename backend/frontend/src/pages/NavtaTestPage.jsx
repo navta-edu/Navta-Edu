@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { curriculumAPI } from "../utils/api";
 import {
   InlineMath,
   BlockMath,
@@ -1413,6 +1414,19 @@ export default function NavtaTestPage() {
 
   const [step, setStep] = useState("mode");
   const [testMode, setTestMode] = useState("");
+  const [curriculumClasses, setCurriculumClasses] = useState(CLASSES);
+
+  useEffect(() => {
+    let cancelled = false;
+    curriculumAPI.getClasses()
+      .then((response) => {
+        const rows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+        const names = rows.map((item) => typeof item === "string" ? item : item?.name).filter(Boolean);
+        if (!cancelled && names.length) setCurriculumClasses([...new Set(names)]);
+      })
+      .catch((error) => console.warn("Using legacy class list for NAVTA Test:", error?.message || error));
+    return () => { cancelled = true; };
+  }, []);
 
   const [subject, setSubject] = useState("");
   const [preparation, setPreparation] = useState("");
@@ -4307,7 +4321,7 @@ export default function NavtaTestPage() {
           </div>
 
           <div className="navta-class-grid">
-            {CLASSES.map((item) => (
+            {curriculumClasses.map((item) => (
               <button
                 key={item}
                 type="button"
