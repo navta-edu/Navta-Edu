@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { curriculumAPI } from "../utils/api";
+import { contentAPI, curriculumAPI } from "../utils/api";
 import {
   InlineMath,
   BlockMath,
@@ -1408,6 +1408,7 @@ function NavtaQuestionBody({ question }) {
 
 export default function NavtaTestPage() {
   const {
+    user,
     updateCoinBalance,
     updateStreak,
   } = useAuth();
@@ -1417,6 +1418,13 @@ export default function NavtaTestPage() {
   const [curriculumClasses, setCurriculumClasses] = useState(CLASSES);
   const [curriculumSubjects, setCurriculumSubjects] = useState([]);
   const [curriculumPreparationMethods, setCurriculumPreparationMethods] = useState([]);
+  const [databaseChapterNames, setDatabaseChapterNames] = useState([]);
+  const [databaseChaptersLoading, setDatabaseChaptersLoading] = useState(false);
+  const [subject, setSubject] = useState("");
+  const [preparation, setPreparation] = useState("");
+  const [classLevel, setClassLevel] = useState(user?.classLevel || "");
+  const [chapter, setChapter] = useState("");
+  const [difficulty, setDifficulty] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -1478,11 +1486,35 @@ export default function NavtaTestPage() {
     return names.length ? names : curriculumClasses;
   }, [curriculumClasses, curriculumPreparationMethods, preparation, selectedCurriculumSubject]);
 
-  const [subject, setSubject] = useState("");
-  const [preparation, setPreparation] = useState("");
-  const [classLevel, setClassLevel] = useState("");
-  const [chapter, setChapter] = useState("");
-  const [difficulty, setDifficulty] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!subject || !classLevel) {
+      setDatabaseChapterNames([]);
+      return () => { cancelled = true; };
+    }
+    setDatabaseChaptersLoading(true);
+    contentAPI.getNavtaChapters(subject, classLevel, preparation)
+      .then((response) => {
+        const rows = Array.isArray(response?.data) ? response.data : Array.isArray(response?.chapters) ? response.chapters : Array.isArray(response) ? response : [];
+        const names = rows.map((item) => typeof item === "string" ? item : item?.title || item?.name || item?.chapter).filter(Boolean);
+        if (!cancelled) setDatabaseChapterNames([...new Set(names)]);
+      })
+      .catch((error) => {
+        console.warn("Could not load dynamic NAVTA chapters:", error?.message || error);
+        if (!cancelled) setDatabaseChapterNames([]);
+      })
+      .finally(() => { if (!cancelled) setDatabaseChaptersLoading(false); });
+    return () => { cancelled = true; };
+  }, [subject, classLevel, preparation]);
+
+  const getAvailableChapterNames = (subjectName, className) => {
+    const staticNames = CHAPTERS[subjectName]?.[className] || [];
+    if (String(subjectName).toLowerCase() === String(subject || "").toLowerCase() && String(className).toLowerCase() === String(classLevel || "").toLowerCase() && databaseChapterNames.length) {
+      return [...new Set([...databaseChapterNames, ...staticNames])];
+    }
+    return staticNames;
+  };
 
   const [questionType, setQuestionType] = useState("mcq");
   const [selectedDuration, setSelectedDuration] = useState(null);
@@ -4386,7 +4418,7 @@ export default function NavtaTestPage() {
                 <div className="navta-card-icon">🎓</div>
                 <h2>{item}</h2>
                 <p>
-                  {(CHAPTERS[subject]?.[item] || []).length} chapters
+                  {getAvailableChapterNames(subject, item).length} chapters
                 </p>
                 <span className="navta-continue">
                   {isBoss ? "Select Chapters →" : "View Chapters →"}
@@ -4417,7 +4449,7 @@ export default function NavtaTestPage() {
           </div>
 
           <div className="navta-chapter-grid">
-            {(CHAPTERS[subject]?.[classLevel] || []).map((item) => (
+            {getAvailableChapterNames(subject, classLevel).map((item) => (
               <button
                 key={item}
                 type="button"
@@ -4471,7 +4503,7 @@ export default function NavtaTestPage() {
           </div>
 
           <div className="navta-chapter-grid">
-            {(CHAPTERS[subject]?.[classLevel] || []).map((item) => {
+            {getAvailableChapterNames(subject, classLevel).map((item) => {
               const selected = selectedChapters.includes(item);
 
               return (
