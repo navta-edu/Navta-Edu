@@ -3630,6 +3630,22 @@ export const healthAPI = {
   }
 };
 
+
+// ============================================
+// DYNAMIC CURRICULUM API
+// ============================================
+
+export const curriculumAPI = {
+  getClasses: async () => (await api.get('/curriculum/classes')).data,
+  createClass: async (data) => (await api.post('/curriculum/classes', data)).data,
+  updateClass: async (id, data) => (await api.patch(`/curriculum/classes/${id}`, data)).data,
+  getPreparationMethods: async () => (await api.get('/curriculum/preparation-methods')).data,
+  createPreparationMethod: async (data) => (await api.post('/curriculum/preparation-methods', data)).data,
+  updatePreparationMethod: async (id, data) => (await api.patch(`/curriculum/preparation-methods/${id}`, data)).data,
+  getSubjects: async () => (await api.get('/curriculum/subjects')).data,
+  updateSubjectLinks: async (id, data) => (await api.patch(`/curriculum/subjects/${id}/links`, data)).data
+};
+
 // ============================================
 // DEFAULT AXIOS EXPORT
 // ============================================
