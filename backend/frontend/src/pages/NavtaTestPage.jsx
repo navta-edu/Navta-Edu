@@ -1439,7 +1439,14 @@ export default function NavtaTestPage() {
         const subjectRows = Array.isArray(subjectResponse?.data) ? subjectResponse.data : Array.isArray(subjectResponse) ? subjectResponse : [];
         const names = classRows.map((item) => typeof item === "string" ? item : item?.name).filter(Boolean);
         if (!cancelled) {
-          if (names.length) setCurriculumClasses([...new Set(names)]);
+          // Keep the original Class 11/Class 12 curriculum and chapter lists.
+          // Dynamic classes are additions, never replacements for legacy classes.
+          const mergedNames = [...new Set([
+            ...CLASSES,
+            ...(user?.classLevel ? [user.classLevel] : []),
+            ...names,
+          ])];
+          setCurriculumClasses(mergedNames);
           setCurriculumPreparationMethods(methodRows);
           setCurriculumSubjects(subjectRows);
         }
@@ -1474,16 +1481,22 @@ export default function NavtaTestPage() {
   }, [selectedCurriculumSubject, curriculumPreparationMethods, subject]);
 
   const availableTestClasses = useMemo(() => {
-    let names = [...curriculumClasses];
+    const legacyNames = [...CLASSES];
+    const allNames = [...new Set([...legacyNames, ...curriculumClasses])];
     const method = curriculumPreparationMethods.find((item) => String(item?.name || "").trim().toLowerCase() === String(preparation || "").trim().toLowerCase());
     const resolveNames = (list = []) => list.map((item) => typeof item === "string"
       ? curriculumClasses.find((entry) => String(entry?._id || entry?.id) === item)?.name || item
       : item?.name || curriculumClasses.find((entry) => String(entry?._id || entry?.id) === String(item?._id || item))?.name).filter(Boolean);
     const methodClasses = resolveNames(method?.classes || []);
     const subjectClasses = resolveNames(selectedCurriculumSubject?.classes || []);
-    if (methodClasses.length) names = names.filter((name) => methodClasses.includes(name));
-    if (subjectClasses.length) names = names.filter((name) => subjectClasses.includes(name));
-    return names.length ? names : curriculumClasses;
+
+    // Legacy classes remain selectable exactly as before. Apply new curriculum
+    // mappings only to newly added classes so existing Class 11/12 content is not hidden.
+    const addedNames = allNames.filter((name) => !legacyNames.includes(name));
+    let addedClasses = [...addedNames];
+    if (methodClasses.length) addedClasses = addedClasses.filter((name) => methodClasses.includes(name));
+    if (subjectClasses.length) addedClasses = addedClasses.filter((name) => subjectClasses.includes(name));
+    return [...new Set([...legacyNames, ...addedClasses])];
   }, [curriculumClasses, curriculumPreparationMethods, preparation, selectedCurriculumSubject]);
 
 
