@@ -267,6 +267,41 @@ function renderPaperText(value = '') {
   return escapeHtml(text).replace(/\r?\n/g, '<br />');
 }
 
+function getQuestionDisplayText(question) {
+  const raw =
+    question?.questionText ??
+    question?.question ??
+    question?.text ??
+    question?.statement ??
+    question?.content ??
+    '';
+  if (typeof raw !== 'string') return '';
+  return raw
+    .replace(/\[\[NAVTA_VISUAL\]\]/gi, '')
+    .replace(/<img\b[^>]*>/gi, '')
+    .trim();
+}
+
+function QuestionImage({ question, className = '' }) {
+  const src = getQuestionImage(question);
+  if (!src) return null;
+
+  return (
+    <div className={`mt-3 ${className}`}>
+      <img
+        src={src}
+        alt="Question diagram"
+        className="max-w-full h-auto max-h-[420px] object-contain rounded-lg border border-slate-200 dark:border-slate-700 bg-white"
+        loading="eager"
+        onError={(event) => {
+          // Hide broken image paths instead of leaving a broken-image icon.
+          event.currentTarget.style.display = 'none';
+        }}
+      />
+    </div>
+  );
+}
+
 // =====================================================
 // AUTH HEADER
 //
@@ -889,7 +924,7 @@ export default function QuestionPaperBuilder() {
 
                       ${renderPaperText(
                         typeof question.question === 'string'
-                          ? question.question.replace(/<img\b[^>]*>/gi, '').replace(/\[\[NAVTA_VISUAL\]\]/g, '')
+                          ? getQuestionDisplayText(question)
                           : question.question
                       )}
 
@@ -2059,8 +2094,10 @@ export default function QuestionPaperBuilder() {
                                 "
                               >
                                 {index + 1}.{' '}
-                                {question.question}
+                                {getQuestionDisplayText(question)}
                               </p>
+
+                              <QuestionImage question={question} />
 
                               {normalizeQuestionType(
                                 question.questionType
@@ -2453,8 +2490,10 @@ export default function QuestionPaperBuilder() {
                           dark:text-slate-200
                         "
                       >
-                        {question.question}
+                        {getQuestionDisplayText(question)}
                       </p>
+
+                      <QuestionImage question={question} className="ml-8" />
 
                       <button
                         type="button"
