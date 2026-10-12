@@ -390,8 +390,17 @@ const [curriculumSubjects, setCurriculumSubjects] = useState([]);
 const [curriculumPreparationMethods, setCurriculumPreparationMethods] = useState([]);
 
 const [selectedSubject, setSelectedSubject] = useState(null);
-const [selectedExam, setSelectedExam] = useState("");
+const [selectedExam, setSelectedExam] = useState(user?.preparationTrack || user?.examGoal || "");
 const [selectedClass, setSelectedClass] = useState(user?.classLevel || "");
+const savedPreparationTrack = String(user?.preparationTrack || user?.examGoal || "").trim().toUpperCase();
+const normalizedSavedClass = String(user?.classLevel || "").trim().toLowerCase();
+const isSeniorSavedClass = /class\s*1[12]|\b1[12](st|th)?\b/.test(normalizedSavedClass);
+const allowedStudentSubjects = useMemo(() => {
+  if (!user?.classLevel || !isSeniorSavedClass) return null;
+  if (savedPreparationTrack === "JEE") return ["Physics", "Chemistry", "Maths", "Mathematics"];
+  if (savedPreparationTrack === "NEET") return ["Physics", "Chemistry", "Biology"];
+  return null;
+}, [user?.classLevel, isSeniorSavedClass, savedPreparationTrack]);
 
 const [chapters, setChapters] = useState([]);
 const [selectedChapter, setSelectedChapter] = useState("");
@@ -1403,7 +1412,7 @@ return (
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
 
-        {subjects.map((subject) => {
+        {subjects.filter((subject) => !allowedStudentSubjects || allowedStudentSubjects.some((name) => name.toLowerCase() === String(subject?.name || "").trim().toLowerCase())).map((subject) => {
 
           const config =
             SUBJECT_CONFIG[
