@@ -1283,73 +1283,72 @@ const formatNavtaSimpleScripts = (
 const NAVTA_VISUAL_MARKER =
   "[[NAVTA_VISUAL]]";
 
-function getNavtaQuestionImage(question) {
-  const visualType = String(
-    question?.visualType || "none"
-  ).trim();
+function getNavtaQuestionImage(question = {}) {
+  // The student portal supports several legacy image shapes. The admin bank
+  // must use the same saved image data rather than relying only on hasVisual.
+  const candidates = [
+    question?.questionImage,
+    question?.image,
+    question?.diagram,
+    question?.visual,
+    question?.originalAIQuestionImage,
+    question?.imageData,
+    question?.diagramData,
+    question?.questionImageUrl,
+    question?.imageUrl,
+    question?.diagramUrl,
+    question?.visualUrl,
+  ];
 
-  const hasRealVisual =
-    Boolean(
-      question?.hasVisual
-    ) &&
-    visualType !== "none";
-
-  if (!hasRealVisual) {
-    return null;
+  if (Array.isArray(question?.questionImages)) {
+    candidates.push(...question.questionImages);
+  }
+  if (Array.isArray(question?.images)) {
+    candidates.push(...question.images);
   }
 
-  const primaryUrl = String(
-    question?.questionImage?.url || ""
-  ).trim();
-
-  if (primaryUrl) {
+  const toImage = (candidate) => {
+    if (typeof candidate === "string") {
+      const value = candidate.trim();
+      if (!value) return null;
+      // Direct URL, data URL, or base64 image.
+      if (/^(https?:|\/|data:image\/|blob:)/i.test(value)) {
+        return { url: value, altText: question?.visualDescription || "Question diagram" };
+      }
+      if (/^[A-Za-z0-9+/=\r\n]+$/.test(value) && value.length > 100) {
+        return { url: `data:image/png;base64,${value.replace(/\s/g, "")}`, altText: question?.visualDescription || "Question diagram" };
+      }
+      return null;
+    }
+    if (!candidate || typeof candidate !== "object") return null;
+    const url = String(
+      candidate.url || candidate.src || candidate.secure_url ||
+      candidate.imageUrl || candidate.imageURL || candidate.dataUrl ||
+      candidate.dataURI || candidate.base64 || candidate.path || candidate.location || ""
+    ).trim();
+    if (!url) return null;
+    const normalizedUrl = /^data:image\//i.test(url) || /^(https?:|\/|blob:)/i.test(url)
+      ? url
+      : (/^[A-Za-z0-9+/=\r\n]+$/.test(url) && url.length > 100
+          ? `data:image/png;base64,${url.replace(/\s/g, "")}`
+          : url);
     return {
-      url: primaryUrl,
-      altText:
-        String(
-          question?.questionImage?.altText ||
-            question?.visualDescription ||
-            question?.questionNumber ||
-            "NAVTA question visual"
-        ).trim() ||
-        "NAVTA question visual",
-      visualType,
+      ...candidate,
+      url: normalizedUrl,
+      altText: String(candidate.altText || candidate.alt || question?.visualDescription || "Question diagram"),
     };
+  };
+
+  for (const candidate of candidates) {
+    const image = toImage(candidate);
+    if (image?.url) return { ...image, visualType: question?.visualType || "image" };
   }
 
-  const firstImage =
-    Array.isArray(
-      question?.questionImages
-    )
-      ? question.questionImages.find(
-          (image) =>
-            image &&
-            typeof image === "object" &&
-            String(
-              image.url || ""
-            ).trim()
-        )
-      : null;
-
-  if (firstImage) {
-    return {
-      url: String(
-        firstImage.url || ""
-      ).trim(),
-
-      altText:
-        String(
-          firstImage.altText ||
-            question?.visualDescription ||
-            question?.questionNumber ||
-            "NAVTA question visual"
-        ).trim() ||
-        "NAVTA question visual",
-
-      visualType,
-    };
+  // Some imports keep the image nested in a crop/source object.
+  for (const candidate of [question?.imageCrop, question?.imageSource, question?.visualSource]) {
+    const image = toImage(candidate);
+    if (image?.url) return { ...image, visualType: question?.visualType || "image" };
   }
-
   return null;
 }
 
@@ -6584,23 +6583,19 @@ export default function AdminNavtaTest() {
                           </div>
 
                           <div className="admin-navta-bank-question">
-                            <strong>
-                              {index + 1}.{" "}
-                            </strong>
-                            {renderNavtaContent(
-                              question.question ||
-                                "Question text unavailable"
-                            )}
+                            <strong>{index + 1}.{" "}</strong>
+                            <NavtaQuestionContent
+                              question={question}
+                              visualClassName="admin-navta-question-preview-image"
+                              visualShellClassName="admin-navta-question-preview-image-shell"
+                            />
                           </div>
 
                           {getNavtaQuestionImage(question)?.url && (
-                            <>
-                              <NavtaVisual question={question} className="admin-navta-question-preview-image" shellClassName="admin-navta-question-preview-image-shell" />
-                              <div className="admin-navta-image-actions">
-                                <button type="button" className="admin-navta-image-edit-button" onClick={() => openImageCropEditor(question)}>✂ Edit / Crop Image</button>
-                                <button type="button" className="admin-navta-image-reset-button" onClick={() => resetSavedQuestionImage(question)}>↺ Reset to AI Crop</button>
-                              </div>
-                            </>
+                            <div className="admin-navta-image-actions">
+                              <button type="button" className="admin-navta-image-edit-button" onClick={() => openImageCropEditor(question)}>✂ Edit / Crop Image</button>
+                              <button type="button" className="admin-navta-image-reset-button" onClick={() => resetSavedQuestionImage(question)}>↺ Reset to AI Crop</button>
+                            </div>
                           )}
 
                           {Array.isArray(
