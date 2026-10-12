@@ -1424,6 +1424,15 @@ export default function NavtaTestPage() {
   const [preparation, setPreparation] = useState("");
   const [classLevel, setClassLevel] = useState(user?.classLevel || "");
   const hasSavedStudentClass = Boolean(String(user?.classLevel || "").trim());
+  const savedPreparationTrack = String(user?.preparationTrack || user?.examGoal || "").trim().toUpperCase();
+  const isSeniorClass = /11|12/.test(String(user?.classLevel || ""));
+  const allowedStudentSubjects = useMemo(() => {
+    if (!hasSavedStudentClass) return null;
+    if (!isSeniorClass) return null;
+    if (savedPreparationTrack === "JEE") return ["Physics", "Chemistry", "Maths", "Mathematics"];
+    if (savedPreparationTrack === "NEET") return ["Physics", "Chemistry", "Biology"];
+    return null;
+  }, [hasSavedStudentClass, isSeniorClass, savedPreparationTrack]);
 
   // Keep NAVTA TEST synchronized with the class selected during login/onboarding.
   useEffect(() => {
@@ -1467,8 +1476,11 @@ export default function NavtaTestPage() {
       const name = String(item?.name || "").trim();
       if (name && !names.some((existing) => existing.toLowerCase() === name.toLowerCase())) names.push(name);
     }
+    if (allowedStudentSubjects) {
+      return names.filter((name) => allowedStudentSubjects.some((allowed) => allowed.toLowerCase() === name.toLowerCase()));
+    }
     return names;
-  }, [curriculumSubjects]);
+  }, [curriculumSubjects, allowedStudentSubjects]);
 
   const selectedCurriculumSubject = curriculumSubjects.find((item) =>
     String(item?.name || "").trim().toLowerCase() === String(subject || "").trim().toLowerCase()
@@ -1478,13 +1490,27 @@ export default function NavtaTestPage() {
       if (typeof item === "string") return curriculumPreparationMethods.find((method) => String(method?._id || method?.id) === item)?.name || item;
       return item?.name || curriculumPreparationMethods.find((method) => String(method?._id || method?.id) === String(item?._id || item))?.name;
     }).filter(Boolean);
-    if (linked.length) return linked.map((name) => PREPARATION_OPTIONS[subject]?.[name] || ({ title: name, description: `${name} preparation`, icon: "🎯" })).reduce((acc, option, index) => {
-      const name = linked[index];
-      acc[name] = option;
-      return acc;
-    }, {});
-    return PREPARATION_OPTIONS[subject] || {};
-  }, [selectedCurriculumSubject, curriculumPreparationMethods, subject]);
+    let options = {};
+    if (linked.length) {
+      options = linked.map((name) => PREPARATION_OPTIONS[subject]?.[name] || ({ title: name, description: `${name} preparation`, icon: "🎯" })).reduce((acc, option, index) => {
+        const name = linked[index];
+        acc[name] = option;
+        return acc;
+      }, {});
+    } else {
+      options = PREPARATION_OPTIONS[subject] || {};
+    }
+    if (hasSavedStudentClass && isSeniorClass && ["JEE", "NEET"].includes(savedPreparationTrack)) {
+      return options[savedPreparationTrack] ? { [savedPreparationTrack]: options[savedPreparationTrack] } : {
+        [savedPreparationTrack]: {
+          title: savedPreparationTrack,
+          description: `${savedPreparationTrack} preparation`,
+          icon: savedPreparationTrack === "JEE" ? "🚀" : "🩺"
+        }
+      };
+    }
+    return options;
+  }, [selectedCurriculumSubject, curriculumPreparationMethods, subject, hasSavedStudentClass, isSeniorClass, savedPreparationTrack]);
 
   const availableTestClasses = useMemo(() => {
     const legacyNames = [...CLASSES];
@@ -4336,7 +4362,13 @@ export default function NavtaTestPage() {
                 onClick={() => {
                   setSubject(item);
                   resetAfterSubject();
-                  setStep("preparation");
+                  if (hasSavedStudentClass && isSeniorClass && ["JEE", "NEET"].includes(savedPreparationTrack)) {
+                    setPreparation(savedPreparationTrack);
+                    setClassLevel(user.classLevel);
+                    setStep(isBoss ? "bossChapters" : "chapter");
+                  } else {
+                    setStep("preparation");
+                  }
                 }}
               >
                 <div className="navta-card-icon">
