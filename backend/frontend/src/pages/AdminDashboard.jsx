@@ -904,16 +904,23 @@ const fetchData = async () => {
   // subject-first selectors elsewhere in the dashboard remain unchanged.
   const chapterAvailableMethods = (() => {
     const className = String(selectedClass || '').trim().toLowerCase();
-    const methods = preparationMethods.filter((method) => {
+    const dynamicMethods = preparationMethods.filter((method) => {
       const linkedClasses = Array.isArray(method?.classes) ? method.classes : [];
       const names = linkedClasses.map((item) => String(
         typeof item === 'string' ? item : item?.name || item?.className || ''
       ).trim().toLowerCase()).filter(Boolean);
       return !className || !names.length || names.includes(className);
     });
-    if (methods.length) return methods;
+
+    // Always merge the legacy preparation methods with admin-created methods.
+    // This prevents adding a new method from hiding JEE Mains, NEET, or Boards.
     const legacyNames = [...new Set(Object.values(SUBJECT_RULES).flat())];
-    return legacyNames.map((name) => ({ name, legacy: true }));
+    const merged = new Map();
+    [...legacyNames.map((name) => ({ name, legacy: true })), ...dynamicMethods].forEach((method) => {
+      const name = String(method?.name || '').trim();
+      if (name && !merged.has(name.toLowerCase())) merged.set(name.toLowerCase(), method);
+    });
+    return [...merged.values()];
   })();
 
   const chapterAvailableSubjects = (() => {
@@ -3264,7 +3271,10 @@ const fetchData = async () => {
                   required
                 >
                   <option value="">Select Class</option>
-                  {(curriculumClasses.length ? curriculumClasses.map((item) => item.name).filter(Boolean) : CLASS_OPTIONS).map((name) => (
+                  {[...new Set([
+                    ...CLASS_OPTIONS,
+                    ...curriculumClasses.map((item) => item?.name).filter(Boolean),
+                  ])].map((name) => (
                     <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
