@@ -165,48 +165,77 @@ function escapeHtml(value = '') {
 function getQuestionImage(question) {
   if (!question || typeof question !== 'object') return '';
 
-  const candidates = [
-    question.imageUrl, question.questionImageUrl, question.questionImage,
-    question.diagramUrl, question.visualUrl, question.image, question.diagram,
-    question.visual, question.imageData, question.imageBase64, question.diagramData,
-    question.visualData, question.questionImageData, question.attachment, question.media,
-    question.imagePath, question.image_url, question.diagram_url, question.fileUrl,
-    question.fileURL, question.file_url, question.publicUrl, question.secure_url,
-    question.question?.imageUrl, question.question?.questionImageUrl,
-    question.question?.image, question.question?.diagram, question.question?.visual,
-    question.question?.content, question.question?.text
+  // Match the exact schema used by the working admin question renderer first.
+  // NAVTA stores visuals primarily in questionImage.url or questionImages[].url.
+  const directCandidates = [
+    question.questionImage?.url,
+    ...(Array.isArray(question.questionImages)
+      ? question.questionImages.map((item) => item?.url)
+      : []),
+    question.imageUrl,
+    question.questionImageUrl,
+    question.diagramUrl,
+    question.visualUrl,
+    question.image_url,
+    question.diagram_url,
+    question.fileUrl,
+    question.fileURL,
+    question.file_url,
+    question.publicUrl,
+    question.secure_url,
+    question.imageData,
+    question.imageBase64,
+    question.diagramData,
+    question.visualData,
+    question.questionImageData
   ];
 
-  const seen = new Set();
-  const toUsableUrl = (raw) => {
+  const makeUrl = (raw) => {
     if (typeof raw !== 'string') return '';
-    let value = raw.trim();
+    const value = raw.trim();
     if (!value) return '';
-    if (/^data:image\//i.test(value) || /^blob:/i.test(value) || /^https?:\/\//i.test(value)) return value;
-    // Raw base64 image data.
+    if (/^(data:image\/|blob:|https?:\/\/)/i.test(value)) return value;
+
+    // Relative image paths are resolved against the app's origin. Preserve
+    // already-rooted paths such as /uploads/questions/example.png.
+    if (value.startsWith('/')) {
+      try { return new URL(value, window.location.origin).href; } catch { return value; }
+    }
+    if (/^(uploads?|images?|media|files)\//i.test(value)) {
+      try { return new URL(`/${value}`, window.location.origin).href; } catch { return `/${value}`; }
+    }
+
+    // Some legacy records store only raw base64 without a data URI prefix.
     if (/^[A-Za-z0-9+/=\r\n]+$/.test(value) && value.length > 300) {
       return `data:image/png;base64,${value.replace(/\s/g, '')}`;
-    }
-    // Relative paths need to be made absolute because the print document is about:blank.
-    if (/^(\/|\.\/|\.\.\/)?(uploads?|images?|media|files)\//i.test(value) || value.startsWith('/')) {
-      try { return new URL(value, window.location.origin).href; } catch { return value; }
     }
     return '';
   };
 
+  for (const candidate of directCandidates) {
+    if (typeof candidate === 'string') {
+      const url = makeUrl(candidate);
+      if (url) return url;
+    }
+  }
+
+  // Fall back to other historic image/visual shapes.
+  const visited = new Set();
   const findImage = (item, depth = 0) => {
-    if (depth > 6 || item == null) return '';
+    if (item == null || depth > 7) return '';
     if (typeof item === 'string') {
-      const direct = toUsableUrl(item);
+      const direct = makeUrl(item);
       if (direct) return direct;
+
       const htmlImg = item.match(/<img\b[^>]*\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
-      if (htmlImg) return toUsableUrl(htmlImg[1] || htmlImg[2] || htmlImg[3] || '');
-      // Some records store the image URL as JSON text.
+      if (htmlImg) return makeUrl(htmlImg[1] || htmlImg[2] || htmlImg[3] || '');
+
       if (/^\s*[\[{]/.test(item)) {
-        try { return findImage(JSON.parse(item), depth + 1); } catch {}
+        try { return findImage(JSON.parse(item), depth + 1); } catch { /* not JSON */ }
       }
       return '';
     }
+
     if (Array.isArray(item)) {
       for (const entry of item) {
         const found = findImage(entry, depth + 1);
@@ -214,22 +243,24 @@ function getQuestionImage(question) {
       }
       return '';
     }
+
     if (typeof item === 'object') {
-      if (seen.has(item)) return '';
-      seen.add(item);
-      const directKeys = [
-        'url', 'src', 'href', 'path', 'uri', 'location', 'key',
+      if (visited.has(item)) return '';
+      visited.add(item);
+
+      for (const key of [
+        'url', 'src', 'href', 'path', 'uri', 'location',
         'fileUrl', 'fileURL', 'file_url', 'publicUrl', 'secure_url',
-        'imageUrl', 'image_url', 'questionImageUrl', 'image', 'diagram',
-        'visual', 'imageData', 'base64', 'imageBase64', 'diagramUrl',
-        'visualUrl', 'contentUrl', 'downloadUrl'
-      ];
-      for (const key of directKeys) {
+        'imageUrl', 'image_url', 'questionImageUrl', 'image',
+        'diagram', 'visual', 'imageData', 'base64', 'imageBase64',
+        'diagramUrl', 'visualUrl', 'contentUrl', 'downloadUrl'
+      ]) {
         if (item[key] != null) {
           const found = findImage(item[key], depth + 1);
           if (found) return found;
         }
       }
+
       for (const [key, value] of Object.entries(item)) {
         if (/image|diagram|visual|attachment|media|file|upload/i.test(key)) {
           const found = findImage(value, depth + 1);
@@ -240,18 +271,37 @@ function getQuestionImage(question) {
     return '';
   };
 
-  for (const item of candidates) {
-    const found = findImage(item);
+  for (const candidate of [
+    question.questionImage,
+    question.questionImages,
+    question.image,
+    question.diagram,
+    question.visual,
+    question.attachment,
+    question.media,
+    question.question?.questionImage,
+    question.question?.questionImages,
+    question.question?.image,
+    question.question?.diagram,
+    question.question?.visual
+  ]) {
+    const found = findImage(candidate);
     if (found) return found;
   }
 
-  // Last fallback: extract image markup from the question body itself.
-  for (const body of [question.question, question.text, question.questionText, question.statement, question.content]) {
+  // Some question bodies contain an actual <img> tag.
+  for (const body of [
+    question.question,
+    question.text,
+    question.questionText,
+    question.statement,
+    question.content
+  ]) {
     if (typeof body === 'string') {
       const match = body.match(/<img\b[^>]*\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
       if (match) {
-        const found = toUsableUrl(match[1] || match[2] || match[3] || '');
-        if (found) return found;
+        const url = makeUrl(match[1] || match[2] || match[3] || '');
+        if (url) return url;
       }
     }
   }
@@ -283,21 +333,41 @@ function getQuestionDisplayText(question) {
 }
 
 function QuestionImage({ question, className = '' }) {
-  const src = getQuestionImage(question);
-  if (!src) return null;
+  const urls = [];
+  const primary = getQuestionImage(question);
+  if (primary) urls.push(primary);
+
+  // Render every saved image for questions that contain multiple diagrams.
+  if (Array.isArray(question?.questionImages)) {
+    for (const item of question.questionImages) {
+      const url = typeof item?.url === 'string' ? item.url.trim() : '';
+      if (url && !urls.includes(url)) {
+        const resolved = url.startsWith('/')
+          ? (() => { try { return new URL(url, window.location.origin).href; } catch { return url; } })()
+          : url;
+        if (!urls.includes(resolved)) urls.push(resolved);
+      }
+    }
+  }
+
+  if (!urls.length) return null;
 
   return (
-    <div className={`mt-3 ${className}`}>
-      <img
-        src={src}
-        alt="Question diagram"
-        className="max-w-full h-auto max-h-[420px] object-contain rounded-lg border border-slate-200 dark:border-slate-700 bg-white"
-        loading="eager"
-        onError={(event) => {
-          // Hide broken image paths instead of leaving a broken-image icon.
-          event.currentTarget.style.display = 'none';
-        }}
-      />
+    <div className={`mt-3 space-y-3 ${className}`}>
+      {urls.map((src, index) => (
+        <img
+          key={`${src}-${index}`}
+          src={src}
+          alt={question?.questionImage?.altText || question?.visualDescription || 'Question diagram'}
+          className="block max-w-full h-auto max-h-[420px] object-contain rounded-lg border border-slate-200 dark:border-slate-700 bg-white"
+          loading="eager"
+          crossOrigin="anonymous"
+          onError={(event) => {
+            console.error('NAVTA question image failed to load:', src);
+            event.currentTarget.style.display = 'none';
+          }}
+        />
+      ))}
     </div>
   );
 }
