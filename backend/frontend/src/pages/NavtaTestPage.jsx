@@ -1423,6 +1423,12 @@ export default function NavtaTestPage() {
   const [subject, setSubject] = useState("");
   const [preparation, setPreparation] = useState("");
   const [classLevel, setClassLevel] = useState(user?.classLevel || "");
+  const hasSavedStudentClass = Boolean(String(user?.classLevel || "").trim());
+
+  // Keep NAVTA TEST synchronized with the class selected during login/onboarding.
+  useEffect(() => {
+    if (hasSavedStudentClass) setClassLevel(user.classLevel);
+  }, [user?.classLevel, hasSavedStudentClass]);
   const [chapter, setChapter] = useState("");
   const [difficulty, setDifficulty] = useState("");
 
@@ -1496,8 +1502,16 @@ export default function NavtaTestPage() {
     let addedClasses = [...addedNames];
     if (methodClasses.length) addedClasses = addedClasses.filter((name) => methodClasses.includes(name));
     if (subjectClasses.length) addedClasses = addedClasses.filter((name) => subjectClasses.includes(name));
-    return [...new Set([...legacyNames, ...addedClasses])];
-  }, [curriculumClasses, curriculumPreparationMethods, preparation, selectedCurriculumSubject]);
+    const availableNames = [...new Set([...legacyNames, ...addedClasses])];
+    // Students with a saved class see only that class; the class picker is
+    // retained for accounts that have not selected a class yet.
+    if (hasSavedStudentClass) {
+      const savedClass = String(user.classLevel).trim();
+      const match = availableNames.find((name) => String(name).trim().toLowerCase() === savedClass.toLowerCase());
+      return [match || savedClass];
+    }
+    return availableNames;
+  }, [curriculumClasses, curriculumPreparationMethods, preparation, selectedCurriculumSubject, hasSavedStudentClass, user?.classLevel]);
 
 
   useEffect(() => {
@@ -1729,7 +1743,7 @@ export default function NavtaTestPage() {
 
   const resetAfterSubject = () => {
     setPreparation("");
-    setClassLevel("");
+    setClassLevel(user?.classLevel || "");
     setChapter("");
     setDifficulty("");
     setQuestionType("mcq");
@@ -1739,7 +1753,7 @@ export default function NavtaTestPage() {
   };
 
   const resetAfterPreparation = () => {
-    setClassLevel("");
+    setClassLevel(user?.classLevel || "");
     setChapter("");
     setDifficulty("");
     setQuestionType("mcq");
@@ -1763,7 +1777,7 @@ export default function NavtaTestPage() {
     setTestMode("");
     setSubject("");
     setPreparation("");
-    setClassLevel("");
+    setClassLevel(user?.classLevel || "");
     setChapter("");
     setDifficulty("");
     setQuestionType("mcq");
@@ -1777,7 +1791,7 @@ export default function NavtaTestPage() {
     setTestMode(mode);
     setSubject("");
     setPreparation("");
-    setClassLevel("");
+    setClassLevel(user?.classLevel || "");
     setChapter("");
     setDifficulty("");
     setQuestionType("mcq");
@@ -4380,7 +4394,12 @@ export default function NavtaTestPage() {
                 onClick={() => {
                   setPreparation(key);
                   resetAfterPreparation();
-                  setStep("class");
+                  if (hasSavedStudentClass) {
+                    setClassLevel(user.classLevel);
+                    setStep(isBoss ? "bossChapters" : "chapter");
+                  } else {
+                    setStep("class");
+                  }
                 }}
               >
                 <div className="navta-card-icon">
@@ -4455,9 +4474,18 @@ export default function NavtaTestPage() {
             <button
               type="button"
               style={styles.backButton}
-              onClick={goBackFromChapter}
+              onClick={() => {
+                if (hasSavedStudentClass) {
+                  setChapter("");
+                  setDifficulty("");
+                  setGenerationError("");
+                  setStep("preparation");
+                } else {
+                  goBackFromChapter();
+                }
+              }}
             >
-              ← Class
+              ← {hasSavedStudentClass ? "Preparation" : "Class"}
             </button>
           </div>
 
@@ -4502,10 +4530,10 @@ export default function NavtaTestPage() {
               onClick={() => {
                 setSelectedChapters([]);
                 setGenerationError("");
-                setStep("class");
+                setStep(hasSavedStudentClass ? "preparation" : "class");
               }}
             >
-              ← Class
+              ← {hasSavedStudentClass ? "Preparation" : "Class"}
             </button>
           </div>
 
