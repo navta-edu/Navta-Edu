@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -61,6 +62,11 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  // Selected school class for the student
+  classLevel: {
+    type: String,
+    default: ''
+  },
   address: {
     type: String,
     default: ''
@@ -79,7 +85,7 @@ UserSchema.pre('save', async function (next) {
   next();
 });
 
-// Match user entered password to hashed password in database
+// Match user-entered password against the stored hash
 UserSchema.methods.matchPassword = async function (enteredPassword) {
   if (!this.password) return false;
   return bcrypt.compare(enteredPassword, this.password);
