@@ -426,7 +426,12 @@ useEffect(() => {
       const subjectRows = Array.isArray(subjectResponse?.data) ? subjectResponse.data : Array.isArray(subjectResponse) ? subjectResponse : [];
       const names = classRows.map((item) => typeof item === "string" ? item : item?.name).filter(Boolean);
       if (!cancelled) {
-        if (names.length) setCurriculumClasses([...new Set([...(user?.classLevel ? [user.classLevel] : []), ...names])]);
+        // Preserve the original Class 11/Class 12 experience and add dynamic classes beside it.
+        setCurriculumClasses([...new Set([
+          ...CLASSES,
+          ...(user?.classLevel ? [user.classLevel] : []),
+          ...names,
+        ])]);
         setCurriculumPreparationMethods(methodRows);
         setCurriculumSubjects(subjectRows);
       }
@@ -462,16 +467,21 @@ const selectedCurriculumMethod = curriculumPreparationMethods.find((item) =>
   String(item?.name || "").trim().toLowerCase() === String(selectedExam || "").trim().toLowerCase()
 );
 const noteClassNamesForSelection = (() => {
-  let names = [...curriculumClasses];
-  const methodClasses = (selectedCurriculumMethod?.classes || []).map((item) => typeof item === "string"
+  const legacyNames = [...CLASSES];
+  const allNames = [...new Set([...legacyNames, ...curriculumClasses])];
+  const resolveNames = (list = []) => list.map((item) => typeof item === "string"
     ? curriculumClasses.find((entry) => String(entry?._id || entry?.id) === item)?.name || item
     : item?.name || curriculumClasses.find((entry) => String(entry?._id || entry?.id) === String(item?._id || item))?.name).filter(Boolean);
-  const subjectClasses = (selectedCurriculumSubject?.classes || []).map((item) => typeof item === "string"
-    ? curriculumClasses.find((entry) => String(entry?._id || entry?.id) === item)?.name || item
-    : item?.name || curriculumClasses.find((entry) => String(entry?._id || entry?.id) === String(item?._id || item))?.name).filter(Boolean);
-  if (methodClasses.length) names = names.filter((name) => methodClasses.includes(name));
-  if (subjectClasses.length) names = names.filter((name) => subjectClasses.includes(name));
-  return names.length ? names : curriculumClasses;
+  const methodClasses = resolveNames(selectedCurriculumMethod?.classes || []);
+  const subjectClasses = resolveNames(selectedCurriculumSubject?.classes || []);
+
+  // Do not hide the legacy Class 11/Class 12 notes when an admin adds mappings
+  // for a new class. Only the newly added class options are mapping-filtered.
+  const addedNames = allNames.filter((name) => !legacyNames.includes(name));
+  let addedClasses = [...addedNames];
+  if (methodClasses.length) addedClasses = addedClasses.filter((name) => methodClasses.includes(name));
+  if (subjectClasses.length) addedClasses = addedClasses.filter((name) => subjectClasses.includes(name));
+  return [...new Set([...legacyNames, ...addedClasses])];
 })();
 
 useEffect(() => {
