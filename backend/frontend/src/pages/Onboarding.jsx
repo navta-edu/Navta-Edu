@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authAPI, curriculumAPI } from '../utils/api';
 import Card from '../components/Card';
 import Button from '../components/Button';
-import { AlertCircle, Building2, BookOpen, MapPin, Briefcase } from 'lucide-react';
+import { AlertCircle, Building2, BookOpen, Briefcase, GraduationCap } from 'lucide-react';
 
 export default function Onboarding() {
   const { user, setProfile, setStreak } = useAuth();
@@ -12,24 +12,42 @@ export default function Onboarding() {
 
   const [role, setRole] = useState(user?.role !== 'student' && user?.role !== 'teacher' ? 'student' : user.role);
   const [stream, setStream] = useState('Science');
-  const [classOptions, setClassOptions] = useState([]);
-  const [classLevel, setClassLevel] = useState(user?.classLevel || '');
   const [department, setDepartment] = useState('');
   const [schoolName, setSchoolName] = useState('');
-  const [address, setAddress] = useState('');
+  const [classLevel, setClassLevel] = useState(user?.classLevel || '');
+  const [classOptions, setClassOptions] = useState(['Class 10', 'Class 11', 'Class 12']);
   
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     let cancelled = false;
-    curriculumAPI.getClasses().then((response) => {
-      const rows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
-      const names = rows.map((item) => typeof item === 'string' ? item : item?.name).filter(Boolean);
-      if (!cancelled) setClassOptions([...new Set(names)]);
-    }).catch((error) => console.warn('Could not load class options:', error?.message || error));
+
+    curriculumAPI.getClasses()
+      .then((response) => {
+        const rows = Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response)
+            ? response
+            : [];
+        const names = rows
+          .map((item) => typeof item === 'string' ? item : item?.name)
+          .filter(Boolean);
+        const standardClasses = ['Class 10', 'Class 11', 'Class 12'];
+        const merged = [...new Set([...standardClasses, ...names])];
+
+        if (!cancelled) {
+          setClassOptions(merged);
+          // Keep an existing account class selected when it is available.
+          if (user?.classLevel) setClassLevel(user.classLevel);
+        }
+      })
+      .catch((error) => {
+        console.warn('Could not load onboarding class options:', error?.message || error);
+      });
+
     return () => { cancelled = true; };
-  }, []);
+  }, [user?.classLevel]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,11 +57,18 @@ export default function Onboarding() {
     try {
       // Assuming authAPI has completeProfile exported
       if (role === 'student' && !classLevel) {
-        setErrorMsg('Please select your class to continue.');
+        setErrorMsg('Please select your class.');
         setLoading(false);
         return;
       }
-      const data = { role, stream, department, schoolName, address, classLevel: role === 'student' ? classLevel : '' };
+
+      const data = {
+        role,
+        stream,
+        department,
+        schoolName,
+        classLevel: role === 'student' ? classLevel : ''
+      };
       const res = await authAPI.completeProfile(data);
       
       // Navigate to correct dashboard after profile is completed
@@ -106,11 +131,23 @@ export default function Onboarding() {
 
           {role === 'student' && (
             <div>
-              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Class *</label>
-              <select required value={classLevel} onChange={(e) => setClassLevel(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-slate-200/70 bg-white dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus:border-primary-500 focus:outline-none text-sm">
-                <option value="">Select your class</option>
-                {classOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+                Class *
+              </label>
+              <div className="relative">
+                <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
+                <select
+                  required
+                  value={classLevel}
+                  onChange={(e) => setClassLevel(e.target.value)}
+                  className="w-full pl-10.5 pr-4 py-2.5 rounded-xl border border-slate-200/70 bg-white/50 dark:border-slate-800 dark:bg-slate-950/50 text-slate-800 dark:text-slate-100 focus:border-primary-500 focus:outline-none text-sm"
+                >
+                  <option value="">Select your class</option>
+                  {classOptions.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 
@@ -167,21 +204,6 @@ export default function Onboarding() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
-              Address *
-            </label>
-            <div className="relative">
-              <MapPin className="absolute left-3.5 top-3 w-4.5 h-4.5 text-slate-400" />
-              <textarea
-                required
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="School/Organisation Address"
-                className="w-full pl-10.5 pr-4 py-2.5 rounded-xl border border-slate-200/70 bg-white/50 dark:border-slate-800 dark:bg-slate-950/50 text-slate-800 dark:text-slate-100 placeholder-slate-400/60 focus:border-primary-500 focus:outline-none text-sm min-h-[80px]"
-              />
-            </div>
-          </div>
 
           <Button type="submit" disabled={loading} className="w-full py-3 mt-4">
             {loading ? 'Saving details...' : 'Complete Profile & Continue'}
