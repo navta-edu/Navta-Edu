@@ -165,47 +165,73 @@ function escapeHtml(value = '') {
 function getQuestionImage(question) {
   const candidates = [
     question?.imageUrl,
+    question?.questionImageUrl,
     question?.questionImage,
+    question?.questionImages,
     question?.diagramUrl,
+    question?.diagramData,
     question?.visualUrl,
+    question?.imageData,
     question?.image,
     question?.diagram,
-    question?.visual
-  ];
+    question?.visual,
+    question?.media
+  ].flatMap((item) => Array.isArray(item) ? item : [item]);
   for (const item of candidates) {
-    if (typeof item === 'string' && /^(https?:\/\/|data:image\/|blob:)/i.test(item.trim())) {
+    if (typeof item === 'string' && (/^(https?:\/\/|data:image\/|blob:)/i.test(item.trim()) || item.trim().startsWith('/'))) {
       return item.trim();
     }
     if (item && typeof item === 'object') {
-      const url = item.url || item.src || item.data || item.imageUrl;
-      if (typeof url === 'string' && /^(https?:\/\/|data:image\/|blob:)/i.test(url.trim())) return url.trim();
+      const url = item.url || item.src || item.data || item.imageUrl || item.path || item.secure_url || item.base64;
+      if (typeof url === 'string' && (/^(https?:\/\/|data:image\/|blob:)/i.test(url.trim()) || url.trim().startsWith('/'))) return url.trim();
     }
   }
   return '';
 }
 
-function renderPaperText(value = '') {
+function normalizePaperMath(value = '') {
   let text = String(value ?? '');
 
-  // Remove internal markers, but keep actual image rendering in getQuestionImage().
+  // Normalize common legacy/OCR variants found in imported question-bank text.
+  // Do not rewrite already well-formed LaTeX fractions.
+  text = text
+    .replace(/\\left\s*/g, '')
+    .replace(/\\right\s*/g, '')
+    .replace(/\\dfrac/g, '\\frac')
+    .replace(/\\tfrac/g, '\\frac');
+
+  // A few imported records lost the leading slash from \frac.
+  text = text.replace(/(^|[^\\A-Za-z])frac(?=\s*(?:\{|[A-Za-zπΠ0-9]))/g, '$1\\frac');
+
+  // Common compact forms: \frac12, frac12, \fracπ2, fracπ2.
+  text = text.replace(/\\frac\s*\{?\s*(π|Π|[0-9])\s*\}?\s*\{?\s*(π|Π|[0-9])\s*\}?/g,
+    (_, numerator, denominator) => `\\frac{${numerator === 'π' ? '\\pi' : numerator === 'Π' ? '\\Pi' : numerator}}{${denominator === 'π' ? '\\pi' : denominator === 'Π' ? '\\Pi' : denominator}}`);
+
+  // Convert bare Greek pi in simple shorthand fractions (e.g. fracπ2 -> \frac{\pi}{2}).
+  text = text.replace(/\\frac\s*π\s*([0-9])/g, '\\frac{\\pi}{$1}');
+  text = text.replace(/\\frac\s*Π\s*([0-9])/g, '\\frac{\\Pi}{$1}');
+
+  // Repair missing braces on the denominator when the numerator is already grouped.
+  text = text.replace(/\\frac\s*\{([^{}]+)\}\s*([0-9])\b/g, '\\frac{$1}{$2}');
+
+  // MathJax needs balanced delimiters. Fix common imported \left/\right tokens
+  // and remove a stray \right delimiter command, without touching normal prose.
+  text = text.replace(/\\left\s*/g, '').replace(/\\right\s*/g, '');
+  text = text.replace(/\\(?:\(|\)|\[|\])/g, (token) => token);
+  return text;
+}
+
+function renderPaperText(value = '') {
+  let text = normalizePaperMath(value);
+
+  // Remove internal visual markers; the image itself is rendered separately.
   text = text.replace(/\[\[NAVTA_VISUAL\]\]/g, '');
   text = text.replace(/<br\s*\/?\s*>/gi, '\n');
 
-  // Older question-bank entries contain incomplete LaTeX sizing commands.
-  // These are visual sizing hints, so removing them preserves the equation
-  // while preventing MathJax's "Missing or unrecognized delimiter" errors.
-  text = text.replace(/\\left\b/g, '').replace(/\\right\b/g, '');
-
-  // Repair common shorthand fractions such as \frac12 and \frac{1}2.
-  text = text.replace(/\\frac\s*([+-]?\d)\s*([+-]?\d)/g, '\\frac{$1}{$2}');
-  text = text.replace(/\\frac\s*\{([^{}]+)\}\s*([+-]?\d)\b/g, '\\frac{$1}{$2}');
-
-  // Many imported options store raw LaTeX without $...$ delimiters.
-  // Wrap only those raw expressions; existing delimited formulas remain unchanged.
-  const hasMathDelimiter =
-    /\$[^$]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]/.test(text);
-  const hasLatexCommand =
-    /\\(?:frac|sqrt|int|sum|prod|lim|sin|cos|tan|cot|sec|csc|log|ln|pi|theta|alpha|beta|infty|cdot|times|neq|leq|geq|pm|rightarrow|Rightarrow|begin|vec|overline|underline)\b/.test(text);
+  // If a record contains TeX commands without delimiters, wrap the math expression.
+  // Existing inline/display math delimiters are preserved.
+  const hasMathDelimiter = /\$[^$]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]/.test(text);
+  const hasLatexCommand = /\\(?:frac|sqrt|int|sum|prod|lim|sin|cos|tan|cot|sec|csc|log|ln|pi|Pi|theta|alpha|beta|infty|cdot|times|neq|leq|geq|pm|rightarrow|Rightarrow|begin|vec|overline|underline|mathrm|text|operatorname)\b/.test(text);
 
   if (!hasMathDelimiter && hasLatexCommand) {
     text = `\\(${text}\\)`;
