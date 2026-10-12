@@ -3,7 +3,8 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Card from '../components/Card';
 import Button from '../components/Button';
-import { GraduationCap, Mail, Lock, User, AlertCircle, BookOpen, FileText } from 'lucide-react';
+import { GraduationCap, Mail, Lock, User, AlertCircle, GraduationCap as ClassIcon, FileText } from 'lucide-react';
+import { curriculumAPI } from '../utils/api';
 
 const GOOGLE_CLIENT_ID = '936476255415-6lglsb7amgin8bk7h66g0u29vjmh24vv.apps.googleusercontent.com';
 
@@ -15,7 +16,8 @@ export default function Signup() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState(preselectedRole);
-  const [stream, setStream] = useState('Science');
+  const [classLevel, setClassLevel] = useState('');
+  const [classOptions, setClassOptions] = useState(['Class 10', 'Class 11', 'Class 12']);
   const [qualification, setQualification] = useState('');
   const [bio, setBio] = useState('');
   
@@ -26,6 +28,35 @@ export default function Signup() {
   const navigate = useNavigate();
   const googleBtnRef = useRef(null);
   const googleInitialized = useRef(false);
+  const roleRef = useRef(role);
+  const classLevelRef = useRef(classLevel);
+  roleRef.current = role;
+  classLevelRef.current = classLevel;
+
+  // Keep the standard school classes available even if the curriculum API
+  // currently returns only a subset. Preserve any extra admin-created classes.
+  useEffect(() => {
+    let cancelled = false;
+    curriculumAPI.getClasses()
+      .then((response) => {
+        const rows = Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response)
+            ? response
+            : [];
+        const apiNames = rows
+          .map((item) => typeof item === 'string' ? item : item?.name)
+          .filter(Boolean);
+        const standardNames = ['Class 10', 'Class 11', 'Class 12'];
+        const merged = [...new Set([...standardNames, ...apiNames])];
+        if (!cancelled) setClassOptions(merged);
+      })
+      .catch((error) => {
+        console.warn('Could not load signup class options:', error?.message || error);
+        // The three standard classes remain available as the fallback.
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const navigateByRole = useCallback((user) => {
     if (!user.isProfileComplete && user.role !== 'admin') {
@@ -56,7 +87,11 @@ export default function Signup() {
           callback: async (response) => {
             setErrorMsg('');
             try {
-              const loggedUser = await googleLogin(response.credential);
+              if (roleRef.current === 'student' && !classLevelRef.current) {
+                setErrorMsg('Please select your class before continuing.');
+                return;
+              }
+              const loggedUser = await googleLogin(response.credential, classLevelRef.current);
               navigateByRole(loggedUser);
             } catch (err) {
               setErrorMsg(err.message || 'Google sign-up failed.');
@@ -90,6 +125,10 @@ export default function Signup() {
       setErrorMsg('Please enter all required authentication fields.');
       return;
     }
+    if (role === 'student' && !classLevel) {
+      setErrorMsg('Please select your class before creating an account.');
+      return;
+    }
 
     setLoading(true);
     setErrorMsg('');
@@ -99,7 +138,7 @@ export default function Signup() {
       email,
       password,
       role,
-      stream: role === 'student' ? stream : undefined,
+      classLevel: role === 'student' ? classLevel : undefined,
       qualification: role === 'teacher' ? qualification : undefined,
       bio: role === 'teacher' ? bio : undefined
     };
@@ -220,24 +259,29 @@ export default function Signup() {
           </div>
 
           {/* DYNAMIC FIELD SETS FOR ROLES */}
+          {/* Class selection for students */}
           {role === 'student' && (
             <div className="animate-fadeIn">
               <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
-                Academic Stream
+                Select Your Class
               </label>
               <div className="relative">
-                <BookOpen className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
+                <ClassIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
                 <select
-                  value={stream}
-                  onChange={(e) => setStream(e.target.value)}
-                  className="w-full pl-10.5 pr-4 py-2.5 rounded-xl border border-slate-200/70 bg-white dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus:border-primary-500 dark:focus:border-primary-500 focus:outline-none transition-colors text-sm"
+                  required
+                  value={classLevel}
+                  onChange={(e) => setClassLevel(e.target.value)}
+                  className="w-full pl-10.5 pr-4 py-2.5 rounded-xl border border-slate-200/70 bg-white dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus:border-primary-500 focus:outline-none transition-colors text-sm"
                 >
-                  <option value="Science">Science (Physics, Chemistry, Maths)</option>
-                  <option value="Commerce">Commerce</option>
-                  <option value="Arts">Arts</option>
-                  <option value="General">General Study</option>
+                  <option value="">Select class</option>
+                  {classOptions.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
                 </select>
               </div>
+              <p className="mt-1 text-xs text-slate-400">
+                NAVTA will use this class for your subjects, chapters, Study Notes, and NAVTA TEST.
+              </p>
             </div>
           )}
 
