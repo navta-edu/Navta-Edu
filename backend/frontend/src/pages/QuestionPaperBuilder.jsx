@@ -163,22 +163,66 @@ function escapeHtml(value = '') {
 
 // Render question text safely while preserving LaTeX for MathJax.
 function getQuestionImage(question) {
+  if (!question || typeof question !== 'object') return '';
   const candidates = [
-    question?.imageUrl,
-    question?.questionImage,
-    question?.diagramUrl,
-    question?.visualUrl,
-    question?.image,
-    question?.diagram,
-    question?.visual
+    question.imageUrl, question.questionImageUrl, question.questionImage,
+    question.diagramUrl, question.visualUrl, question.image, question.diagram,
+    question.visual, question.imageData, question.imageBase64, question.diagramData,
+    question.visualData, question.questionImageData, question.attachment, question.media,
+    question.question?.imageUrl, question.question?.questionImageUrl,
+    question.question?.image, question.question?.diagram, question.question?.visual
   ];
-  for (const item of candidates) {
-    if (typeof item === 'string' && /^(https?:\/\/|data:image\/|blob:)/i.test(item.trim())) {
-      return item.trim();
+  const seen = new Set();
+  const findImage = (item, depth = 0) => {
+    if (depth > 4 || item == null) return '';
+    if (typeof item === 'string') {
+      const value = item.trim();
+      if (/^(https?:\/\/|data:image\/|blob:)/i.test(value)) return value;
+      if (/^[A-Za-z0-9+/=\r\n]+$/.test(value) && value.length > 300) {
+        return `data:image/png;base64,${value.replace(/\s/g, '')}`;
+      }
+      const match = value.match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i);
+      if (match && /^(https?:\/\/|data:image\/|blob:)/i.test(match[1].trim())) return match[1].trim();
+      return '';
     }
-    if (item && typeof item === 'object') {
-      const url = item.url || item.src || item.data || item.imageUrl;
-      if (typeof url === 'string' && /^(https?:\/\/|data:image\/|blob:)/i.test(url.trim())) return url.trim();
+    if (Array.isArray(item)) {
+      for (const entry of item) {
+        const found = findImage(entry, depth + 1);
+        if (found) return found;
+      }
+      return '';
+    }
+    if (typeof item === 'object') {
+      if (seen.has(item)) return '';
+      seen.add(item);
+      const directKeys = [
+        'url', 'src', 'data', 'imageUrl', 'questionImageUrl', 'image',
+        'diagram', 'visual', 'imageData', 'base64', 'imageBase64',
+        'diagramUrl', 'visualUrl', 'contentUrl'
+      ];
+      for (const key of directKeys) {
+        if (item[key] != null) {
+          const found = findImage(item[key], depth + 1);
+          if (found) return found;
+        }
+      }
+      for (const [key, value] of Object.entries(item)) {
+        if (/image|diagram|visual|attachment|media|file/i.test(key)) {
+          const found = findImage(value, depth + 1);
+          if (found) return found;
+        }
+      }
+    }
+    return '';
+  };
+  for (const item of candidates) {
+    const found = findImage(item);
+    if (found) return found;
+  }
+  for (const body of [question.question, question.text, question.questionText, question.statement, question.content]) {
+    if (typeof body === 'string') {
+      const match = body.match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i);
+      if (match && /^(https?:\/\/|data:image\/|blob:)/i.test(match[1].trim())) return match[1].trim();
     }
   }
   return '';
