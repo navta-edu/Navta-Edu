@@ -164,25 +164,47 @@ function escapeHtml(value = '') {
 // Render question text safely while preserving LaTeX for MathJax.
 function getQuestionImage(question) {
   if (!question || typeof question !== 'object') return '';
+
   const candidates = [
     question.imageUrl, question.questionImageUrl, question.questionImage,
     question.diagramUrl, question.visualUrl, question.image, question.diagram,
     question.visual, question.imageData, question.imageBase64, question.diagramData,
     question.visualData, question.questionImageData, question.attachment, question.media,
+    question.imagePath, question.image_url, question.diagram_url, question.fileUrl,
+    question.fileURL, question.file_url, question.publicUrl, question.secure_url,
     question.question?.imageUrl, question.question?.questionImageUrl,
-    question.question?.image, question.question?.diagram, question.question?.visual
+    question.question?.image, question.question?.diagram, question.question?.visual,
+    question.question?.content, question.question?.text
   ];
+
   const seen = new Set();
+  const toUsableUrl = (raw) => {
+    if (typeof raw !== 'string') return '';
+    let value = raw.trim();
+    if (!value) return '';
+    if (/^data:image\//i.test(value) || /^blob:/i.test(value) || /^https?:\/\//i.test(value)) return value;
+    // Raw base64 image data.
+    if (/^[A-Za-z0-9+/=\r\n]+$/.test(value) && value.length > 300) {
+      return `data:image/png;base64,${value.replace(/\s/g, '')}`;
+    }
+    // Relative paths need to be made absolute because the print document is about:blank.
+    if (/^(\/|\.\/|\.\.\/)?(uploads?|images?|media|files)\//i.test(value) || value.startsWith('/')) {
+      try { return new URL(value, window.location.origin).href; } catch { return value; }
+    }
+    return '';
+  };
+
   const findImage = (item, depth = 0) => {
-    if (depth > 4 || item == null) return '';
+    if (depth > 6 || item == null) return '';
     if (typeof item === 'string') {
-      const value = item.trim();
-      if (/^(https?:\/\/|data:image\/|blob:)/i.test(value)) return value;
-      if (/^[A-Za-z0-9+/=\r\n]+$/.test(value) && value.length > 300) {
-        return `data:image/png;base64,${value.replace(/\s/g, '')}`;
+      const direct = toUsableUrl(item);
+      if (direct) return direct;
+      const htmlImg = item.match(/<img\b[^>]*\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
+      if (htmlImg) return toUsableUrl(htmlImg[1] || htmlImg[2] || htmlImg[3] || '');
+      // Some records store the image URL as JSON text.
+      if (/^\s*[\[{]/.test(item)) {
+        try { return findImage(JSON.parse(item), depth + 1); } catch {}
       }
-      const match = value.match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i);
-      if (match && /^(https?:\/\/|data:image\/|blob:)/i.test(match[1].trim())) return match[1].trim();
       return '';
     }
     if (Array.isArray(item)) {
@@ -196,9 +218,11 @@ function getQuestionImage(question) {
       if (seen.has(item)) return '';
       seen.add(item);
       const directKeys = [
-        'url', 'src', 'data', 'imageUrl', 'questionImageUrl', 'image',
-        'diagram', 'visual', 'imageData', 'base64', 'imageBase64',
-        'diagramUrl', 'visualUrl', 'contentUrl'
+        'url', 'src', 'href', 'path', 'uri', 'location', 'key',
+        'fileUrl', 'fileURL', 'file_url', 'publicUrl', 'secure_url',
+        'imageUrl', 'image_url', 'questionImageUrl', 'image', 'diagram',
+        'visual', 'imageData', 'base64', 'imageBase64', 'diagramUrl',
+        'visualUrl', 'contentUrl', 'downloadUrl'
       ];
       for (const key of directKeys) {
         if (item[key] != null) {
@@ -207,7 +231,7 @@ function getQuestionImage(question) {
         }
       }
       for (const [key, value] of Object.entries(item)) {
-        if (/image|diagram|visual|attachment|media|file/i.test(key)) {
+        if (/image|diagram|visual|attachment|media|file|upload/i.test(key)) {
           const found = findImage(value, depth + 1);
           if (found) return found;
         }
@@ -215,14 +239,20 @@ function getQuestionImage(question) {
     }
     return '';
   };
+
   for (const item of candidates) {
     const found = findImage(item);
     if (found) return found;
   }
+
+  // Last fallback: extract image markup from the question body itself.
   for (const body of [question.question, question.text, question.questionText, question.statement, question.content]) {
     if (typeof body === 'string') {
-      const match = body.match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i);
-      if (match && /^(https?:\/\/|data:image\/|blob:)/i.test(match[1].trim())) return match[1].trim();
+      const match = body.match(/<img\b[^>]*\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
+      if (match) {
+        const found = toUsableUrl(match[1] || match[2] || match[3] || '');
+        if (found) return found;
+      }
     }
   }
   return '';
@@ -857,7 +887,11 @@ export default function QuestionPaperBuilder() {
                         ${index + 1}.
                       </strong>
 
-                      ${renderPaperText(question.question)}
+                      ${renderPaperText(
+                        typeof question.question === 'string'
+                          ? question.question.replace(/<img\b[^>]*>/gi, '').replace(/\[\[NAVTA_VISUAL\]\]/g, '')
+                          : question.question
+                      )}
 
                     </div>
 
@@ -877,7 +911,7 @@ export default function QuestionPaperBuilder() {
 
                   </div>
 
-                  ${getQuestionImage(question) ? `<div class="question-image-wrap"><img class="question-image" src="${escapeHtml(getQuestionImage(question))}" alt="Question diagram" /></div>` : ''}
+                  ${getQuestionImage(question) ? `<div class="question-image-wrap"><img class="question-image" src="${escapeHtml(getQuestionImage(question))}" alt="Question diagram" loading="eager" decoding="sync" /></div>` : ''}
 
                   ${optionsHtml}
 
