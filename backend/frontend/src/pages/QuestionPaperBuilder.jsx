@@ -163,146 +163,22 @@ function escapeHtml(value = '') {
 
 // Render question text safely while preserving LaTeX for MathJax.
 function getQuestionImage(question) {
-  if (!question || typeof question !== 'object') return '';
-
-  // Match the exact schema used by the working admin question renderer first.
-  // NAVTA stores visuals primarily in questionImage.url or questionImages[].url.
-  const directCandidates = [
-    question.questionImage?.url,
-    ...(Array.isArray(question.questionImages)
-      ? question.questionImages.map((item) => item?.url)
-      : []),
-    question.imageUrl,
-    question.questionImageUrl,
-    question.diagramUrl,
-    question.visualUrl,
-    question.image_url,
-    question.diagram_url,
-    question.fileUrl,
-    question.fileURL,
-    question.file_url,
-    question.publicUrl,
-    question.secure_url,
-    question.imageData,
-    question.imageBase64,
-    question.diagramData,
-    question.visualData,
-    question.questionImageData
+  const candidates = [
+    question?.imageUrl,
+    question?.questionImage,
+    question?.diagramUrl,
+    question?.visualUrl,
+    question?.image,
+    question?.diagram,
+    question?.visual
   ];
-
-  const makeUrl = (raw) => {
-    if (typeof raw !== 'string') return '';
-    const value = raw.trim();
-    if (!value) return '';
-    if (/^(data:image\/|blob:|https?:\/\/)/i.test(value)) return value;
-
-    // Relative image paths are resolved against the app's origin. Preserve
-    // already-rooted paths such as /uploads/questions/example.png.
-    if (value.startsWith('/')) {
-      try { return new URL(value, window.location.origin).href; } catch { return value; }
+  for (const item of candidates) {
+    if (typeof item === 'string' && /^(https?:\/\/|data:image\/|blob:)/i.test(item.trim())) {
+      return item.trim();
     }
-    if (/^(uploads?|images?|media|files)\//i.test(value)) {
-      try { return new URL(`/${value}`, window.location.origin).href; } catch { return `/${value}`; }
-    }
-
-    // Some legacy records store only raw base64 without a data URI prefix.
-    if (/^[A-Za-z0-9+/=\r\n]+$/.test(value) && value.length > 300) {
-      return `data:image/png;base64,${value.replace(/\s/g, '')}`;
-    }
-    return '';
-  };
-
-  for (const candidate of directCandidates) {
-    if (typeof candidate === 'string') {
-      const url = makeUrl(candidate);
-      if (url) return url;
-    }
-  }
-
-  // Fall back to other historic image/visual shapes.
-  const visited = new Set();
-  const findImage = (item, depth = 0) => {
-    if (item == null || depth > 7) return '';
-    if (typeof item === 'string') {
-      const direct = makeUrl(item);
-      if (direct) return direct;
-
-      const htmlImg = item.match(/<img\b[^>]*\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
-      if (htmlImg) return makeUrl(htmlImg[1] || htmlImg[2] || htmlImg[3] || '');
-
-      if (/^\s*[\[{]/.test(item)) {
-        try { return findImage(JSON.parse(item), depth + 1); } catch { /* not JSON */ }
-      }
-      return '';
-    }
-
-    if (Array.isArray(item)) {
-      for (const entry of item) {
-        const found = findImage(entry, depth + 1);
-        if (found) return found;
-      }
-      return '';
-    }
-
-    if (typeof item === 'object') {
-      if (visited.has(item)) return '';
-      visited.add(item);
-
-      for (const key of [
-        'url', 'src', 'href', 'path', 'uri', 'location',
-        'fileUrl', 'fileURL', 'file_url', 'publicUrl', 'secure_url',
-        'imageUrl', 'image_url', 'questionImageUrl', 'image',
-        'diagram', 'visual', 'imageData', 'base64', 'imageBase64',
-        'diagramUrl', 'visualUrl', 'contentUrl', 'downloadUrl'
-      ]) {
-        if (item[key] != null) {
-          const found = findImage(item[key], depth + 1);
-          if (found) return found;
-        }
-      }
-
-      for (const [key, value] of Object.entries(item)) {
-        if (/image|diagram|visual|attachment|media|file|upload/i.test(key)) {
-          const found = findImage(value, depth + 1);
-          if (found) return found;
-        }
-      }
-    }
-    return '';
-  };
-
-  for (const candidate of [
-    question.questionImage,
-    question.questionImages,
-    question.image,
-    question.diagram,
-    question.visual,
-    question.attachment,
-    question.media,
-    question.question?.questionImage,
-    question.question?.questionImages,
-    question.question?.image,
-    question.question?.diagram,
-    question.question?.visual
-  ]) {
-    const found = findImage(candidate);
-    if (found) return found;
-  }
-
-  // Some question bodies contain an actual <img> tag.
-  for (const body of [
-    question.question,
-    question.text,
-    question.questionText,
-    question.statement,
-    question.content
-  ]) {
-    if (typeof body === 'string') {
-      const match = body.match(/<img\b[^>]*\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
-      if (match) {
-        const url = makeUrl(match[1] || match[2] || match[3] || '');
-        if (url) return url;
-      }
+    if (item && typeof item === 'object') {
+      const url = item.url || item.src || item.data || item.imageUrl;
+      if (typeof url === 'string' && /^(https?:\/\/|data:image\/|blob:)/i.test(url.trim())) return url.trim();
     }
   }
   return '';
@@ -310,66 +186,32 @@ function getQuestionImage(question) {
 
 function renderPaperText(value = '') {
   let text = String(value ?? '');
-  // Older question records may contain this internal marker without an attached visual.
+
+  // Remove internal markers, but keep actual image rendering in getQuestionImage().
   text = text.replace(/\[\[NAVTA_VISUAL\]\]/g, '');
-  // Convert common stored HTML line breaks to readable line breaks before escaping.
   text = text.replace(/<br\s*\/?\s*>/gi, '\n');
-  return escapeHtml(text).replace(/\r?\n/g, '<br />');
-}
 
-function getQuestionDisplayText(question) {
-  const raw =
-    question?.questionText ??
-    question?.question ??
-    question?.text ??
-    question?.statement ??
-    question?.content ??
-    '';
-  if (typeof raw !== 'string') return '';
-  return raw
-    .replace(/\[\[NAVTA_VISUAL\]\]/gi, '')
-    .replace(/<img\b[^>]*>/gi, '')
-    .trim();
-}
+  // Older question-bank entries contain incomplete LaTeX sizing commands.
+  // These are visual sizing hints, so removing them preserves the equation
+  // while preventing MathJax's "Missing or unrecognized delimiter" errors.
+  text = text.replace(/\\left\b/g, '').replace(/\\right\b/g, '');
 
-function QuestionImage({ question, className = '' }) {
-  const urls = [];
-  const primary = getQuestionImage(question);
-  if (primary) urls.push(primary);
+  // Repair common shorthand fractions such as \frac12 and \frac{1}2.
+  text = text.replace(/\\frac\s*([+-]?\d)\s*([+-]?\d)/g, '\\frac{$1}{$2}');
+  text = text.replace(/\\frac\s*\{([^{}]+)\}\s*([+-]?\d)\b/g, '\\frac{$1}{$2}');
 
-  // Render every saved image for questions that contain multiple diagrams.
-  if (Array.isArray(question?.questionImages)) {
-    for (const item of question.questionImages) {
-      const url = typeof item?.url === 'string' ? item.url.trim() : '';
-      if (url && !urls.includes(url)) {
-        const resolved = url.startsWith('/')
-          ? (() => { try { return new URL(url, window.location.origin).href; } catch { return url; } })()
-          : url;
-        if (!urls.includes(resolved)) urls.push(resolved);
-      }
-    }
+  // Many imported options store raw LaTeX without $...$ delimiters.
+  // Wrap only those raw expressions; existing delimited formulas remain unchanged.
+  const hasMathDelimiter =
+    /\$[^$]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]/.test(text);
+  const hasLatexCommand =
+    /\\(?:frac|sqrt|int|sum|prod|lim|sin|cos|tan|cot|sec|csc|log|ln|pi|theta|alpha|beta|infty|cdot|times|neq|leq|geq|pm|rightarrow|Rightarrow|begin|vec|overline|underline)\b/.test(text);
+
+  if (!hasMathDelimiter && hasLatexCommand) {
+    text = `\\(${text}\\)`;
   }
 
-  if (!urls.length) return null;
-
-  return (
-    <div className={`mt-3 space-y-3 ${className}`}>
-      {urls.map((src, index) => (
-        <img
-          key={`${src}-${index}`}
-          src={src}
-          alt={question?.questionImage?.altText || question?.visualDescription || 'Question diagram'}
-          className="block max-w-full h-auto max-h-[420px] object-contain rounded-lg border border-slate-200 dark:border-slate-700 bg-white"
-          loading="eager"
-          crossOrigin="anonymous"
-          onError={(event) => {
-            console.error('NAVTA question image failed to load:', src);
-            event.currentTarget.style.display = 'none';
-          }}
-        />
-      ))}
-    </div>
-  );
+  return escapeHtml(text).replace(/\r?\n/g, '<br />');
 }
 
 // =====================================================
@@ -992,11 +834,7 @@ export default function QuestionPaperBuilder() {
                         ${index + 1}.
                       </strong>
 
-                      ${renderPaperText(
-                        typeof question.question === 'string'
-                          ? getQuestionDisplayText(question)
-                          : question.question
-                      )}
+                      ${renderPaperText(question.question)}
 
                     </div>
 
@@ -1016,7 +854,7 @@ export default function QuestionPaperBuilder() {
 
                   </div>
 
-                  ${getQuestionImage(question) ? `<div class="question-image-wrap"><img class="question-image" src="${escapeHtml(getQuestionImage(question))}" alt="Question diagram" loading="eager" decoding="sync" /></div>` : ''}
+                  ${getQuestionImage(question) ? `<div class="question-image-wrap"><img class="question-image" src="${escapeHtml(getQuestionImage(question))}" alt="Question diagram" /></div>` : ''}
 
                   ${optionsHtml}
 
@@ -2164,10 +2002,8 @@ export default function QuestionPaperBuilder() {
                                 "
                               >
                                 {index + 1}.{' '}
-                                {getQuestionDisplayText(question)}
+                                {question.question}
                               </p>
-
-                              <QuestionImage question={question} />
 
                               {normalizeQuestionType(
                                 question.questionType
@@ -2560,10 +2396,8 @@ export default function QuestionPaperBuilder() {
                           dark:text-slate-200
                         "
                       >
-                        {getQuestionDisplayText(question)}
+                        {question.question}
                       </p>
-
-                      <QuestionImage question={question} className="ml-8" />
 
                       <button
                         type="button"
