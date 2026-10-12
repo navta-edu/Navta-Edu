@@ -161,6 +161,38 @@ function escapeHtml(value = '') {
     );
 }
 
+// Render question text safely while preserving LaTeX for MathJax.
+function getQuestionImage(question) {
+  const candidates = [
+    question?.imageUrl,
+    question?.questionImage,
+    question?.diagramUrl,
+    question?.visualUrl,
+    question?.image,
+    question?.diagram,
+    question?.visual
+  ];
+  for (const item of candidates) {
+    if (typeof item === 'string' && /^(https?:\/\/|data:image\/|blob:)/i.test(item.trim())) {
+      return item.trim();
+    }
+    if (item && typeof item === 'object') {
+      const url = item.url || item.src || item.data || item.imageUrl;
+      if (typeof url === 'string' && /^(https?:\/\/|data:image\/|blob:)/i.test(url.trim())) return url.trim();
+    }
+  }
+  return '';
+}
+
+function renderPaperText(value = '') {
+  let text = String(value ?? '');
+  // Older question records may contain this internal marker without an attached visual.
+  text = text.replace(/\[\[NAVTA_VISUAL\]\]/g, '');
+  // Convert common stored HTML line breaks to readable line breaks before escaping.
+  text = text.replace(/<br\s*\/?\s*>/gi, '\n');
+  return escapeHtml(text).replace(/\r?\n/g, '<br />');
+}
+
 // =====================================================
 // AUTH HEADER
 //
@@ -759,9 +791,7 @@ export default function QuestionPaperBuilder() {
                               )}.
                             </strong>
 
-                            ${escapeHtml(
-                              option
-                            )}
+                            ${renderPaperText(option)}
 
                           </div>
                         `
@@ -783,9 +813,7 @@ export default function QuestionPaperBuilder() {
                         ${index + 1}.
                       </strong>
 
-                      ${escapeHtml(
-                        question.question
-                      )}
+                      ${renderPaperText(question.question)}
 
                     </div>
 
@@ -804,6 +832,8 @@ export default function QuestionPaperBuilder() {
                     </div>
 
                   </div>
+
+                  ${getQuestionImage(question) ? `<div class="question-image-wrap"><img class="question-image" src="${escapeHtml(getQuestionImage(question))}" alt="Question diagram" /></div>` : ''}
 
                   ${optionsHtml}
 
@@ -827,6 +857,19 @@ export default function QuestionPaperBuilder() {
               paperDetails.title
             )}
           </title>
+
+          <script>
+            window.MathJax = {
+              tex: {
+                inlineMath: [['$','$'], ['\\(','\\)']],
+                displayMath: [['$$','$$'], ['\\[','\\]']],
+                processEscapes: true
+              },
+              options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] },
+              startup: { typeset: false }
+            };
+          </script>
+          <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 
           <style>
 
@@ -962,6 +1005,30 @@ export default function QuestionPaperBuilder() {
 
               margin:
                 10px 0 0 25px;
+            }
+
+            .question-image-wrap {
+              margin: 10px 0 0 25px;
+              max-width: 100%;
+            }
+
+            .question-image {
+              display: block;
+              max-width: 100%;
+              max-height: 420px;
+              height: auto;
+              object-fit: contain;
+            }
+
+            .question-text, .option {
+              overflow-wrap: anywhere;
+              white-space: normal;
+            }
+
+            mjx-container {
+              max-width: 100%;
+              overflow-x: auto;
+              overflow-y: hidden;
             }
 
             .footer {
@@ -1116,19 +1183,32 @@ export default function QuestionPaperBuilder() {
           </div>
 
           <script>
-
-            window.onload =
-              function () {
-
-                setTimeout(
-                  function () {
-                    window.print();
-                  },
-                  300
-                );
-
-              };
-
+            (function () {
+              let printed = false;
+              function printWhenReady() {
+                if (printed) return;
+                printed = true;
+                const images = Array.from(document.images || []);
+                Promise.all(images.map((img) => img.complete ? Promise.resolve() : new Promise((resolve) => {
+                  img.onload = resolve;
+                  img.onerror = resolve;
+                  setTimeout(resolve, 2500);
+                }))).then(() => {
+                  const typeset = window.MathJax && window.MathJax.typesetPromise
+                    ? window.MathJax.typesetPromise().catch(() => {})
+                    : Promise.resolve();
+                  return typeset;
+                }).then(() => setTimeout(() => window.print(), 250));
+              }
+              window.addEventListener('load', () => {
+                if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
+                  window.MathJax.startup.promise.then(printWhenReady).catch(printWhenReady);
+                } else {
+                  setTimeout(printWhenReady, 1200);
+                }
+              });
+              setTimeout(printWhenReady, 5000);
+            })();
           </script>
 
         </body>
