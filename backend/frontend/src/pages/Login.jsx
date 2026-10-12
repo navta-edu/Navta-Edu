@@ -4,14 +4,37 @@ import { useAuth } from '../context/AuthContext';
 import { curriculumAPI } from '../utils/api';
 import Card from '../components/Card';
 import Button from '../components/Button';
-import { GraduationCap, Mail, Lock, AlertCircle } from 'lucide-react';
+import { Mail, Lock, AlertCircle } from 'lucide-react';
 
 const GOOGLE_CLIENT_ID = '936476255415-6lglsb7amgin8bk7h66g0u29vjmh24vv.apps.googleusercontent.com';
+
+// Keep the established class names used by existing curriculum records.
+// Classes returned by the admin curriculum API are added to these defaults,
+// rather than replacing them.
+const DEFAULT_CLASS_OPTIONS = ['Class 10', 'Class 11', 'Class 12'];
+
+function getClassName(item) {
+  const value = typeof item === 'string' ? item : item?.name;
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function mergeClassOptions(rows) {
+  const names = Array.isArray(rows) ? rows.map(getClassName).filter(Boolean) : [];
+  const combined = [...DEFAULT_CLASS_OPTIONS, ...names];
+  const unique = new Map();
+  combined.forEach((name) => {
+    // Avoid duplicates such as "Class 11" and " class 11 ", but preserve
+    // the original display/value spelling used by the curriculum API.
+    const key = name.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (key && !unique.has(key)) unique.set(key, name);
+  });
+  return [...unique.values()];
+}
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [classOptions, setClassOptions] = useState([]);
+  const [classOptions, setClassOptions] = useState(DEFAULT_CLASS_OPTIONS);
   const [selectedClass, setSelectedClass] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -24,11 +47,25 @@ export default function Login() {
 
   useEffect(() => {
     let cancelled = false;
-    curriculumAPI.getClasses().then((response) => {
-      const rows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
-      const names = rows.map((item) => typeof item === 'string' ? item : item?.name).filter(Boolean);
-      if (!cancelled) setClassOptions([...new Set(names)]);
-    }).catch((error) => console.warn('Could not load class options on login:', error?.message || error));
+    curriculumAPI.getClasses()
+      .then((response) => {
+        const rows = Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response)
+            ? response
+            : Array.isArray(response?.data?.classes)
+              ? response.data.classes
+              : [];
+        if (!cancelled) {
+          // Merge API/admin classes with the three standard classes. An API
+          // response containing only Class 10 must not hide Classes 11 and 12.
+          setClassOptions(mergeClassOptions(rows));
+        }
+      })
+      .catch((error) => {
+        // Defaults remain visible if the curriculum endpoint is unavailable.
+        console.warn('Could not load class options on login:', error?.message || error);
+      });
     return () => { cancelled = true; };
   }, []);
 
@@ -37,25 +74,18 @@ export default function Login() {
       navigate('/onboarding');
       return;
     }
-    
-    if (user.role === 'admin') {
-      navigate('/admin');
-    } else if (user.role === 'teacher') {
-      navigate('/teacher');
-    } else if (user.role === 'external_teacher') {
-      navigate('/external-teacher');
-    } else {
-      navigate('/dashboard');
-    }
+    if (user.role === 'admin') navigate('/admin');
+    else if (user.role === 'teacher') navigate('/teacher');
+    else if (user.role === 'external_teacher') navigate('/external-teacher');
+    else navigate('/dashboard');
   }, [navigate]);
 
   useEffect(() => {
-    if (googleInitialized.current) return;
+    if (googleInitialized.current) return undefined;
 
     const initGoogle = () => {
       if (window.google?.accounts?.id && googleBtnRef.current && !googleInitialized.current) {
         googleInitialized.current = true;
-
         window.google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
           callback: async (response) => {
@@ -72,8 +102,6 @@ export default function Login() {
             }
           },
         });
-
-        // Render the official Google button inside our container
         window.google.accounts.id.renderButton(googleBtnRef.current, {
           type: 'standard',
           theme: 'outline',
@@ -85,10 +113,7 @@ export default function Login() {
       }
     };
 
-    // Try immediately
     initGoogle();
-
-    // Retry after script loads (only if not yet initialized)
     const timer = setTimeout(initGoogle, 1500);
     return () => clearTimeout(timer);
   }, [googleLogin, navigateByRole]);
@@ -103,6 +128,8 @@ export default function Login() {
     setLoading(true);
     setErrorMsg('');
     try {
+      // Pass the chosen class through the existing auth flow so AuthContext /
+      // backend can persist it alongside the user's existing profile.
       const loggedUser = await login(email, password, selectedClass);
       if (loggedUser?.role === 'student' && !(selectedClassRef.current || loggedUser.classLevel)) {
         setErrorMsg('Please select your class before continuing.');
@@ -121,7 +148,6 @@ export default function Login() {
       <div className="absolute top-1/4 left-1/3 -z-10 h-72 w-72 rounded-full bg-primary-500/10 blur-[90px] dark:bg-primary-500/5 pulse-glow" />
 
       <Card className="w-full max-w-md p-8 border border-slate-100 dark:border-slate-800/40 relative shadow-lg">
-        {/* Header Logo */}
         <div className="flex flex-col items-center mb-8">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl shadow-md shadow-primary-500/20 mb-3 bg-white dark:bg-slate-800">
             <img src="/favicon.svg.png" alt="Navta Logo" className="h-8 w-8 object-contain" />
@@ -130,7 +156,6 @@ export default function Login() {
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Log in to resume your learning streaks</p>
         </div>
 
-        {/* Error Alert Box */}
         {errorMsg && (
           <div className="flex items-center gap-2 rounded-xl bg-red-50 dark:bg-red-950/20 p-4 text-xs font-semibold text-red-600 dark:text-red-400 border border-red-200/50 dark:border-red-900/30 mb-6">
             <AlertCircle className="w-4.5 h-4.5 shrink-0" />
@@ -138,21 +163,14 @@ export default function Login() {
           </div>
         )}
 
-        {/* Google Sign-In Button — rendered by Google Identity Services */}
-        <div
-          ref={googleBtnRef}
-          id="google-signin-btn"
-          className="w-full flex items-center justify-center [&>div]:!w-full"
-        />
+        <div ref={googleBtnRef} id="google-signin-btn" className="w-full flex items-center justify-center [&>div]:!w-full" />
 
-        {/* Divider */}
         <div className="flex items-center gap-3 my-6">
           <div className="flex-1 h-px bg-slate-200/70 dark:bg-slate-700/50" />
           <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">or</span>
           <div className="flex-1 h-px bg-slate-200/70 dark:bg-slate-700/50" />
         </div>
 
-        {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
@@ -168,42 +186,25 @@ export default function Login() {
             </select>
             <p className="mt-1 text-xs text-slate-400">Your class helps NAVTA show the relevant chapters and Study Notes.</p>
           </div>
+
           <div>
-            <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
-              Email Address
-            </label>
+            <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Email Address</label>
             <div className="relative">
               <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full pl-10.5 pr-4 py-2.5 rounded-xl border border-slate-200/70 bg-white/50 dark:border-slate-800 dark:bg-slate-950/50 text-slate-800 dark:text-slate-100 placeholder-slate-400/60 focus:border-primary-500 dark:focus:border-primary-500 focus:outline-none transition-colors text-sm"
-              />
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com"
+                className="w-full pl-10.5 pr-4 py-2.5 rounded-xl border border-slate-200/70 bg-white/50 dark:border-slate-800 dark:bg-slate-950/50 text-slate-800 dark:text-slate-100 placeholder-slate-400/60 focus:border-primary-500 dark:focus:border-primary-500 focus:outline-none transition-colors text-sm" />
             </div>
           </div>
 
           <div>
             <div className="flex justify-between items-center mb-2">
-              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                Password
-              </label>
-              <Link to="#" className="text-xs font-semibold text-primary-500 hover:text-primary-600 dark:hover:text-primary-400">
-                Forgot Password?
-              </Link>
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Password</label>
+              <Link to="#" className="text-xs font-semibold text-primary-500 hover:text-primary-600 dark:hover:text-primary-400">Forgot Password?</Link>
             </div>
             <div className="relative">
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full pl-10.5 pr-4 py-2.5 rounded-xl border border-slate-200/70 bg-white/50 dark:border-slate-800 dark:bg-slate-950/50 text-slate-800 dark:text-slate-100 placeholder-slate-400/60 focus:border-primary-500 dark:focus:border-primary-500 focus:outline-none transition-colors text-sm"
-              />
+              <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
+                className="w-full pl-10.5 pr-4 py-2.5 rounded-xl border border-slate-200/70 bg-white/50 dark:border-slate-800 dark:bg-slate-950/50 text-slate-800 dark:text-slate-100 placeholder-slate-400/60 focus:border-primary-500 dark:focus:border-primary-500 focus:outline-none transition-colors text-sm" />
             </div>
           </div>
 
@@ -212,12 +213,9 @@ export default function Login() {
           </Button>
         </form>
 
-        {/* Footer */}
         <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-8">
           Don't have an account?{' '}
-          <Link to="/signup" className="font-bold text-primary-500 hover:text-primary-600 dark:hover:text-primary-400">
-            Sign up here
-          </Link>
+          <Link to="/signup" className="font-bold text-primary-500 hover:text-primary-600 dark:hover:text-primary-400">Sign up here</Link>
         </p>
       </Card>
     </div>
