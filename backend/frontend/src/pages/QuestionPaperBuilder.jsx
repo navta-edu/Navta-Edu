@@ -161,82 +161,112 @@ function escapeHtml(value = '') {
     );
 }
 
-// Render question text safely while preserving LaTeX for MathJax.
+// NAVTA TEST-compatible LaTeX normalization and question visual helpers.
+// Keep these transformations aligned with NavtaTestPage.jsx so the teacher
+// paper uses the same saved question content and common LaTeX repairs.
+const NAVTA_LATEX_COMMANDS =
+  "begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|cdot|times|div|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|sin|cos|tan|cot|sec|csc|log|ln|exp|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|neq|ne|leq|geq|approx|equiv|sim|propto|pm|mp|infty|vec|overrightarrow|overleftarrow|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|leftrightarrow|Rightarrow|Leftarrow|Leftrightarrow|therefore|because|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|ce|pu";
+
+function normaliseNavtaLatex(input = '') {
+  let value = String(input ?? '')
+    .replace(/```(?:latex|tex|math)?/gi, '')
+    .replace(/```/g, '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\r\n?/g, '\n')
+    .trim();
+
+  if (!value) return '';
+
+  // Repair JSON/Gemini double escaping without touching matrix row breaks.
+  value = value.replace(
+    new RegExp(`\\\\\\\\(?=(?:${NAVTA_LATEX_COMMANDS})\\b)`, 'g'),
+    '\\',
+  );
+  value = value.replace(/\\\s+(?=[A-Za-z])/g, '\\');
+  value = value
+    .replace(/\\cdotp\b/g, '\\cdot')
+    .replace(/\\operatorname\s*\{C\}/g, 'C')
+    .replace(/\\operatorname\s*\{sin\}/gi, '\\sin')
+    .replace(/\\operatorname\s*\{cos\}/gi, '\\cos')
+    .replace(/\\operatorname\s*\{tan\}/gi, '\\tan')
+    .replace(/\\operatorname\s*\{cot\}/gi, '\\cot');
+
+  // Match NAVTA TEST's combinations notation repairs.
+  value = value
+    .replace(/\{\}\^\{?([A-Za-z0-9+\-]+)\}?\s*C_\{([^{}]+)\}/g, '\\binom{$1}{$2}')
+    .replace(/\{\}\^\{?([A-Za-z0-9+\-]+)\}?\s*C_([A-Za-z0-9+\-]+)/g, '\\binom{$1}{$2}')
+    .replace(/\^\{?([A-Za-z0-9+\-]+)\}?\s*C_\{([^{}]+)\}/g, '\\binom{$1}{$2}')
+    .replace(/\^\{?([A-Za-z0-9+\-]+)\}?\s*C_([A-Za-z0-9+\-]+)/g, '\\binom{$1}{$2}')
+    .replace(/\b([A-Za-z0-9]+)\s*C_\{([^{}]+)\}/g, '\\binom{$1}{$2}')
+    .replace(/\b([A-Za-z0-9]+)\s*C_([A-Za-z0-9+\-]+)/g, '\\binom{$1}{$2}')
+    .replace(/\^\\([A-Za-z]+)\b/g, '^{\\$1}')
+    .replace(/_\\([A-Za-z]+)\b/g, '_{\\$1}');
+
+  // Repair unambiguous common OCR shorthand fractions only. Do not guess at
+  // damaged expressions such as frac-x where the intended denominator is unknown.
+  const commonFractions = {
+    frac12: '\\frac{1}{2}', frac13: '\\frac{1}{3}', frac14: '\\frac{1}{4}',
+    frac23: '\\frac{2}{3}', frac34: '\\frac{3}{4}', frac16: '\\frac{1}{6}',
+    fracπ2: '\\frac{\\pi}{2}', fracpi2: '\\frac{\\pi}{2}',
+    fracπ3: '\\frac{\\pi}{3}', fracπ4: '\\frac{\\pi}{4}'
+  };
+  for (const [bad, good] of Object.entries(commonFractions)) {
+    value = value.replace(new RegExp(`(?<![A-Za-z])\\\\?${bad}(?![A-Za-z0-9])`, 'g'), good);
+  }
+
+  // Standardize MathJax delimiter variants while retaining existing $ delimiters.
+  value = value
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => `$$${math}$$`)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => `$${math}$`)
+    .replace(/\\dfrac\b/g, '\\frac')
+    .replace(/\\tfrac\b/g, '\\frac');
+
+  return value.trim();
+}
+
 function getQuestionImage(question) {
+  // questionImage.url and questionImages[].url are the canonical fields used
+  // by the working NAVTA TEST/admin question renderer.
   const candidates = [
+    question?.questionImage?.url,
+    question?.questionImage?.src,
+    question?.questionImage?.data,
+    ...(Array.isArray(question?.questionImages)
+      ? question.questionImages.flatMap((item) => [item?.url, item?.src, item?.data, item?.imageUrl])
+      : []),
     question?.imageUrl,
-    question?.questionImageUrl,
-    question?.questionImage,
-    question?.questionImages,
     question?.diagramUrl,
-    question?.diagramData,
     question?.visualUrl,
-    question?.imageData,
     question?.image,
     question?.diagram,
     question?.visual,
-    question?.media
-  ].flatMap((item) => Array.isArray(item) ? item : [item]);
+    question?.imageData,
+    question?.diagramData,
+    question?.visualData
+  ];
+
   for (const item of candidates) {
-    if (typeof item === 'string' && (/^(https?:\/\/|data:image\/|blob:)/i.test(item.trim()) || item.trim().startsWith('/'))) {
-      return item.trim();
+    let candidate = '';
+    if (typeof item === 'string') candidate = item.trim();
+    else if (item && typeof item === 'object') {
+      candidate = String(item.url || item.src || item.data || item.imageUrl || item.path || '').trim();
     }
-    if (item && typeof item === 'object') {
-      const url = item.url || item.src || item.data || item.imageUrl || item.path || item.secure_url || item.base64;
-      if (typeof url === 'string' && (/^(https?:\/\/|data:image\/|blob:)/i.test(url.trim()) || url.trim().startsWith('/'))) return url.trim();
+    if (!candidate) continue;
+    if (/^(https?:\/\/|data:image\/|blob:)/i.test(candidate)) return candidate;
+    // Support root-relative and relative upload paths as well as absolute URLs.
+    if (/^(\/|\.\/|\.\.\/)/.test(candidate)) {
+      try { return new URL(candidate, window.location.origin).href; } catch { /* ignore invalid URL */ }
     }
   }
   return '';
 }
 
-function normalizePaperMath(value = '') {
-  let text = String(value ?? '');
-
-  // Normalize common legacy/OCR variants found in imported question-bank text.
-  // Do not rewrite already well-formed LaTeX fractions.
-  text = text
-    .replace(/\\left\s*/g, '')
-    .replace(/\\right\s*/g, '')
-    .replace(/\\dfrac/g, '\\frac')
-    .replace(/\\tfrac/g, '\\frac');
-
-  // A few imported records lost the leading slash from \frac.
-  text = text.replace(/(^|[^\\A-Za-z])frac(?=\s*(?:\{|[A-Za-zπΠ0-9]))/g, '$1\\frac');
-
-  // Common compact forms: \frac12, frac12, \fracπ2, fracπ2.
-  text = text.replace(/\\frac\s*\{?\s*(π|Π|[0-9])\s*\}?\s*\{?\s*(π|Π|[0-9])\s*\}?/g,
-    (_, numerator, denominator) => `\\frac{${numerator === 'π' ? '\\pi' : numerator === 'Π' ? '\\Pi' : numerator}}{${denominator === 'π' ? '\\pi' : denominator === 'Π' ? '\\Pi' : denominator}}`);
-
-  // Convert bare Greek pi in simple shorthand fractions (e.g. fracπ2 -> \frac{\pi}{2}).
-  text = text.replace(/\\frac\s*π\s*([0-9])/g, '\\frac{\\pi}{$1}');
-  text = text.replace(/\\frac\s*Π\s*([0-9])/g, '\\frac{\\Pi}{$1}');
-
-  // Repair missing braces on the denominator when the numerator is already grouped.
-  text = text.replace(/\\frac\s*\{([^{}]+)\}\s*([0-9])\b/g, '\\frac{$1}{$2}');
-
-  // MathJax needs balanced delimiters. Fix common imported \left/\right tokens
-  // and remove a stray \right delimiter command, without touching normal prose.
-  text = text.replace(/\\left\s*/g, '').replace(/\\right\s*/g, '');
-  text = text.replace(/\\(?:\(|\)|\[|\])/g, (token) => token);
-  return text;
-}
-
 function renderPaperText(value = '') {
-  let text = normalizePaperMath(value);
-
-  // Remove internal visual markers; the image itself is rendered separately.
-  text = text.replace(/\[\[NAVTA_VISUAL\]\]/g, '');
+  let text = normaliseNavtaLatex(String(value ?? ''));
+  // Hide internal marker only; actual diagram is inserted from the saved image fields.
+  text = text.replace(/\[+\s*NAVTA[\s_-]*VISUAL\s*\]+/gi, '');
   text = text.replace(/<br\s*\/?\s*>/gi, '\n');
-
-  // If a record contains TeX commands without delimiters, wrap the math expression.
-  // Existing inline/display math delimiters are preserved.
-  const hasMathDelimiter = /\$[^$]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]/.test(text);
-  const hasLatexCommand = /\\(?:frac|sqrt|int|sum|prod|lim|sin|cos|tan|cot|sec|csc|log|ln|pi|Pi|theta|alpha|beta|infty|cdot|times|neq|leq|geq|pm|rightarrow|Rightarrow|begin|vec|overline|underline|mathrm|text|operatorname)\b/.test(text);
-
-  if (!hasMathDelimiter && hasLatexCommand) {
-    text = `\\(${text}\\)`;
-  }
-
+  // Escape user content to avoid injecting markup into the printable document.
   return escapeHtml(text).replace(/\r?\n/g, '<br />');
 }
 
@@ -810,6 +840,7 @@ export default function QuestionPaperBuilder() {
                 normalizeQuestionType(
                   question.questionType
                 );
+              const questionImage = getQuestionImage(question);
 
               let optionsHtml =
                 '';
@@ -880,7 +911,7 @@ export default function QuestionPaperBuilder() {
 
                   </div>
 
-                  ${getQuestionImage(question) ? `<div class="question-image-wrap"><img class="question-image" src="${escapeHtml(getQuestionImage(question))}" alt="Question diagram" /></div>` : ''}
+                  ${questionImage ? `<div class="question-image-wrap"><img class="question-image" src="${escapeHtml(questionImage)}" alt="Question diagram" /></div>` : ''}
 
                   ${optionsHtml}
 
@@ -910,7 +941,8 @@ export default function QuestionPaperBuilder() {
               tex: {
                 inlineMath: [['$','$'], ['\\(','\\)']],
                 displayMath: [['$$','$$'], ['\\[','\\]']],
-                processEscapes: true
+                processEscapes: true,
+                packages: {'[+]': ['ams', 'mhchem']}
               },
               options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] },
               startup: { typeset: false }
