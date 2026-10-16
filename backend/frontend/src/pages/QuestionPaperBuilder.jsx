@@ -177,11 +177,13 @@ function normaliseNavtaLatex(input = '') {
 
   if (!value) return '';
 
-  // Repair JSON/Gemini double escaping without touching matrix row breaks.
-  value = value.replace(
-    new RegExp(`\\\\\\\\(?=(?:${NAVTA_LATEX_COMMANDS})\\b)`, 'g'),
-    '\\',
-  );
+  // Repair double-escaped LaTeX copied through JSON/API serialization.
+  // Collapse doubled slashes before commands and math delimiters, while leaving
+  // matrix line breaks and other intentional \ separators alone.
+  value = value
+    .replace(/\\\\(?=[A-Za-z])/g, '\\')
+    .replace(/\\\\(?=[()[\]])/g, '\\')
+    .replace(/\\\\(?=\$)/g, '\\');
   value = value.replace(/\\\s+(?=[A-Za-z])/g, '\\');
   value = value
     .replace(/\\cdotp\b/g, '\\cdot')
@@ -277,20 +279,39 @@ function getQuestionImage(question) {
 
 function renderPaperText(value = '') {
   let text = normaliseNavtaLatex(String(value ?? ''));
-  // Hide internal marker only; actual diagram is inserted from the saved image fields.
+  // Hide the internal marker only; the saved diagram is inserted separately.
   text = text.replace(/\[+\s*NAVTA[\s_-]*VISUAL\s*\]+/gi, '');
   text = text.replace(/<br\s*\/?\s*>/gi, '\n');
 
-  // Some imported answer options contain valid LaTeX but no $...$ delimiters.
-  // Wrap only formula-led values (not normal prose) so MathJax renders fractions,
-  // roots, trigonometric expressions, and other commands instead of printing raw TeX.
-  const hasMathDelimiters = /\$|\\\(|\\\[/.test(text);
-  const beginsWithLatex = /^\s*(?:\\(?:frac|dfrac|tfrac|sqrt|sec|csc|sin|cos|tan|cot|log|ln|int|sum|binom|cdot|left|right|overline|underline|mathrm|text|lim|pi|theta|alpha|beta)\b|[\[{]\s*\\(?:frac|sqrt))/i.test(text);
-  if (!hasMathDelimiters && beginsWithLatex) {
+  // Imported question-bank strings sometimes contain TeX commands without math
+  // delimiters, or have only one side of a \( ... \) delimiter. Repair those
+  // cases before HTML escaping so MathJax receives a balanced math expression.
+  const hasLatexCommand = /\\(?:frac|dfrac|tfrac|sqrt|root|text|mathrm|mathbf|mathit|mathbb|mathcal|operatorname|left|right|middle|sin|cos|tan|cot|sec|csc|log|ln|int|sum|prod|binom|cdot|times|pi|theta|alpha|beta|gamma|infty|lim|neq|leq|geq|approx|pm|mp|overline|underline|vec|partial|nabla|begin|end)\b/i.test(text);
+  const hasDollarDelimiter = /\$\$?[\s\S]*?\$\$?/.test(text);
+  const hasParenDelimiter = /\\\(|\\\)/.test(text);
+  const hasBracketDelimiter = /\\\[|\\\]/.test(text);
+
+  if (hasParenDelimiter) {
+    const opens = (text.match(/\\\(/g) || []).length;
+    const closes = (text.match(/\\\)/g) || []).length;
+    if (opens > closes) text += '\\)'.repeat(opens - closes);
+    else if (closes > opens) text = '\\('.repeat(closes - opens) + text;
+  } else if (hasBracketDelimiter) {
+    const opens = (text.match(/\\\[/g) || []).length;
+    const closes = (text.match(/\\\]/g) || []).length;
+    if (opens > closes) text += '\\]'.repeat(opens - closes);
+    else if (closes > opens) text = '\\['.repeat(closes - opens) + text;
+  } else if (hasLatexCommand && !hasDollarDelimiter) {
+    // Options are usually short math expressions. Wrapping the whole option is
+    // safer than rendering only a leading fraction and leaving trailing terms raw.
     text = `\\(${text}\\)`;
   }
 
-  // Escape user content to avoid injecting markup into the printable document.
+  // Convert bare common fraction spellings even if the source omitted the slash.
+  text = text
+    .replace(/(^|[^\\A-Za-z])frac(?=\s*\{)/g, '$1\\frac')
+    .replace(/\\\\(?=(?:frac|sqrt|left|right|text|mathrm|sin|cos|tan|log|ln)\b)/g, '\\');
+
   return escapeHtml(text).replace(/\r?\n/g, '<br />');
 }
 
