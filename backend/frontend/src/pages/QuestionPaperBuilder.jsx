@@ -149,6 +149,44 @@ function getDefaultMarks(question) {
   return 1;
 }
 
+function getQuestionImageForPaper(question = {}) {
+  const candidates = [
+    question?.questionImage,
+    ...(Array.isArray(question?.questionImages) ? question.questionImages : []),
+    question?.image,
+    question?.diagram,
+    question?.visual,
+  ];
+
+  for (const candidate of candidates) {
+    const url = typeof candidate === 'string'
+      ? candidate.trim()
+      : String(candidate?.url || candidate?.src || candidate?.imageUrl || '').trim();
+    if (url) {
+      return {
+        url,
+        alt: String(
+          (typeof candidate === 'object' && (candidate?.altText || candidate?.alt)) ||
+          question?.visualDescription ||
+          'Question diagram'
+        ).trim(),
+      };
+    }
+  }
+
+  const directUrl = String(
+    question?.questionImageUrl || question?.imageUrl || question?.diagramUrl ||
+    question?.visualUrl || question?.imageURL || ''
+  ).trim();
+  return directUrl ? { url: directUrl, alt: String(question?.visualDescription || 'Question diagram') } : null;
+}
+
+function cleanQuestionVisualMarker(value = '') {
+  return String(value ?? '')
+    .replace(/\[+\s*NAVTA[\s_-]*VISUAL\s*\]+/gi, '')
+    .trim();
+}
+
 function escapeHtml(value = '') {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -159,160 +197,6 @@ function escapeHtml(value = '') {
       "'",
       '&#039;'
     );
-}
-
-// NAVTA TEST-compatible LaTeX normalization and question visual helpers.
-// Keep these transformations aligned with NavtaTestPage.jsx so the teacher
-// paper uses the same saved question content and common LaTeX repairs.
-const NAVTA_LATEX_COMMANDS =
-  "begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|cdot|times|div|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|sin|cos|tan|cot|sec|csc|log|ln|exp|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|neq|ne|leq|geq|approx|equiv|sim|propto|pm|mp|infty|vec|overrightarrow|overleftarrow|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|leftrightarrow|Rightarrow|Leftarrow|Leftrightarrow|therefore|because|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|ce|pu";
-
-function normaliseNavtaLatex(input = '') {
-  let value = String(input ?? '')
-    .replace(/```(?:latex|tex|math)?/gi, '')
-    .replace(/```/g, '')
-    .replace(/\u00a0/g, ' ')
-    .replace(/\r\n?/g, '\n')
-    .trim();
-
-  if (!value) return '';
-
-  // Repair double-escaped LaTeX copied through JSON/API serialization.
-  // Collapse doubled slashes before commands and math delimiters, while leaving
-  // matrix line breaks and other intentional \ separators alone.
-  value = value
-    .replace(/\\\\(?=[A-Za-z])/g, '\\')
-    .replace(/\\\\(?=[()[\]])/g, '\\')
-    .replace(/\\\\(?=\$)/g, '\\');
-  value = value.replace(/\\\s+(?=[A-Za-z])/g, '\\');
-  value = value
-    .replace(/\\cdotp\b/g, '\\cdot')
-    .replace(/\\operatorname\s*\{C\}/g, 'C')
-    .replace(/\\operatorname\s*\{sin\}/gi, '\\sin')
-    .replace(/\\operatorname\s*\{cos\}/gi, '\\cos')
-    .replace(/\\operatorname\s*\{tan\}/gi, '\\tan')
-    .replace(/\\operatorname\s*\{cot\}/gi, '\\cot');
-
-  // Match NAVTA TEST's combinations notation repairs.
-  value = value
-    .replace(/\{\}\^\{?([A-Za-z0-9+\-]+)\}?\s*C_\{([^{}]+)\}/g, '\\binom{$1}{$2}')
-    .replace(/\{\}\^\{?([A-Za-z0-9+\-]+)\}?\s*C_([A-Za-z0-9+\-]+)/g, '\\binom{$1}{$2}')
-    .replace(/\^\{?([A-Za-z0-9+\-]+)\}?\s*C_\{([^{}]+)\}/g, '\\binom{$1}{$2}')
-    .replace(/\^\{?([A-Za-z0-9+\-]+)\}?\s*C_([A-Za-z0-9+\-]+)/g, '\\binom{$1}{$2}')
-    .replace(/\b([A-Za-z0-9]+)\s*C_\{([^{}]+)\}/g, '\\binom{$1}{$2}')
-    .replace(/\b([A-Za-z0-9]+)\s*C_([A-Za-z0-9+\-]+)/g, '\\binom{$1}{$2}')
-    .replace(/\^\\([A-Za-z]+)\b/g, '^{\\$1}')
-    .replace(/_\\([A-Za-z]+)\b/g, '_{\\$1}');
-
-  // Repair unambiguous common OCR shorthand fractions only. Do not guess at
-  // damaged expressions such as frac-x where the intended denominator is unknown.
-  const commonFractions = {
-    frac12: '\\frac{1}{2}', frac13: '\\frac{1}{3}', frac14: '\\frac{1}{4}',
-    frac23: '\\frac{2}{3}', frac34: '\\frac{3}{4}', frac16: '\\frac{1}{6}',
-    fracπ2: '\\frac{\\pi}{2}', fracpi2: '\\frac{\\pi}{2}',
-    fracπ3: '\\frac{\\pi}{3}', fracπ4: '\\frac{\\pi}{4}'
-  };
-  for (const [bad, good] of Object.entries(commonFractions)) {
-    value = value.replace(new RegExp(`(?<![A-Za-z])\\\\?${bad}(?![A-Za-z0-9])`, 'g'), good);
-  }
-
-  // Standardize MathJax delimiter variants while retaining existing $ delimiters.
-  value = value
-    .replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => `$$${math}$$`)
-    .replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => `$${math}$`)
-    .replace(/\\dfrac\b/g, '\\frac')
-    .replace(/\\tfrac\b/g, '\\frac');
-
-  // MathJax reports a visible "Missing or unrecognized delimiter for \right"
-  // when imported questions contain malformed sizing commands. The sizing is
-  // optional, so remove these commands while preserving the delimiters themselves.
-  value = value
-    .replace(/\\left\s*/g, '')
-    .replace(/\\right\s*/g, '')
-    .replace(/\\middle\s*/g, '');
-
-  // Repair common unescaped fraction spellings from OCR/imported records.
-  value = value
-    .replace(/(^|[^\\A-Za-z])frac(?=\s*\{)/g, '$1\\frac')
-    .replace(/\\dfrac\b/g, '\\frac')
-    .replace(/\\tfrac\b/g, '\\frac');
-
-  return value.trim();
-}
-
-function getQuestionImage(question) {
-  // questionImage.url and questionImages[].url are the canonical fields used
-  // by the working NAVTA TEST/admin question renderer.
-  const candidates = [
-    question?.questionImage?.url,
-    question?.questionImage?.src,
-    question?.questionImage?.data,
-    ...(Array.isArray(question?.questionImages)
-      ? question.questionImages.flatMap((item) => [item?.url, item?.src, item?.data, item?.imageUrl])
-      : []),
-    question?.imageUrl,
-    question?.diagramUrl,
-    question?.visualUrl,
-    question?.image,
-    question?.diagram,
-    question?.visual,
-    question?.imageData,
-    question?.diagramData,
-    question?.visualData
-  ];
-
-  for (const item of candidates) {
-    let candidate = '';
-    if (typeof item === 'string') candidate = item.trim();
-    else if (item && typeof item === 'object') {
-      candidate = String(item.url || item.src || item.data || item.imageUrl || item.path || '').trim();
-    }
-    if (!candidate) continue;
-    if (/^(https?:\/\/|data:image\/|blob:)/i.test(candidate)) return candidate;
-    // Support root-relative and relative upload paths as well as absolute URLs.
-    if (/^(\/|\.\/|\.\.\/)/.test(candidate)) {
-      try { return new URL(candidate, window.location.origin).href; } catch { /* ignore invalid URL */ }
-    }
-  }
-  return '';
-}
-
-function renderPaperText(value = '') {
-  let text = normaliseNavtaLatex(String(value ?? ''));
-  // Hide the internal marker only; the saved diagram is inserted separately.
-  text = text.replace(/\[+\s*NAVTA[\s_-]*VISUAL\s*\]+/gi, '');
-  text = text.replace(/<br\s*\/?\s*>/gi, '\n');
-
-  // Imported question-bank strings sometimes contain TeX commands without math
-  // delimiters, or have only one side of a \( ... \) delimiter. Repair those
-  // cases before HTML escaping so MathJax receives a balanced math expression.
-  const hasLatexCommand = /\\(?:frac|dfrac|tfrac|sqrt|root|text|mathrm|mathbf|mathit|mathbb|mathcal|operatorname|left|right|middle|sin|cos|tan|cot|sec|csc|log|ln|int|sum|prod|binom|cdot|times|pi|theta|alpha|beta|gamma|infty|lim|neq|leq|geq|approx|pm|mp|overline|underline|vec|partial|nabla|begin|end)\b/i.test(text);
-  const hasDollarDelimiter = /\$\$?[\s\S]*?\$\$?/.test(text);
-  const hasParenDelimiter = /\\\(|\\\)/.test(text);
-  const hasBracketDelimiter = /\\\[|\\\]/.test(text);
-
-  if (hasParenDelimiter) {
-    const opens = (text.match(/\\\(/g) || []).length;
-    const closes = (text.match(/\\\)/g) || []).length;
-    if (opens > closes) text += '\\)'.repeat(opens - closes);
-    else if (closes > opens) text = '\\('.repeat(closes - opens) + text;
-  } else if (hasBracketDelimiter) {
-    const opens = (text.match(/\\\[/g) || []).length;
-    const closes = (text.match(/\\\]/g) || []).length;
-    if (opens > closes) text += '\\]'.repeat(opens - closes);
-    else if (closes > opens) text = '\\['.repeat(closes - opens) + text;
-  } else if (hasLatexCommand && !hasDollarDelimiter) {
-    // Options are usually short math expressions. Wrapping the whole option is
-    // safer than rendering only a leading fraction and leaving trailing terms raw.
-    text = `\\(${text}\\)`;
-  }
-
-  // Convert bare common fraction spellings even if the source omitted the slash.
-  text = text
-    .replace(/(^|[^\\A-Za-z])frac(?=\s*\{)/g, '$1\\frac')
-    .replace(/\\\\(?=(?:frac|sqrt|left|right|text|mathrm|sin|cos|tan|log|ln)\b)/g, '\\');
-
-  return escapeHtml(text).replace(/\r?\n/g, '<br />');
 }
 
 // =====================================================
@@ -885,7 +769,6 @@ export default function QuestionPaperBuilder() {
                 normalizeQuestionType(
                   question.questionType
                 );
-              const questionImage = getQuestionImage(question);
 
               let optionsHtml =
                 '';
@@ -914,7 +797,9 @@ export default function QuestionPaperBuilder() {
                               )}.
                             </strong>
 
-                            ${renderPaperText(option)}
+                            ${escapeHtml(
+                              option
+                            )}
 
                           </div>
                         `
@@ -924,6 +809,12 @@ export default function QuestionPaperBuilder() {
                   </div>
                 `;
               }
+
+              const questionImage = getQuestionImageForPaper(question);
+              const questionText = cleanQuestionVisualMarker(question.question);
+              const imageHtml = questionImage
+                ? `<div class="question-visual"><img src="${escapeHtml(questionImage.url)}" alt="${escapeHtml(questionImage.alt)}" /></div>`
+                : '';
 
               return `
                 <div class="question">
@@ -936,7 +827,7 @@ export default function QuestionPaperBuilder() {
                         ${index + 1}.
                       </strong>
 
-                      ${renderPaperText(question.question)}
+                      ${escapeHtml(questionText)}
 
                     </div>
 
@@ -956,7 +847,7 @@ export default function QuestionPaperBuilder() {
 
                   </div>
 
-                  ${questionImage ? `<div class="question-image-wrap"><img class="question-image" src="${escapeHtml(questionImage)}" alt="Question diagram" /></div>` : ''}
+                  ${imageHtml}
 
                   ${optionsHtml}
 
@@ -980,20 +871,6 @@ export default function QuestionPaperBuilder() {
               paperDetails.title
             )}
           </title>
-
-          <script>
-            window.MathJax = {
-              tex: {
-                inlineMath: [['$','$'], ['\\(','\\)']],
-                displayMath: [['$$','$$'], ['\\[','\\]']],
-                processEscapes: true,
-                packages: {'[+]': ['ams', 'mhchem']}
-              },
-              options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] },
-              startup: { typeset: false }
-            };
-          </script>
-          <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 
           <style>
 
@@ -1118,6 +995,23 @@ export default function QuestionPaperBuilder() {
               font-weight: 700;
             }
 
+            .question-visual {
+              margin: 10px 0 12px 25px;
+              max-width: 100%;
+              page-break-inside: avoid;
+              break-inside: avoid;
+            }
+
+            .question-visual img {
+              display: block;
+              max-width: 100%;
+              width: auto;
+              height: auto;
+              max-height: 360px;
+              object-fit: contain;
+              object-position: left center;
+            }
+
             .options {
               display: grid;
 
@@ -1129,30 +1023,6 @@ export default function QuestionPaperBuilder() {
 
               margin:
                 10px 0 0 25px;
-            }
-
-            .question-image-wrap {
-              margin: 10px 0 0 25px;
-              max-width: 100%;
-            }
-
-            .question-image {
-              display: block;
-              max-width: 100%;
-              max-height: 420px;
-              height: auto;
-              object-fit: contain;
-            }
-
-            .question-text, .option {
-              overflow-wrap: anywhere;
-              white-space: normal;
-            }
-
-            mjx-container {
-              max-width: 100%;
-              overflow-x: auto;
-              overflow-y: hidden;
             }
 
             .footer {
@@ -1307,32 +1177,19 @@ export default function QuestionPaperBuilder() {
           </div>
 
           <script>
-            (function () {
-              let printed = false;
-              function printWhenReady() {
-                if (printed) return;
-                printed = true;
-                const images = Array.from(document.images || []);
-                Promise.all(images.map((img) => img.complete ? Promise.resolve() : new Promise((resolve) => {
-                  img.onload = resolve;
-                  img.onerror = resolve;
-                  setTimeout(resolve, 2500);
-                }))).then(() => {
-                  const typeset = window.MathJax && window.MathJax.typesetPromise
-                    ? window.MathJax.typesetPromise().catch(() => {})
-                    : Promise.resolve();
-                  return typeset;
-                }).then(() => setTimeout(() => window.print(), 250));
-              }
-              window.addEventListener('load', () => {
-                if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
-                  window.MathJax.startup.promise.then(printWhenReady).catch(printWhenReady);
-                } else {
-                  setTimeout(printWhenReady, 1200);
-                }
-              });
-              setTimeout(printWhenReady, 5000);
-            })();
+
+            window.onload =
+              function () {
+
+                setTimeout(
+                  function () {
+                    window.print();
+                  },
+                  300
+                );
+
+              };
+
           </script>
 
         </body>
