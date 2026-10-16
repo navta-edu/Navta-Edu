@@ -3040,6 +3040,54 @@ exports.getQuestionBank = async (req, res) => {
                 ? question.options
                 : [],
 
+            // Preserve diagram/image metadata from the NAVTA question bank.
+            // The student/admin views read these fields, but this teacher
+            // endpoint previously omitted them while formatting questions.
+            hasVisual:
+              Boolean(question.hasVisual),
+
+            visualType:
+              question.visualType ||
+              (question.questionImage?.url ? 'image' : 'none'),
+
+            visualDescription:
+              question.visualDescription || '',
+
+            questionImage:
+              question.questionImage || null,
+
+            questionImages:
+              Array.isArray(question.questionImages)
+                ? question.questionImages
+                : [],
+
+            imageCropSource:
+              question.imageCropSource || '',
+
+            sourceDocument:
+              question.sourceDocument || null,
+
+            imageUrl:
+              question.imageUrl || '',
+
+            questionImageUrl:
+              question.questionImageUrl || '',
+
+            diagramUrl:
+              question.diagramUrl || '',
+
+            visualUrl:
+              question.visualUrl || '',
+
+            imageData:
+              question.imageData || '',
+
+            diagramData:
+              question.diagramData || '',
+
+            visualData:
+              question.visualData || '',
+
             maxMarks:
               defaultMarks,
 
