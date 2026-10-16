@@ -241,40 +241,102 @@ function normaliseNavtaLatex(input = '') {
 }
 
 function getQuestionImage(question) {
-  // questionImage.url and questionImages[].url are the canonical fields used
-  // by the working NAVTA TEST/admin question renderer.
+  // Keep the same image field priority as NAVTA TEST, while tolerating older
+  // question-bank records and alternate API serialization shapes.
   const candidates = [
     question?.questionImage?.url,
     question?.questionImage?.src,
     question?.questionImage?.data,
+    question?.questionImage?.imageUrl,
+    question?.questionImage?.path,
+    question?.questionImage?.secure_url,
+    question?.questionImage?.image,
     ...(Array.isArray(question?.questionImages)
-      ? question.questionImages.flatMap((item) => [item?.url, item?.src, item?.data, item?.imageUrl])
+      ? question.questionImages.flatMap((item) => [
+          item?.url, item?.src, item?.data, item?.imageUrl,
+          item?.path, item?.secure_url, item?.image
+        ])
       : []),
     question?.imageUrl,
+    question?.imageURL,
     question?.diagramUrl,
+    question?.diagramURL,
     question?.visualUrl,
-    question?.image,
-    question?.diagram,
-    question?.visual,
+    question?.visualURL,
+    question?.visualImage?.url,
+    question?.visualImage?.src,
+    question?.diagramImage?.url,
+    question?.diagramImage?.src,
+    question?.image?.url,
+    question?.image?.src,
+    question?.image?.data,
+    question?.image?.imageUrl,
+    question?.image?.path,
+    question?.diagram?.url,
+    question?.diagram?.src,
+    question?.diagram?.data,
+    question?.visual?.url,
+    question?.visual?.src,
+    question?.visual?.data,
     question?.imageData,
     question?.diagramData,
-    question?.visualData
+    question?.visualData,
+    question?.screenshotUrl,
+    question?.questionScreenshot,
+    question?.croppedImageUrl,
+    question?.cropImage?.url,
+    question?.sourceImage?.url
   ];
 
-  for (const item of candidates) {
-    let candidate = '';
-    if (typeof item === 'string') candidate = item.trim();
-    else if (item && typeof item === 'object') {
-      candidate = String(item.url || item.src || item.data || item.imageUrl || item.path || '').trim();
-    }
-    if (!candidate) continue;
+  const toUsableUrl = (value) => {
+    if (typeof value !== 'string') return '';
+    const candidate = value.trim();
+    if (!candidate || /^\[+\s*NAVTA[\s_-]*VISUAL\s*\]+$/i.test(candidate)) return '';
     if (/^(https?:\/\/|data:image\/|blob:)/i.test(candidate)) return candidate;
-    // Support root-relative and relative upload paths as well as absolute URLs.
-    if (/^(\/|\.\/|\.\.\/)/.test(candidate)) {
-      try { return new URL(candidate, window.location.origin).href; } catch { /* ignore invalid URL */ }
+    // Resolve root-relative and relative upload paths against the current host.
+    if (/^(\/|\.\/|\.\.\/|uploads\/|upload\/|images\/|storage\/)/i.test(candidate)) {
+      try { return new URL(candidate, window.location.origin).href; } catch { return ''; }
+    }
+    return '';
+  };
+
+  for (const item of candidates) {
+    const values = item && typeof item === 'object'
+      ? [item.url, item.src, item.data, item.imageUrl, item.path, item.secure_url, item.image]
+      : [item];
+    for (const value of values) {
+      const url = toUsableUrl(value);
+      if (url) return url;
     }
   }
-  return '';
+
+  // Last-resort lookup for API versions that wrap image metadata differently.
+  // Restrict recursion to image-related property names to avoid mistaking text
+  // or unrelated document URLs for a question diagram.
+  const seen = new Set();
+  const visit = (value, depth = 0) => {
+    if (!value || typeof value !== 'object' || depth > 4 || seen.has(value)) return '';
+    seen.add(value);
+    for (const [key, child] of Object.entries(value)) {
+      if (/(image|diagram|visual|screenshot|crop|figure|illustration)/i.test(key)) {
+        const direct = toUsableUrl(typeof child === 'string' ? child : '');
+        if (direct) return direct;
+        if (child && typeof child === 'object') {
+          for (const nested of [child.url, child.src, child.data, child.imageUrl, child.path, child.secure_url]) {
+            const url = toUsableUrl(nested);
+            if (url) return url;
+          }
+          const deep = visit(child, depth + 1);
+          if (deep) return deep;
+        }
+      } else if (child && typeof child === 'object') {
+        const deep = visit(child, depth + 1);
+        if (deep) return deep;
+      }
+    }
+    return '';
+  };
+  return visit(question);
 }
 
 function renderPaperText(value = '') {
