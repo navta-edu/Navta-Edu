@@ -1209,17 +1209,47 @@ export default function QuestionPaperBuilder() {
                 10px 0 0 25px;
             }
 
+            /* Keep question diagrams large enough to read on the printed paper.
+               Imported NAVTA visuals can be very wide, low-height crops; relying
+               only on max-width leaves them at their tiny intrinsic size. */
             .question-image-wrap {
-              margin: 10px 0 0 25px;
+              display: block;
+              box-sizing: border-box;
+              width: calc(100% - 25px);
               max-width: 100%;
+              margin: 12px 0 14px 25px;
+              break-inside: avoid;
+              page-break-inside: avoid;
             }
 
             .question-image {
               display: block;
-              max-width: 100%;
-              max-height: 420px;
+              box-sizing: border-box;
+              width: 100%;
+              max-width: 7.1in;
+              max-height: 3.5in;
               height: auto;
               object-fit: contain;
+              object-position: left center;
+              image-rendering: auto;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
+            }
+
+            @media print {
+              .question-image-wrap {
+                width: calc(100% - 25px) !important;
+                max-width: 100% !important;
+                margin-top: 12px !important;
+                margin-bottom: 14px !important;
+              }
+
+              .question-image {
+                width: 100% !important;
+                max-width: 7.1in !important;
+                max-height: 3.5in !important;
+                height: auto !important;
+              }
             }
 
             .question-text, .option {
