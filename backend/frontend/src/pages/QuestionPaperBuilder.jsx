@@ -221,6 +221,20 @@ function normaliseNavtaLatex(input = '') {
     .replace(/\\dfrac\b/g, '\\frac')
     .replace(/\\tfrac\b/g, '\\frac');
 
+  // MathJax reports a visible "Missing or unrecognized delimiter for \right"
+  // when imported questions contain malformed sizing commands. The sizing is
+  // optional, so remove these commands while preserving the delimiters themselves.
+  value = value
+    .replace(/\\left\s*/g, '')
+    .replace(/\\right\s*/g, '')
+    .replace(/\\middle\s*/g, '');
+
+  // Repair common unescaped fraction spellings from OCR/imported records.
+  value = value
+    .replace(/(^|[^\\A-Za-z])frac(?=\s*\{)/g, '$1\\frac')
+    .replace(/\\dfrac\b/g, '\\frac')
+    .replace(/\\tfrac\b/g, '\\frac');
+
   return value.trim();
 }
 
@@ -266,6 +280,16 @@ function renderPaperText(value = '') {
   // Hide internal marker only; actual diagram is inserted from the saved image fields.
   text = text.replace(/\[+\s*NAVTA[\s_-]*VISUAL\s*\]+/gi, '');
   text = text.replace(/<br\s*\/?\s*>/gi, '\n');
+
+  // Some imported answer options contain valid LaTeX but no $...$ delimiters.
+  // Wrap only formula-led values (not normal prose) so MathJax renders fractions,
+  // roots, trigonometric expressions, and other commands instead of printing raw TeX.
+  const hasMathDelimiters = /\$|\\\(|\\\[/.test(text);
+  const beginsWithLatex = /^\s*(?:\\(?:frac|dfrac|tfrac|sqrt|sec|csc|sin|cos|tan|cot|log|ln|int|sum|binom|cdot|left|right|overline|underline|mathrm|text|lim|pi|theta|alpha|beta)\b|[\[{]\s*\\(?:frac|sqrt))/i.test(text);
+  if (!hasMathDelimiters && beginsWithLatex) {
+    text = `\\(${text}\\)`;
+  }
+
   // Escape user content to avoid injecting markup into the printable document.
   return escapeHtml(text).replace(/\r?\n/g, '<br />');
 }
