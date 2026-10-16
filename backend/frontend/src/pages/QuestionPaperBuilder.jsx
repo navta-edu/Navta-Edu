@@ -251,6 +251,17 @@ function getQuestionImage(question) {
     question?.questionImage?.path,
     question?.questionImage?.secure_url,
     question?.questionImage?.image,
+    question?.questionImageUrl,
+    question?.image_url,
+    question?.diagram_url,
+    question?.fileUrl,
+    question?.fileURL,
+    question?.file_url,
+    question?.publicUrl,
+    question?.secure_url,
+    question?.imageData,
+    question?.imageBase64,
+    question?.questionImageData,
     ...(Array.isArray(question?.questionImages)
       ? question.questionImages.flatMap((item) => [
           item?.url, item?.src, item?.data, item?.imageUrl,
@@ -281,6 +292,8 @@ function getQuestionImage(question) {
     question?.imageData,
     question?.diagramData,
     question?.visualData,
+    question?.imageBase64,
+    question?.questionImageData,
     question?.screenshotUrl,
     question?.questionScreenshot,
     question?.croppedImageUrl,
@@ -293,6 +306,9 @@ function getQuestionImage(question) {
     const candidate = value.trim();
     if (!candidate || /^\[+\s*NAVTA[\s_-]*VISUAL\s*\]+$/i.test(candidate)) return '';
     if (/^(https?:\/\/|data:image\/|blob:)/i.test(candidate)) return candidate;
+    if (/^[A-Za-z0-9+/=\r\n]+$/.test(candidate) && candidate.length > 300) {
+      return `data:image/png;base64,${candidate.replace(/\s/g, '')}`;
+    }
     // Resolve root-relative and relative upload paths against the current host.
     if (/^(\/|\.\/|\.\.\/|uploads\/|upload\/|images\/|storage\/)/i.test(candidate)) {
       try { return new URL(candidate, window.location.origin).href; } catch { return ''; }
