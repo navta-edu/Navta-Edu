@@ -1,6 +1,5 @@
 import React, { lazy, Suspense } from 'react';
 
-
 import {
   BrowserRouter as Router,
   Routes,
@@ -21,7 +20,6 @@ import {
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import Footer from './components/Footer';
-import NavtaAI from './components/NavtaAI';
 
 // =====================================================
 // PUBLIC PAGES
@@ -684,13 +682,6 @@ export default function App() {
 
           </Routes>
         </Suspense>
-
-        {/* =====================================================
-            NAVTA AI TUTOR
-            Visible throughout the website
-        ===================================================== */}
-
-        <NavtaAI />
 
       </Router>
     </AuthProvider>
