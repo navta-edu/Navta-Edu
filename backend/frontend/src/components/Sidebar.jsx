@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -29,6 +29,88 @@ export default function Sidebar() {
   const { user } = useAuth();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const [lightMode, setLightMode] = useState(false);
+
+  useEffect(() => {
+    const isLightColor = (color) => {
+      const match = String(color || '').match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
+      if (!match) return null;
+      const [r, g, b] = match.slice(1, 4).map(Number);
+      return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.62;
+    };
+
+    const detectTheme = () => {
+      const root = document.documentElement;
+      const body = document.body;
+      const nodes = [root, body, document.querySelector('#root')].filter(Boolean);
+      const themeTokens = nodes.map((node) => {
+        const attrs = `${node.className || ''} ${node.getAttribute('data-theme') || ''} ${node.getAttribute('data-mode') || ''} ${node.getAttribute('data-color-scheme') || ''}`;
+        return attrs.toLowerCase();
+      }).join(' ');
+
+      // Prefer explicit theme attributes/classes when the application provides them.
+      if (/(^|[\s_-])(light|light-mode)([\s_-]|$)|data-theme=["']light/i.test(themeTokens)) {
+        setLightMode(true);
+        return;
+      }
+      if (/(^|[\s_-])(dark|dark-mode)([\s_-]|$)|data-theme=["']dark/i.test(themeTokens)) {
+        setLightMode(false);
+        return;
+      }
+
+      // Read only theme-related storage values; do not let unrelated keys containing
+      // words such as "dark" or "light" incorrectly override the selected theme.
+      try {
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const key = localStorage.key(i) || '';
+          if (!/(^|[-_])(theme|color.?scheme|appearance|mode)([-_]|$)/i.test(key) && !/^(theme|colorScheme|appearance|mode)$/i.test(key)) continue;
+          const raw = String(localStorage.getItem(key) || '').trim().toLowerCase();
+          if (/^(light|light-mode|day)$/.test(raw) || /["'](theme|mode|colorScheme)["']\s*:\s*["']light["']/.test(raw)) {
+            setLightMode(true);
+            return;
+          }
+          if (/^(dark|dark-mode|night)$/.test(raw) || /["'](theme|mode|colorScheme)["']\s*:\s*["']dark["']/.test(raw)) {
+            setLightMode(false);
+            return;
+          }
+        }
+      } catch (_) {
+        // Storage can be unavailable in privacy-restricted browser contexts.
+      }
+
+      // Fallback to the visible page surface. NAVTA's theme switch changes these
+      // surfaces even when it doesn't expose a theme class on <html> or <body>.
+      const candidates = [
+        ...document.querySelectorAll('main, [role="main"], .dashboard-content, .page-content, .app-content'),
+        body,
+        root,
+      ];
+      for (const node of candidates) {
+        if (!node) continue;
+        const rect = node.getBoundingClientRect?.();
+        if (rect && (rect.width < 160 || rect.height < 100)) continue;
+        const bg = window.getComputedStyle(node).backgroundColor;
+        const light = isLightColor(bg);
+        if (light !== null && bg !== 'rgba(0, 0, 0, 0)') {
+          setLightMode(light);
+          return;
+        }
+      }
+    };
+
+    detectTheme();
+    const observer = new MutationObserver(detectTheme);
+    [document.documentElement, document.body, document.querySelector('#root')].filter(Boolean).forEach((node) => {
+      observer.observe(node, { attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-mode', 'data-color-scheme'], subtree: true });
+    });
+    window.addEventListener('storage', detectTheme);
+    window.addEventListener('focus', detectTheme);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', detectTheme);
+      window.removeEventListener('focus', detectTheme);
+    };
+  }, []);
 
   if (!user) return null;
 
@@ -91,9 +173,10 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`navta-neon-sidebar navta-scroll-area w-full shrink-0 md:sticky md:top-16 md:h-[calc(100vh-4rem)] md:self-start ${collapsed ? 'md:w-[5.25rem]' : 'md:w-64'}`}
+      className={`navta-neon-sidebar navta-scroll-area w-full shrink-0 md:sticky md:top-16 md:h-[calc(100vh-4rem+35px)] md:self-start ${collapsed ? 'md:w-[5.25rem]' : 'md:w-64'}`}
       aria-label="Main navigation"
       data-collapsed={collapsed ? 'true' : 'false'}
+      data-navta-theme-mode={lightMode ? 'light' : 'dark'}
     >
       <div className="navta-sidebar-brand">
         <div className="navta-sidebar-brand-mark" aria-hidden="true">
@@ -162,6 +245,7 @@ export default function Sidebar() {
           flex-direction: column;
           gap: 0;
           min-width: 0;
+          margin-top: -35px; /* align sidebar top with the dashboard content/header line */
           padding: 16px 11px 14px;
           overflow-x: hidden;
           overflow-y: auto;
@@ -212,7 +296,7 @@ export default function Sidebar() {
         .navta-sidebar-status-dot { width: 6px; height: 6px; margin-left: auto; flex: 0 0 6px; border-radius: 50%; background: #35e6b1; box-shadow: 0 0 8px rgba(53,230,177,.7); }
         .navta-sidebar-collapsed-glow { height: 3px; margin: 20px 7px 0; border-radius: 9px; background: linear-gradient(90deg, #03c5f5, #5264ff, #a43cff); box-shadow: 0 0 13px rgba(87, 87, 255, .55); }
         @media (max-width: 767px) {
-          .navta-neon-sidebar { position: relative; top: auto; height: auto; max-height: none; padding: 10px; border-right: 0; border-bottom: 1px solid rgba(125, 148, 205, .15); }
+          .navta-neon-sidebar { position: relative; top: auto; height: auto; max-height: none; margin-top: 0; padding: 10px; border-right: 0; border-bottom: 1px solid rgba(125, 148, 205, .15); }
           .navta-sidebar-brand { padding-bottom: 9px; }
           .navta-sidebar-section-label { height: 29px; }
           .navta-sidebar-nav { flex-direction: row; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
@@ -267,6 +351,35 @@ export default function Sidebar() {
         html.light .navta-sidebar-bottom-copy span, body.light .navta-sidebar-bottom-copy span,
         html[data-theme="light"] .navta-sidebar-bottom-copy span, body[data-theme="light"] .navta-sidebar-bottom-copy span,
         [data-theme="light"] .navta-sidebar-bottom-copy span { color: #7885a2; }
+        /* Strong, self-contained light theme styles; independent of global class names. */
+        .navta-neon-sidebar[data-navta-theme-mode="light"] {
+          color: #17213d !important;
+          border-right-color: rgba(93, 113, 158, .20) !important;
+          background: linear-gradient(180deg, #ffffff 0%, #f7f8ff 58%, #f1efff 100%) !important;
+          box-shadow: 10px 0 32px rgba(35, 48, 85, .07), inset -1px 0 0 rgba(108, 91, 255, .05) !important;
+        }
+        .navta-neon-sidebar[data-navta-theme-mode="light"]:before { background: rgba(70, 130, 255, .08) !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-brand { border-bottom-color: rgba(93, 113, 158, .17) !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-brand-name { color: #111a32 !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-brand-caption { color: #7783a1 !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-collapse { color: #53617f !important; border-color: rgba(93,113,158,.22) !important; background: #f0f3fb !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-section-label { color: #7d89a5 !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-section-line { background: linear-gradient(90deg, rgba(105,119,166,.25), transparent) !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-link { color: #5d6b89 !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-icon-wrap { color: #7382a5 !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-link:hover { color: #273456 !important; border-color: rgba(110,128,211,.20) !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-link.is-active { color: #fff !important; background: linear-gradient(105deg,#08aee8 0%,#4b68f5 48%,#913df0 100%) !important; box-shadow: 0 7px 20px rgba(75,91,230,.22), inset 0 1px 0 rgba(255,255,255,.28) !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-link.is-active .navta-sidebar-icon-wrap { color: #fff !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-bottom-card { border-color: rgba(109,106,255,.18) !important; background: linear-gradient(130deg,#f0f6ff,#f6f0ff) !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-bottom-copy strong { color: #202b49 !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-bottom-copy span { color: #7885a2 !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-link:not(.is-active):before { background: linear-gradient(105deg, rgba(0, 174, 232, .08), rgba(91, 81, 255, .08) 60%, rgba(166, 60, 255, .06)) !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-link:not(.is-active):hover { background-color: rgba(88, 105, 220, .055) !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-link:not(.is-active):hover .navta-sidebar-icon-wrap { color: #4657bc !important; }
+        .navta-neon-sidebar[data-navta-theme-mode="light"] .navta-sidebar-bottom-icon { color: #6c4dff !important; }
+        @media (min-width: 768px) {
+          .navta-neon-sidebar { align-self: start; }
+        }
         @media (prefers-reduced-motion: reduce) { .navta-neon-sidebar, .navta-sidebar-link, .navta-sidebar-link:before { transition: none; } }
       `}</style>
     </aside>
