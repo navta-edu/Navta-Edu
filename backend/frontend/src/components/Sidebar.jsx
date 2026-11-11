@@ -151,6 +151,7 @@ export default function Sidebar() {
     { to: '/admin', label: 'Study Notes', icon: BookOpen, hash: '#note' },
     { to: '/admin/navta-test', label: 'Navta TEST', icon: Target },
     { to: '/admin/pdf-question-cropper', label: 'PDF Question Cropper', icon: Crop },
+    { to: '/admin/question-paper-builder', label: 'Question Paper Builder', icon: FilePlus2 },
     { to: '/admin', label: 'Reward Store', icon: Award, hash: '#reward' },
     { to: '/settings', label: 'Settings', icon: Settings },
   ];

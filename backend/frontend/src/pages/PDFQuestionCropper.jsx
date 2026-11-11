@@ -51,8 +51,35 @@ const fieldClass =
 const labelClass =
   "mb-2 block text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-400";
 
+const emptyAnswerDetails = {
+  question: "",
+  modelAnswer: "",
+  keyPoints: "",
+  maxMarks: "",
+  evaluationInstructions: "",
+  explanation: "",
+};
+
+const defaultWrittenMarks = { short: "3", long: "5" };
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function AnswerTextField({ id, label, value, onChange, placeholder }) {
+  return (
+    <div>
+      <label className={labelClass} htmlFor={id}>{label}</label>
+      <textarea
+        id={id}
+        className={fieldClass}
+        rows={3}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+      />
+    </div>
+  );
 }
 
 export default function PDFQuestionCropper() {
@@ -87,12 +114,25 @@ export default function PDFQuestionCropper() {
   const [classLevel, setClassLevel] = useState("");
   const [chapter, setChapter] = useState("");
   const [difficulty, setDifficulty] = useState("");
+  const [questionType, setQuestionType] = useState("mcq");
   const [correctAnswer, setCorrectAnswer] = useState("");
+  const [answerDetails, setAnswerDetails] = useState(emptyAnswerDetails);
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState("");
   const [savedCount, setSavedCount] = useState(0);
+  const isWritten = questionType !== "mcq";
+  const maxMarks = answerDetails.maxMarks || defaultWrittenMarks[questionType];
+
+  const updateAnswerDetail = (name, value) => {
+    setAnswerDetails((previous) => ({ ...previous, [name]: value }));
+  };
+
+  const resetAnswer = () => {
+    setCorrectAnswer("");
+    setAnswerDetails(emptyAnswerDetails);
+  };
 
   const availableExams = useMemo(
     () => (subject ? SUBJECT_EXAMS[subject] || [] : []),
@@ -204,6 +244,7 @@ export default function PDFQuestionCropper() {
     setMessage("");
     setSelection(null);
     setCropPreview("");
+    resetAnswer();
 
     try {
       const pdfjsLib = await loadPdfJs();
@@ -260,7 +301,7 @@ export default function PDFQuestionCropper() {
   };
 
   const handlePointerDown = (event) => {
-    if (!pageRenderedRef.current) return;
+    if (saving || !pageRenderedRef.current) return;
 
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -382,6 +423,7 @@ export default function PDFQuestionCropper() {
     setPageNumber(safePage);
     setSelection(null);
     setCropPreview("");
+    resetAnswer();
   };
 
   const changeScale = (nextScale) => {
@@ -403,7 +445,7 @@ export default function PDFQuestionCropper() {
     return response.blob();
   };
 
-  const validateQuestion = () => {
+  const validateQuestion = (keyPoints) => {
     if (!pdfFile) return "Select a PDF first.";
     if (!cropPreview) return "Crop a question from the PDF first.";
     if (!subject) return "Select a subject.";
@@ -411,13 +453,28 @@ export default function PDFQuestionCropper() {
     if (!classLevel) return "Select a class.";
     if (!chapter) return "Select a chapter.";
     if (!difficulty) return "Select a difficulty.";
-    if (correctAnswer === "") return "Select the correct answer A, B, C or D.";
+    if (!isWritten) {
+      return correctAnswer === "" ? "Select the correct answer A, B, C or D." : "";
+    }
+
+    if (exam !== "Boards") return "Written questions are available for Boards.";
+    if (!answerDetails.question.trim()) return "Enter the question text for written grading.";
+    if (!answerDetails.modelAnswer.trim()) return "Enter the model answer.";
+    if (!keyPoints.length) return "Enter at least one key point.";
+    if (!Number.isFinite(Number(maxMarks)) || Number(maxMarks) < 1) {
+      return "Maximum marks must be at least 1.";
+    }
 
     return "";
   };
 
   const saveQuestion = async ({ moveNext = false } = {}) => {
-    const validationError = validateQuestion();
+    if (saving) return;
+    const keyPoints = answerDetails.keyPoints
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const validationError = validateQuestion(keyPoints);
 
     if (validationError) {
       setMessageType("error");
@@ -444,13 +501,22 @@ export default function PDFQuestionCropper() {
       formData.append("classLevel", classLevel);
       formData.append("chapter", chapter);
       formData.append("difficulty", difficulty);
-      formData.append("questionType", "mcq");
-      formData.append("correctAnswer", String(correctAnswer));
+      formData.append("questionType", questionType);
+      formData.append("explanation", answerDetails.explanation.trim());
 
-      formData.append("optionA", "A");
-      formData.append("optionB", "B");
-      formData.append("optionC", "C");
-      formData.append("optionD", "D");
+      if (isWritten) {
+        formData.append("question", answerDetails.question.trim());
+        formData.append("modelAnswer", answerDetails.modelAnswer.trim());
+        formData.append("maxMarks", maxMarks);
+        formData.append("evaluationInstructions", answerDetails.evaluationInstructions.trim());
+        for (const point of keyPoints) formData.append("keyPoints", point);
+      } else {
+        formData.append("correctAnswer", correctAnswer);
+        formData.append("optionA", "A");
+        formData.append("optionB", "B");
+        formData.append("optionC", "C");
+        formData.append("optionD", "D");
+      }
 
       formData.append("sourceType", "pdf-crop");
       formData.append("sourcePdfName", pdfName);
@@ -463,11 +529,6 @@ export default function PDFQuestionCropper() {
         formData.append("cropHeight", String(Math.round(selection.height)));
       }
 
-      /*
-       * This route is intentionally dedicated to PDF-cropped questions.
-       * The backend step will add this endpoint and store the image in the
-       * same NAVTA TEST question collection used by AdminNavtaTest.
-       */
       const response = await fetch(
         "/api/navta-test/questions/pdf-crop",
         {
@@ -488,8 +549,7 @@ export default function PDFQuestionCropper() {
 
       if (!response.ok) {
         throw new Error(
-          data.message ||
-            "The cropper page is ready, but the PDF-crop backend endpoint has not been connected yet."
+          data.message || "Unable to save the cropped question."
         );
       }
 
@@ -499,7 +559,7 @@ export default function PDFQuestionCropper() {
 
       setSelection(null);
       setCropPreview("");
-      setCorrectAnswer("");
+      resetAnswer();
 
       if (moveNext && pageNumber < pageCount) {
         changePage(pageNumber + 1);
@@ -589,7 +649,7 @@ export default function PDFQuestionCropper() {
                   type="file"
                   accept="application/pdf,.pdf"
                   onChange={handlePdfFile}
-                  disabled={pdfLoading}
+                  disabled={pdfLoading || saving}
                   className="hidden"
                 />
               </label>
@@ -630,7 +690,7 @@ export default function PDFQuestionCropper() {
                   <button
                     type="button"
                     onClick={() => changePage(pageNumber - 1)}
-                    disabled={pageNumber <= 1}
+                    disabled={saving || pageNumber <= 1}
                     className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center disabled:opacity-40"
                   >
                     <ChevronLeft className="w-4 h-4" />
@@ -643,7 +703,7 @@ export default function PDFQuestionCropper() {
                   <button
                     type="button"
                     onClick={() => changePage(pageNumber + 1)}
-                    disabled={pageNumber >= pageCount}
+                    disabled={saving || pageNumber >= pageCount}
                     className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center disabled:opacity-40"
                   >
                     <ChevronRight className="w-4 h-4" />
@@ -654,7 +714,7 @@ export default function PDFQuestionCropper() {
                   <button
                     type="button"
                     onClick={() => changeScale(scale - 0.15)}
-                    disabled={scale <= 0.7}
+                    disabled={saving || scale <= 0.7}
                     className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center disabled:opacity-40"
                   >
                     <ZoomOut className="w-4 h-4" />
@@ -667,7 +727,7 @@ export default function PDFQuestionCropper() {
                   <button
                     type="button"
                     onClick={() => changeScale(scale + 0.15)}
-                    disabled={scale >= 2.5}
+                    disabled={saving || scale >= 2.5}
                     className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center disabled:opacity-40"
                   >
                     <ZoomIn className="w-4 h-4" />
@@ -676,6 +736,7 @@ export default function PDFQuestionCropper() {
                   <button
                     type="button"
                     onClick={resetCrop}
+                    disabled={saving}
                     className="h-10 rounded-xl border border-slate-200 dark:border-slate-800 px-3 flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300"
                   >
                     <RotateCcw className="w-4 h-4" />
@@ -689,6 +750,7 @@ export default function PDFQuestionCropper() {
                         setFitToWidth(true);
                         setScale(1.35);
                       }}
+                      disabled={saving}
                       className={`h-10 rounded-xl border px-3 text-xs font-bold ${
                         fitToWidth
                           ? "border-primary-500 bg-primary-500/10 text-primary-600"
@@ -759,7 +821,7 @@ export default function PDFQuestionCropper() {
           </div>
         </div>
 
-        <div className="space-y-6">
+        <fieldset disabled={saving} className="min-w-0 space-y-6">
           <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 p-5 shadow-sm">
             <div className="flex items-center gap-2">
               <ImageIcon className="w-5 h-5 text-primary-500" />
@@ -829,6 +891,7 @@ export default function PDFQuestionCropper() {
                   onChange={(event) => {
                     setSubject(event.target.value);
                     setExam("");
+                    setQuestionType("mcq");
                     setClassLevel("");
                     setChapter("");
                   }}
@@ -848,7 +911,11 @@ export default function PDFQuestionCropper() {
                 <select
                   value={exam}
                   disabled={!subject}
-                  onChange={(event) => setExam(event.target.value)}
+                  onChange={(event) => {
+                    const nextExam = event.target.value;
+                    setExam(nextExam);
+                    if (nextExam !== "Boards") setQuestionType("mcq");
+                  }}
                   className={`${fieldClass} disabled:opacity-50`}
                 >
                   <option value="">Select preparation</option>
@@ -921,28 +988,110 @@ export default function PDFQuestionCropper() {
 
           <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 p-5 shadow-sm">
             <h2 className="font-extrabold text-slate-900 dark:text-white">
-              4. Correct Answer
+              4. Answer and explanation
             </h2>
 
-            <p className="mt-1 text-xs text-slate-500">
-              The student will answer using A, B, C or D. The printed options remain inside the cropped image.
-            </p>
-
-            <div className="grid grid-cols-4 gap-2 mt-5">
-              {["A", "B", "C", "D"].map((letter, index) => (
-                <button
-                  key={letter}
-                  type="button"
-                  onClick={() => setCorrectAnswer(String(index))}
-                  className={`aspect-square rounded-2xl border text-lg font-black transition ${
-                    correctAnswer === String(index)
-                      ? "border-primary-500 bg-primary-500 text-white shadow-lg shadow-primary-500/20"
-                      : "border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:border-primary-400"
-                  }`}
+            <div className="mt-5 space-y-4">
+              <div>
+                <label className={labelClass} htmlFor="crop-question-type">Question type</label>
+                <select
+                  id="crop-question-type"
+                  className={fieldClass}
+                  value={questionType}
+                  onChange={(event) => {
+                    setQuestionType(event.target.value);
+                    updateAnswerDetail("maxMarks", "");
+                  }}
                 >
-                  {letter}
-                </button>
-              ))}
+                  <option value="mcq">Multiple choice (MCQ)</option>
+                  {exam === "Boards" && (
+                    <>
+                      <option value="short">Short theory answer</option>
+                      <option value="long">Long theory answer</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              {isWritten ? (
+                <>
+                  <AnswerTextField
+                    id="crop-question-text"
+                    label="Question text"
+                    value={answerDetails.question}
+                    onChange={(value) => updateAnswerDetail("question", value)}
+                    placeholder="Transcribe the question and diagram details needed for grading."
+                  />
+                  <AnswerTextField
+                    id="crop-model-answer"
+                    label="Model answer"
+                    value={answerDetails.modelAnswer}
+                    onChange={(value) => updateAnswerDetail("modelAnswer", value)}
+                  />
+                  <AnswerTextField
+                    id="crop-key-points"
+                    label="Key points"
+                    value={answerDetails.keyPoints}
+                    onChange={(value) => updateAnswerDetail("keyPoints", value)}
+                    placeholder="Enter one point per line."
+                  />
+                  <div>
+                    <label className={labelClass} htmlFor="crop-max-marks">Maximum marks</label>
+                    <input
+                      id="crop-max-marks"
+                      className={fieldClass}
+                      type="number"
+                      min="1"
+                      step="any"
+                      value={answerDetails.maxMarks}
+                      onChange={(event) => updateAnswerDetail("maxMarks", event.target.value)}
+                      placeholder={defaultWrittenMarks[questionType]}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Defaults to {defaultWrittenMarks[questionType]} marks.
+                    </p>
+                  </div>
+                  <AnswerTextField
+                    id="crop-marking-scheme"
+                    label="Marking scheme (optional)"
+                    value={answerDetails.evaluationInstructions}
+                    onChange={(value) => updateAnswerDetail("evaluationInstructions", value)}
+                    placeholder="Award 1 mark for the formula and 2 marks for the correct reasoning."
+                  />
+                </>
+              ) : (
+                <div>
+                  <p className={labelClass}>Correct answer</p>
+                  <p className="text-xs text-slate-500">
+                    The printed options remain inside the cropped image.
+                  </p>
+                  <div className="mt-3 grid grid-cols-4 gap-2" role="group" aria-label="Correct answer">
+                    {["A", "B", "C", "D"].map((letter, index) => (
+                      <button
+                        key={letter}
+                        type="button"
+                        aria-pressed={correctAnswer === String(index)}
+                        onClick={() => setCorrectAnswer(String(index))}
+                        className={`aspect-square rounded-2xl border text-lg font-black transition ${
+                          correctAnswer === String(index)
+                            ? "border-primary-500 bg-primary-500 text-white shadow-lg shadow-primary-500/20"
+                            : "border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:border-primary-400"
+                        }`}
+                      >
+                        {letter}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <AnswerTextField
+                id="crop-explanation"
+                label="Explanation (optional)"
+                value={answerDetails.explanation}
+                onChange={(value) => updateAnswerDetail("explanation", value)}
+                placeholder="Explain the correct answer for students to review."
+              />
             </div>
           </div>
 
@@ -992,7 +1141,7 @@ export default function PDFQuestionCropper() {
               You can crop multiple questions from the same page. After saving, the PDF remains on the current page and your Subject, Preparation, Class, Chapter and Difficulty stay selected.
             </p>
           </div>
-        </div>
+        </fieldset>
       </div>
     </div>
   );

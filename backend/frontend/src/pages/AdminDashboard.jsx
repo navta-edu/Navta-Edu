@@ -18,6 +18,7 @@ import {
   BookOpen,
   PlusCircle,
   FileText,
+  FilePlus2,
   HelpCircle,
   Upload,
   GraduationCap,
@@ -2441,6 +2442,14 @@ const fetchData = async () => {
             icon: Crop,
             isRoute: true,
             route: '/admin/pdf-question-cropper'
+          },
+
+          {
+            id: 'questionPaperBuilder',
+            label: 'Question Paper Builder',
+            icon: FilePlus2,
+            isRoute: true,
+            route: '/admin/question-paper-builder'
           }
 
         ].map(
