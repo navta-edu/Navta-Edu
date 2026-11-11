@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ChevronLeft,
@@ -20,6 +20,10 @@ import {
   CLASSES,
   CHAPTERS,
 } from "./AdminNavtaTest";
+import {
+  getQuestionCropLayers,
+  removeLightGrayWatermark,
+} from "../utils/pdfQuestionCrop";
 
 function getAdminAuthToken() {
   if (typeof window === "undefined") return "";
@@ -56,9 +60,9 @@ export default function PDFQuestionCropper() {
 
   const canvasRef = useRef(null);
   const overlayRef = useRef(null);
-  const pdfStageViewportRef = useRef(null);
   const pdfDocumentRef = useRef(null);
-  const renderTaskRef = useRef(null);
+  const cropLayersRef = useRef(null);
+  const pageRenderedRef = useRef(false);
   const dragStartRef = useRef(null);
 
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -74,8 +78,9 @@ export default function PDFQuestionCropper() {
   const [scale, setScale] = useState(1.35);
 
   const [selection, setSelection] = useState(null);
-  const [dragging, setDragging] = useState(false);
   const [cropPreview, setCropPreview] = useState("");
+  const [removeFaintWatermark, setRemoveFaintWatermark] = useState(false);
+  const [watermarkStrength, setWatermarkStrength] = useState(20);
 
   const [subject, setSubject] = useState("");
   const [exam, setExam] = useState("");
@@ -113,47 +118,8 @@ export default function PDFQuestionCropper() {
   }, []);
 
   useEffect(() => {
-    if (!isMobileViewport || !pdfDocumentRef.current || !pageCount) return;
-    const node = pdfStageViewportRef.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-
-    let timer = null;
-    const observer = new ResizeObserver(() => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        renderPage(pageNumber, scale).catch((error) => {
-          if (error?.name !== "RenderingCancelledException") {
-            console.error("Responsive PDF render error:", error);
-          }
-        });
-      }, 120);
-    });
-
-    observer.observe(node);
     return () => {
-      window.clearTimeout(timer);
-      observer.disconnect();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMobileViewport, pageCount]);
-
-  useEffect(() => {
-    return () => {
-      if (renderTaskRef.current) {
-        try {
-          renderTaskRef.current.cancel();
-        } catch {
-          // Ignore cancellation during unmount.
-        }
-      }
-
-      if (pdfDocumentRef.current) {
-        try {
-          pdfDocumentRef.current.destroy();
-        } catch {
-          // Ignore cleanup errors.
-        }
-      }
+      pdfDocumentRef.current?.destroy().catch(() => {});
     };
   }, []);
 
@@ -170,64 +136,54 @@ export default function PDFQuestionCropper() {
     return pdfjsLib;
   };
 
-  const renderPage = async (number, zoom = scale) => {
+  useEffect(() => {
     const pdf = pdfDocumentRef.current;
     const canvas = canvasRef.current;
+    const cropLayers = cropLayersRef.current;
 
-    if (!pdf || !canvas) return;
+    if (!pdfFile || pdfLoading || !pdf || !canvas) return;
 
-    if (renderTaskRef.current) {
-      try {
-        renderTaskRef.current.cancel();
-      } catch {
-        // Ignore.
-      }
-      renderTaskRef.current = null;
-    }
-
-    const page = await pdf.getPage(number);
-    const viewport = page.getViewport({ scale: zoom });
-
-    const context = canvas.getContext("2d", { alpha: false });
-
-    canvas.width = Math.floor(viewport.width);
-    canvas.height = Math.floor(viewport.height);
-    canvas.style.width = `${Math.floor(viewport.width)}px`;
-    canvas.style.height = `${Math.floor(viewport.height)}px`;
-
-    const renderTask = page.render({
-      canvasContext: context,
-      viewport,
-    });
-
-    renderTaskRef.current = renderTask;
-
-    try {
-      await renderTask.promise;
-    } catch (error) {
-      if (error?.name !== "RenderingCancelledException") {
-        throw error;
-      }
-    } finally {
-      if (renderTaskRef.current === renderTask) {
-        renderTaskRef.current = null;
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (!pdfDocumentRef.current || !pageCount) return;
-
+    let active = true;
+    let renderTask;
+    pageRenderedRef.current = false;
+    dragStartRef.current = null;
     setSelection(null);
     setCropPreview("");
     setMessage("");
 
-    renderPage(pageNumber, scale).catch((error) => {
+    const renderPage = async () => {
+      const page = await pdf.getPage(pageNumber);
+      if (!active) return;
+
+      const viewport = page.getViewport({ scale });
+      const context = canvas.getContext("2d", { alpha: false });
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      canvas.style.width = `${canvas.width}px`;
+      canvas.style.height = `${canvas.height}px`;
+
+      renderTask = page.render({
+        canvasContext: context,
+        viewport,
+        optionalContentConfigPromise: Promise.resolve(cropLayers),
+      });
+
+      await renderTask.promise;
+      if (active) pageRenderedRef.current = true;
+    };
+
+    renderPage().catch((error) => {
+      if (!active || error?.name === "RenderingCancelledException") return;
       console.error("PDF page render error:", error);
       setPdfError("Unable to render this PDF page.");
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageNumber, scale, pageCount, isMobileViewport, fitToWidth]);
+
+    return () => {
+      active = false;
+      pageRenderedRef.current = false;
+      renderTask?.cancel();
+    };
+  }, [pdfFile, pdfLoading, pageNumber, scale, isMobileViewport, fitToWidth]);
 
   const handlePdfFile = async (event) => {
     const file = event.target.files?.[0];
@@ -265,6 +221,7 @@ export default function PDFQuestionCropper() {
       const pdf = await loadingTask.promise;
 
       pdfDocumentRef.current = pdf;
+      cropLayersRef.current = await getQuestionCropLayers(pdf);
 
       setPdfFile(file);
       setPdfName(file.name);
@@ -272,13 +229,8 @@ export default function PDFQuestionCropper() {
       setPageNumber(1);
       setScale(1.35);
       setFitToWidth(true);
-
-      requestAnimationFrame(() => {
-        renderPage(1, 1.35).catch((error) => {
-          console.error("Initial PDF render error:", error);
-          setPdfError("The PDF loaded, but the first page could not be rendered.");
-        });
-      });
+      setRemoveFaintWatermark(false);
+      setWatermarkStrength(20);
     } catch (error) {
       console.error("PDF load error:", error);
       setPdfFile(null);
@@ -297,6 +249,7 @@ export default function PDFQuestionCropper() {
     if (!overlay) return null;
 
     const rect = overlay.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
 
     return {
       x: clamp(event.clientX - rect.left, 0, rect.width),
@@ -307,7 +260,7 @@ export default function PDFQuestionCropper() {
   };
 
   const handlePointerDown = (event) => {
-    if (!pdfDocumentRef.current || !canvasRef.current) return;
+    if (!pageRenderedRef.current) return;
 
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -316,7 +269,6 @@ export default function PDFQuestionCropper() {
     if (!point) return;
 
     dragStartRef.current = point;
-    setDragging(true);
     setCropPreview("");
     setMessage("");
 
@@ -325,63 +277,49 @@ export default function PDFQuestionCropper() {
       y: point.y,
       width: 0,
       height: 0,
+      displayWidth: point.width,
+      displayHeight: point.height,
     });
+  };
+
+  const getDragSelection = (event) => {
+    const start = dragStartRef.current;
+    if (!start) return null;
+    const point = getPointerPosition(event);
+    if (!point) return null;
+
+    const x = (point.x * start.width) / point.width;
+    const y = (point.y * start.height) / point.height;
+
+    return {
+      x: Math.min(start.x, x),
+      y: Math.min(start.y, y),
+      width: Math.abs(x - start.x),
+      height: Math.abs(y - start.y),
+      displayWidth: start.width,
+      displayHeight: start.height,
+    };
   };
 
   const handlePointerMove = (event) => {
-    if (!dragging || !dragStartRef.current) return;
+    const nextSelection = getDragSelection(event);
+    if (!nextSelection) return;
     event.preventDefault();
-
-    const point = getPointerPosition(event);
-    if (!point) return;
-
-    const start = dragStartRef.current;
-
-    setSelection({
-      x: Math.min(start.x, point.x),
-      y: Math.min(start.y, point.y),
-      width: Math.abs(point.x - start.x),
-      height: Math.abs(point.y - start.y),
-    });
+    setSelection(nextSelection);
   };
 
-  const finishSelection = (event) => {
-    if (!dragging) return;
-
-    event?.preventDefault?.();
-
-    setDragging(false);
-    dragStartRef.current = null;
-
-    setTimeout(() => {
-      createCropPreview();
-    }, 0);
-  };
-
-  const createCropPreview = (explicitSelection) => {
+  const createCropPreview = (crop, cleanupEnabled, strength) => {
     const canvas = canvasRef.current;
-    const overlay = overlayRef.current;
-    const currentSelection = explicitSelection || selection;
+    if (!canvas || !pageRenderedRef.current || !crop) return "";
+    if (crop.width < 10 || crop.height < 10) return "";
 
-    if (!canvas || !overlay || !currentSelection) return "";
+    const ratioX = canvas.width / crop.displayWidth;
+    const ratioY = canvas.height / crop.displayHeight;
 
-    if (
-      currentSelection.width < 10 ||
-      currentSelection.height < 10
-    ) {
-      setCropPreview("");
-      return "";
-    }
-
-    const rect = overlay.getBoundingClientRect();
-
-    const ratioX = canvas.width / rect.width;
-    const ratioY = canvas.height / rect.height;
-
-    const sx = Math.round(currentSelection.x * ratioX);
-    const sy = Math.round(currentSelection.y * ratioY);
-    const sw = Math.max(1, Math.round(currentSelection.width * ratioX));
-    const sh = Math.max(1, Math.round(currentSelection.height * ratioY));
+    const sx = Math.round(crop.x * ratioX);
+    const sy = Math.round(crop.y * ratioY);
+    const sw = Math.max(1, Math.round((crop.x + crop.width) * ratioX) - sx);
+    const sh = Math.max(1, Math.round((crop.y + crop.height) * ratioY) - sy);
 
     const cropCanvas = document.createElement("canvas");
     cropCanvas.width = sw;
@@ -403,17 +341,30 @@ export default function PDFQuestionCropper() {
       sh
     );
 
-    const dataUrl = cropCanvas.toDataURL("image/png", 0.96);
-    setCropPreview(dataUrl);
+    if (cleanupEnabled) {
+      const image = cropContext.getImageData(0, 0, sw, sh);
+      removeLightGrayWatermark(image, 240 - strength);
+      cropContext.putImageData(image, 0, 0);
+    }
 
-    return dataUrl;
+    return cropCanvas.toDataURL("image/png");
   };
 
-  useEffect(() => {
-    if (!selection || dragging) return;
-    createCropPreview(selection);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selection, dragging]);
+  const finishSelection = (event) => {
+    if (!dragStartRef.current) return;
+    event.preventDefault();
+
+    const crop = event.type === "pointercancel" ? selection : getDragSelection(event);
+    dragStartRef.current = null;
+    setSelection(crop);
+    setCropPreview(createCropPreview(crop, removeFaintWatermark, watermarkStrength));
+  };
+
+  const updateWatermarkCleanup = (enabled, strength) => {
+    setRemoveFaintWatermark(enabled);
+    setWatermarkStrength(strength);
+    setCropPreview(createCropPreview(selection, enabled, strength));
+  };
 
   const resetCrop = () => {
     setSelection(null);
@@ -638,6 +589,7 @@ export default function PDFQuestionCropper() {
                   type="file"
                   accept="application/pdf,.pdf"
                   onChange={handlePdfFile}
+                  disabled={pdfLoading}
                   className="hidden"
                 />
               </label>
@@ -775,10 +727,7 @@ export default function PDFQuestionCropper() {
                   </div>
                 </div>
               ) : (
-                <div
-                  ref={pdfStageViewportRef}
-                  className="w-full min-w-0 md:w-max md:min-w-full flex justify-center overflow-x-auto"
-                >
+                <div className="w-full min-w-0 md:w-max md:min-w-full flex justify-center overflow-x-auto">
                   <div className="relative inline-block w-fit max-w-full shadow-xl bg-white select-none">
                     <canvas ref={canvasRef} className="block max-w-full h-auto md:max-w-none" />
 
@@ -794,10 +743,10 @@ export default function PDFQuestionCropper() {
                         <div
                           className="absolute border-2 border-primary-500 bg-primary-500/10 pointer-events-none"
                           style={{
-                            left: selection.x,
-                            top: selection.y,
-                            width: selection.width,
-                            height: selection.height,
+                            left: `${(selection.x / selection.displayWidth) * 100}%`,
+                            top: `${(selection.y / selection.displayHeight) * 100}%`,
+                            width: `${(selection.width / selection.displayWidth) * 100}%`,
+                            height: `${(selection.height / selection.displayHeight) * 100}%`,
                             boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.18)",
                           }}
                         />
@@ -818,6 +767,39 @@ export default function PDFQuestionCropper() {
                 Crop Preview
               </h2>
             </div>
+
+            {cropPreview && (
+              <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                <label className="flex items-center gap-2 font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={removeFaintWatermark}
+                    onChange={(event) => updateWatermarkCleanup(event.target.checked, watermarkStrength)}
+                    className="h-4 w-4 accent-primary-600"
+                  />
+                  Remove faint gray watermark
+                </label>
+
+                {removeFaintWatermark && (
+                  <>
+                    <label className="flex flex-col gap-1">
+                      Cleanup strength
+                      <input
+                        type="range"
+                        min="0"
+                        max="40"
+                        value={watermarkStrength}
+                        onChange={(event) => updateWatermarkCleanup(removeFaintWatermark, Number(event.target.value))}
+                        className="w-full accent-primary-600"
+                      />
+                    </label>
+                    <p className="text-xs">
+                      Check the printed options and any pale diagram details before saving.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="mt-4 min-h-[190px] rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 flex items-center justify-center overflow-hidden p-3">
               {cropPreview ? (
