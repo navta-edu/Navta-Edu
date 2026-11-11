@@ -1558,13 +1558,16 @@ exports.resetAIQuestionImage = async (
 // classLevel
 // chapter
 // difficulty
-// correctAnswer  -> 0, 1, 2 or 3
+// questionType   -> mcq (default), short or long (Boards only)
+// correctAnswer  -> 0, 1, 2 or 3 for MCQs
+// question, modelAnswer, keyPoints and maxMarks -> written questions
+// evaluationInstructions -> optional written marking guidance
+// explanation    -> optional student feedback
 // sourcePdfName
 // sourcePage
 //
-// The complete printed question + printed A/B/C/D options
-// stay inside questionImage. The stored options are A/B/C/D so
-// the normal NAVTA TEST MCQ answer controls can still be used.
+// The crop displays the printed question. MCQs use A/B/C/D answer
+// controls. Written questions also store a transcript for grading.
 // ============================================
 
 exports.createPDFCropQuestion = async (
@@ -1610,15 +1613,11 @@ exports.createPDFCropQuestion = async (
         req.body?.sourcePdfName || ""
       ).trim();
 
+    const requestedPage = Number(req.body?.sourcePage);
     const sourcePage =
-      Number(
-        req.body?.sourcePage
-      ) || null;
-
-    const answerIndex =
-      Number(
-        req.body?.correctAnswer
-      );
+      Number.isInteger(requestedPage) && requestedPage > 0
+        ? requestedPage
+        : null;
 
     if (
       !subject ||
@@ -1698,18 +1697,89 @@ exports.createPDFCropQuestion = async (
       });
     }
 
-    if (
-      !Number.isInteger(
-        answerIndex
-      ) ||
-      answerIndex < 0 ||
-      answerIndex > 3
-    ) {
+    const {
+      questionType: requestedQuestionType,
+      correctAnswer,
+      question: questionText,
+      modelAnswer: modelAnswerText,
+      keyPoints: submittedKeyPoints,
+      maxMarks: submittedMaxMarks,
+      evaluationInstructions,
+      explanation,
+    } = req.body ?? {};
+
+    const questionType = String(requestedQuestionType ?? "").trim() || "mcq";
+    if (!validQuestionTypes.includes(questionType)) {
       return res.status(400).json({
         success: false,
-        message:
-          "Correct answer must be Option A, B, C or D.",
+        message: "Invalid question type.",
       });
+    }
+
+    let answerFields;
+    if (questionType === "mcq") {
+      const answerIndex = normaliseSubmittedAnswer(
+        typeof correctAnswer === "string" ? correctAnswer.trim() : correctAnswer
+      );
+      if (answerIndex === null || answerIndex < 0 || answerIndex > 3) {
+        return res.status(400).json({
+          success: false,
+          message: "Correct answer must be Option A, B, C or D.",
+        });
+      }
+
+      answerFields = {
+        question: NAVTA_VISUAL_MARKER,
+        options: ["A", "B", "C", "D"],
+        correctAnswer: answerIndex,
+        maxMarks: 1,
+      };
+    } else {
+      if (exam !== "Boards") {
+        return res.status(400).json({
+          success: false,
+          message: "Short and long answer questions are only available for Boards.",
+        });
+      }
+
+      const question = typeof questionText === "string" ? questionText.trim() : "";
+      const modelAnswer =
+        typeof modelAnswerText === "string" ? modelAnswerText.trim() : "";
+      const keyPoints = (Array.isArray(submittedKeyPoints)
+        ? submittedKeyPoints
+        : [submittedKeyPoints])
+        .filter((point) => typeof point === "string")
+        .map((point) => point.trim())
+        .filter(Boolean);
+      const maxMarks = Number(submittedMaxMarks);
+
+      if (!question || question === NAVTA_VISUAL_MARKER) {
+        return res.status(400).json({
+          success: false,
+          message: "A question transcript is required for written grading.",
+        });
+      }
+      if (!modelAnswer || keyPoints.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Provide a model answer and at least one marking point.",
+        });
+      }
+      if (!Number.isFinite(maxMarks) || maxMarks < 1) {
+        return res.status(400).json({
+          success: false,
+          message: "Maximum marks must be at least 1.",
+        });
+      }
+
+      answerFields = {
+        question,
+        modelAnswer,
+        keyPoints,
+        maxMarks,
+        evaluationInstructions:
+          typeof evaluationInstructions === "string" ? evaluationInstructions.trim() : "",
+      };
     }
 
     const mimeType =
@@ -1770,8 +1840,9 @@ exports.createPDFCropQuestion = async (
           ""
         ).trim(),
 
-      altText:
-        `${subject} ${chapter} question`,
+      altText: questionType === "mcq"
+        ? `${subject} ${chapter} question`
+        : answerFields.question,
 
       sourcePage,
 
@@ -1793,39 +1864,9 @@ exports.createPDFCropQuestion = async (
       chapter,
       difficulty,
 
-      questionType:
-        "mcq",
-
-      // The actual question and its printed choices are in the image.
-      // Keeping the visual marker here lets the existing NAVTA visual
-      // renderer place the crop as the question content.
-      question:
-        NAVTA_VISUAL_MARKER,
-
-      options: [
-        "A",
-        "B",
-        "C",
-        "D",
-      ],
-
-      correctAnswer:
-        answerIndex,
-
-      explanation:
-        "",
-
-      modelAnswer:
-        "",
-
-      keyPoints:
-        [],
-
-      evaluationInstructions:
-        "",
-
-      maxMarks:
-        1,
+      questionType,
+      ...answerFields,
+      explanation: typeof explanation === "string" ? explanation.trim() : "",
 
       isActive:
         true,
@@ -1850,7 +1891,7 @@ exports.createPDFCropQuestion = async (
     // strict Mongoose schemas that do not yet contain these fields.
     if (
       NavtaQuestion.schema?.path(
-        "sourceDocument"
+        "sourceDocument.fileName"
       )
     ) {
       payload.sourceDocument = {
@@ -4064,6 +4105,7 @@ exports.generateTest = async (req, res) => {
             // NAVTA AI visual / screenshot fields
             questionImage: 1,
             questionImages: 1,
+            imageCropSource: 1,
             hasVisual: 1,
             visualType: 1,
             visualDescription: 1,
