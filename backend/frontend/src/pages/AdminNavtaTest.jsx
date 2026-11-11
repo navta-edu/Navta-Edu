@@ -174,6 +174,14 @@ export const CHAPTERS = {
 // EMPTY MANUAL QUESTION FORM
 // =====================================================
 
+const assertionReasonChoices = {
+  optionA: "Both the assertion and the reason are true, and the reason correctly explains the assertion.",
+  optionB: "Both the assertion and the reason are true, but the reason does not explain the assertion.",
+  optionC: "The assertion is true, but the reason is false.",
+  optionD: "The assertion is false, but the reason is true.",
+  correctAnswer: "",
+};
+
 const emptyForm = {
   subject: "",
   exam: "",
@@ -181,7 +189,12 @@ const emptyForm = {
   chapter: "",
   difficulty: "",
   questionType: "mcq",
+  questionFormat: "standard",
   question: "",
+  assertion: "",
+  reason: "",
+  casePassage: "",
+  assertionChoices: assertionReasonChoices,
   optionA: "",
   optionB: "",
   optionC: "",
@@ -193,6 +206,26 @@ const emptyForm = {
   evaluationInstructions: "",
   explanation: "",
 };
+
+function getManualQuestionText(form) {
+  if (form.questionFormat === "assertion-reason") {
+    const assertion = form.assertion.trim();
+    const reason = form.reason.trim();
+    return assertion && reason
+      ? `Assertion (A): ${assertion}\n\nReason (R): ${reason}`
+      : "";
+  }
+
+  const question = form.question.trim();
+  if (form.questionFormat === "case-study") {
+    const passage = form.casePassage.trim();
+    return passage && question
+      ? `Case study: ${passage}\n\nQuestion: ${question}`
+      : "";
+  }
+
+  return question;
+}
 
 // =====================================================
 // EMPTY AI IMPORT HINTS
@@ -1569,6 +1602,12 @@ export default function AdminNavtaTest() {
   const [form, setForm] =
     useState(emptyForm);
 
+  const isWrittenQuestion = form.exam === "Boards" && form.questionType !== "mcq";
+  const isAssertionReason = form.questionFormat === "assertion-reason";
+  const isCaseStudy = form.questionFormat === "case-study";
+  const choiceFields = isAssertionReason ? form.assertionChoices : form;
+  const ChoiceInput = isAssertionReason ? "textarea" : "input";
+
   const [message, setMessage] =
     useState("");
 
@@ -2160,6 +2199,29 @@ export default function AdminNavtaTest() {
     }));
   };
 
+  const updateChoiceField = (field, value) => {
+    if (!isAssertionReason) {
+      updateField(field, value);
+      return;
+    }
+
+    setForm((previous) => ({
+      ...previous,
+      assertionChoices: { ...previous.assertionChoices, [field]: value },
+    }));
+  };
+
+  const handleQuestionTypeChange = (questionType) => {
+    setForm((previous) => ({
+      ...previous,
+      questionType,
+      questionFormat:
+        questionType !== "mcq" && previous.questionFormat === "assertion-reason"
+          ? "standard"
+          : previous.questionFormat,
+    }));
+  };
+
   const handleSubjectChange = (
     value
   ) => {
@@ -2169,6 +2231,7 @@ export default function AdminNavtaTest() {
       exam: "",
       classLevel: "",
       chapter: "",
+      questionType: "mcq",
     }));
 
     setMessage("");
@@ -2196,6 +2259,7 @@ export default function AdminNavtaTest() {
       optionC: "",
       optionD: "",
       correctAnswer: "",
+      assertionChoices: assertionReasonChoices,
       modelAnswer: "",
       keyPoints: "",
       maxMarks: "",
@@ -2227,6 +2291,18 @@ export default function AdminNavtaTest() {
   const submitQuestion =
     async (event) => {
       event.preventDefault();
+
+      const questionText = getManualQuestionText(form);
+      if (!questionText) {
+        const requiredFields = {
+          standard: "Enter the question.",
+          "assertion-reason": "Enter both the assertion and the reason.",
+          "case-study": "Enter the case study passage and its question.",
+        };
+        setMessage(requiredFields[form.questionFormat]);
+        setMessageType("error");
+        return;
+      }
 
       setLoading(true);
       setMessage("");
@@ -2269,7 +2345,7 @@ export default function AdminNavtaTest() {
                       : "mcq",
 
                   question:
-                    form.question.trim(),
+                    questionText,
 
                   options:
                     form.exam !==
@@ -2277,10 +2353,10 @@ export default function AdminNavtaTest() {
                     form.questionType ===
                       "mcq"
                       ? [
-                          form.optionA.trim(),
-                          form.optionB.trim(),
-                          form.optionC.trim(),
-                          form.optionD.trim(),
+                          choiceFields.optionA.trim(),
+                          choiceFields.optionB.trim(),
+                          choiceFields.optionC.trim(),
+                          choiceFields.optionD.trim(),
                         ]
                       : [],
 
@@ -2290,7 +2366,7 @@ export default function AdminNavtaTest() {
                     form.questionType ===
                       "mcq"
                       ? Number(
-                          form.correctAnswer
+                          choiceFields.correctAnswer
                         )
                       : undefined,
 
@@ -5071,6 +5147,9 @@ export default function AdminNavtaTest() {
           <p className="admin-navta-test-subtitle">
             Add questions manually or upload a PDF, DOCX or TXT file and let NAVTA AI classify, explain and organise the questions automatically.
           </p>
+          <a href="#manual-question-entry" className="admin-navta-secondary-button mb-5 inline-block">
+            Add Question Manually
+          </a>
 
           {/* =================================================
               AI IMPORT
@@ -6663,7 +6742,7 @@ export default function AdminNavtaTest() {
             Manual Entry: Select Subject → Preparation → Class → Chapter → Difficulty. For Boards, choose MCQ, Short Answer or Long Answer.
           </div>
 
-          <div className="admin-navta-test-card">
+          <div id="manual-question-entry" className="admin-navta-test-card scroll-mt-24" tabIndex={-1}>
 
             <form
               onSubmit={
@@ -6906,20 +6985,18 @@ export default function AdminNavtaTest() {
                   {form.exam ===
                     "Boards" && (
                     <div className="admin-navta-field full">
-                      <label className="admin-navta-label">
-                        Question Type
+                      <label className="admin-navta-label" htmlFor="manual-question-response-type">
+                        Response Type
                       </label>
 
                       <select
+                        id="manual-question-response-type"
                         className="admin-navta-select"
                         value={
                           form.questionType
                         }
                         onChange={(event) =>
-                          updateField(
-                            "questionType",
-                            event.target.value
-                          )
+                          handleQuestionTypeChange(event.target.value)
                         }
                         required
                       >
@@ -6952,30 +7029,70 @@ export default function AdminNavtaTest() {
                 <div className="admin-navta-grid">
 
                   <div className="admin-navta-field full">
-                    <label className="admin-navta-label">
-                      Question
+                    <label className="admin-navta-label" htmlFor="manual-question-format">
+                      Question Format
                     </label>
-
-                    <textarea
-                      className="admin-navta-textarea"
-                      placeholder="Enter the complete question"
-                      value={
-                        form.question
-                      }
-                      onChange={(event) =>
-                        updateField(
-                          "question",
-                          event.target.value
-                        )
-                      }
-                      required
-                    />
+                    <select
+                      id="manual-question-format"
+                      className="admin-navta-select"
+                      value={form.questionFormat}
+                      onChange={(event) => updateField("questionFormat", event.target.value)}
+                    >
+                      <option value="standard">Standard</option>
+                      <option value="assertion-reason" disabled={isWrittenQuestion}>
+                        Assertion and Reason (MCQ)
+                      </option>
+                      <option value="case-study">Case Study</option>
+                    </select>
                   </div>
 
-                  {(form.exam !==
-                    "Boards" ||
-                    form.questionType ===
-                      "mcq") && (
+                  {isAssertionReason ? (
+                    [["assertion", "Assertion (A)"], ["reason", "Reason (R)"]].map(([field, label]) => (
+                      <div key={field} className="admin-navta-field full">
+                        <label className="admin-navta-label" htmlFor={`manual-question-${field}`}>
+                          {label}
+                        </label>
+                        <textarea
+                          id={`manual-question-${field}`}
+                          className="admin-navta-textarea"
+                          value={form[field]}
+                          onChange={(event) => updateField(field, event.target.value)}
+                          required
+                        />
+                      </div>
+                    ))
+                  ) : (
+                    <>
+                      {isCaseStudy && (
+                        <div className="admin-navta-field full">
+                          <label className="admin-navta-label" htmlFor="manual-question-passage">
+                            Case Study Passage
+                          </label>
+                          <textarea
+                            id="manual-question-passage"
+                            className="admin-navta-textarea"
+                            value={form.casePassage}
+                            onChange={(event) => updateField("casePassage", event.target.value)}
+                            required
+                          />
+                        </div>
+                      )}
+                      <div className="admin-navta-field full">
+                        <label className="admin-navta-label" htmlFor="manual-question-text">
+                          {isCaseStudy ? "Question About the Passage" : "Question"}
+                        </label>
+                        <textarea
+                          id="manual-question-text"
+                          className="admin-navta-textarea"
+                          value={form.question}
+                          onChange={(event) => updateField("question", event.target.value)}
+                          required
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {!isWrittenQuestion && (
                     <>
                       {[
                         "A",
@@ -6996,23 +7113,20 @@ export default function AdminNavtaTest() {
                               }
                               className="admin-navta-field"
                             >
-                              <label className="admin-navta-label">
+                              <label className="admin-navta-label" htmlFor={`manual-question-${key}`}>
                                 Option{" "}
                                 {
                                   letter
                                 }
                               </label>
 
-                              <input
-                                className="admin-navta-input"
+                              <ChoiceInput
+                                id={`manual-question-${key}`}
+                                className={isAssertionReason ? "admin-navta-textarea" : "admin-navta-input"}
                                 placeholder={`Enter Option ${letter}`}
-                                value={
-                                  form[
-                                    key
-                                  ]
-                                }
+                                value={choiceFields[key]}
                                 onChange={(event) =>
-                                  updateField(
+                                  updateChoiceField(
                                     key,
                                     event.target.value
                                   )
@@ -7025,17 +7139,16 @@ export default function AdminNavtaTest() {
                       )}
 
                       <div className="admin-navta-field full">
-                        <label className="admin-navta-label">
+                        <label className="admin-navta-label" htmlFor="manual-question-correct-answer">
                           Correct Answer
                         </label>
 
                         <select
+                          id="manual-question-correct-answer"
                           className="admin-navta-select"
-                          value={
-                            form.correctAnswer
-                          }
+                          value={choiceFields.correctAnswer}
                           onChange={(event) =>
-                            updateField(
+                            updateChoiceField(
                               "correctAnswer",
                               event.target.value
                             )
@@ -7066,17 +7179,15 @@ export default function AdminNavtaTest() {
                     </>
                   )}
 
-                  {form.exam ===
-                    "Boards" &&
-                    form.questionType !==
-                      "mcq" && (
+                  {isWrittenQuestion && (
                       <>
                         <div className="admin-navta-field full">
-                          <label className="admin-navta-label">
+                          <label className="admin-navta-label" htmlFor="manual-question-model-answer">
                             Model Answer
                           </label>
 
                           <textarea
+                            id="manual-question-model-answer"
                             className="admin-navta-textarea"
                             placeholder="Enter the model / ideal answer"
                             value={
@@ -7093,11 +7204,12 @@ export default function AdminNavtaTest() {
                         </div>
 
                         <div className="admin-navta-field full">
-                          <label className="admin-navta-label">
+                          <label className="admin-navta-label" htmlFor="manual-question-key-points">
                             Key Points
                           </label>
 
                           <textarea
+                            id="manual-question-key-points"
                             className="admin-navta-textarea"
                             placeholder={
                               "Enter one key point per line\nExample:\nDefinition\nFormula\nCorrect unit"
@@ -7116,15 +7228,16 @@ export default function AdminNavtaTest() {
                         </div>
 
                         <div className="admin-navta-field">
-                          <label className="admin-navta-label">
+                          <label className="admin-navta-label" htmlFor="manual-question-maximum-marks">
                             Maximum Marks
                           </label>
 
                           <input
+                            id="manual-question-maximum-marks"
                             type="number"
                             min="1"
                             className="admin-navta-input"
-                            placeholder="e.g. 3 or 5"
+                            placeholder="Total available marks, e.g. 5"
                             value={
                               form.maxMarks
                             }
@@ -7138,14 +7251,16 @@ export default function AdminNavtaTest() {
                           />
                         </div>
 
-                        <div className="admin-navta-field">
-                          <label className="admin-navta-label">
-                            Evaluation Instructions
+                        <div className="admin-navta-field full">
+                          <label className="admin-navta-label" htmlFor="manual-question-marking-scheme">
+                            Custom Marking Scheme (Optional)
                           </label>
 
-                          <input
-                            className="admin-navta-input"
-                            placeholder="Optional AI marking guidance"
+                          <textarea
+                            id="manual-question-marking-scheme"
+                            className="admin-navta-textarea"
+                            rows={3}
+                            placeholder="For 5 marks, award 1 for the definition, 2 for the method, and 2 for the result."
                             value={
                               form.evaluationInstructions
                             }
@@ -7161,17 +7276,15 @@ export default function AdminNavtaTest() {
                     )}
 
                   <div className="admin-navta-field full">
-                    <label className="admin-navta-label">
+                    <label className="admin-navta-label" htmlFor="manual-question-explanation">
                       Explanation / Feedback
                     </label>
 
                     <textarea
+                      id="manual-question-explanation"
                       className="admin-navta-textarea admin-navta-explanation"
                       placeholder={
-                        form.exam ===
-                          "Boards" &&
-                        form.questionType !==
-                          "mcq"
+                        isWrittenQuestion
                           ? "Feedback shown after AI evaluation"
                           : "Shown to the student only after a wrong MCQ answer"
                       }
