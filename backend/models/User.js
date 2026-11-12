@@ -21,7 +21,7 @@ const UserSchema = new mongoose.Schema({
     minlength: 6,
     select: false,
     required: function () {
-      return !this.googleId;
+      return !this.googleId && !this.portalTestOwner;
     }
   },
   googleId: {
@@ -37,6 +37,12 @@ const UserSchema = new mongoose.Schema({
     type: String,
     enum: ['student', 'teacher', 'admin', 'external_teacher'],
     default: 'student'
+  },
+  portalTestOwner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+    immutable: true
   },
   isVerified: {
     type: Boolean,
@@ -72,6 +78,14 @@ const UserSchema = new mongoose.Schema({
     default: ''
   }
 });
+
+UserSchema.index(
+  { portalTestOwner: 1, role: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { portalTestOwner: { $type: 'objectId' } }
+  }
+);
 
 // Encrypt password using bcrypt
 UserSchema.pre('save', async function (next) {
