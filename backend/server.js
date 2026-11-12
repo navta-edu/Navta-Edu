@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 const path = require("path");
+const mongoose = require("mongoose");
 
 const connectDB = require("./config/db");
 
@@ -157,6 +158,23 @@ app.get(
     });
   }
 );
+
+app.get("/api/readiness", async (req, res) => {
+  let database = "unavailable";
+
+  if (mongoose.connection.readyState === 1 && mongoose.connection.db) {
+    try {
+      await mongoose.connection.db.command({ ping: 1 }, { timeoutMS: 2000 });
+      database = "ready";
+    } catch {
+      // Readiness responses expose only the status, never connection details.
+    }
+  }
+
+  const ready = database === "ready";
+  res.set("Cache-Control", "no-store");
+  return res.status(ready ? 200 : 503).json({ success: ready, database });
+});
 
 // ============================================
 // MAIN API ROUTES
