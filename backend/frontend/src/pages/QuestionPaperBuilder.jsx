@@ -420,7 +420,9 @@ function preparePaperMath(value = '') {
   let text = normaliseNavtaLatex(stripVisualMarker(value));
   text = text.replace(/<br\s*\/?\s*>/gi, '\n');
   if (/^Assertion\s*\(A\)\s*:/i.test(text)) {
-    text = text.replace(/\s*(Reason\s*\(R\)\s*:)/i, '\n$1');
+    text = text
+      .replace(/^Assertion\s*\(A\)\s*:\s*/i, 'Assertion (A): ')
+      .replace(/\s*Reason\s*\(R\)\s*:\s*/i, '\nReason (R): ');
   }
 
   // Imported question-bank strings sometimes contain TeX commands without math
@@ -452,10 +454,12 @@ function preparePaperMath(value = '') {
 
 const paperMathSegments = /(\$\$[\s\S]+?\$\$|(?<!\\)\$(?!\$)(?:\\[\s\S]|[^$\\])+\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])/g;
 
-const PaperMathText = memo(function PaperMathText({ value }) {
+const PaperMathText = memo(function PaperMathText({ value, preserveLineBreaks = false }) {
+  const text = preparePaperMath(value);
+  const showLineBreaks = preserveLineBreaks || text.startsWith('Assertion (A):');
   return (
-    <span className="whitespace-pre-wrap">
-      {preparePaperMath(value).split(paperMathSegments).map((part, index) => {
+    <span className={showLineBreaks ? 'whitespace-pre-wrap' : 'whitespace-normal'}>
+      {text.split(paperMathSegments).map((part, index) => {
         if (index % 2 === 0) return part;
 
         const displayMode = part.startsWith('$$') || part.startsWith('\\[');
@@ -471,7 +475,7 @@ const PaperMathText = memo(function PaperMathText({ value }) {
           return (
             <span
               key={index}
-              className={displayMode ? 'block max-w-full overflow-x-auto' : 'inline-block max-w-full overflow-x-auto align-middle'}
+              className={displayMode ? 'block max-w-full overflow-x-auto overflow-y-hidden' : 'inline-block max-w-full overflow-x-auto overflow-y-hidden align-middle'}
               dangerouslySetInnerHTML={{ __html: html }}
             />
           );
@@ -2310,7 +2314,7 @@ export default function QuestionPaperBuilder() {
                                 <p className="mb-2 whitespace-pre-wrap text-sm">
                                   <strong>Case study</strong>
                                   <br />
-                                  <PaperMathText value={question.caseStudy.passage} />
+                                  <PaperMathText value={question.caseStudy.passage} preserveLineBreaks />
                                 </p>
                               )}
 
