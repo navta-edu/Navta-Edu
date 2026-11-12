@@ -10,6 +10,13 @@ import {
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import "katex/contrib/mhchem";
+import StructuredAnswerInput from "../components/StructuredAnswerInput";
+import {
+  getObjectiveAnswerMode,
+  getObjectivePartialFraction,
+  getSingleChoiceAnswer,
+  isObjectiveAnswerCorrect,
+} from "../utils/navtaObjective";
 
 const PREPARATION_OPTIONS = {
   Physics: {
@@ -215,9 +222,9 @@ const DIFFICULTY_INFO = {
 
 const QUESTION_TYPE_INFO = {
   mcq: {
-    title: "MCQ / Option",
+    title: "Objective Questions",
     icon: "✅",
-    description: "Choose one correct option",
+    description: "Answer choice and numerical questions",
     minutesPerQuestion: 1,
   },
   short: {
@@ -1395,6 +1402,12 @@ function shouldUseNavtaQuestionScreenshot(question) {
 function NavtaQuestionBody({ question }) {
   return (
     <div className="navta-question-body">
+      {question.caseStudy?.passage && (
+        <section className="mb-4 rounded-xl border border-current/20 p-4" aria-label="Case study passage">
+          <p className="mb-2 font-semibold">Case study · Question {question.caseStudy.order + 1} of {question.caseStudy.size}</p>
+          {renderNavtaContent(question.caseStudy.passage)}
+        </section>
+      )}
       <h2 className="navta-question">
         <NavtaQuestionContent
           question={question}
@@ -1404,6 +1417,17 @@ function NavtaQuestionBody({ question }) {
       </h2>
     </div>
   );
+}
+
+function renderObjectiveAnswerKey(question) {
+  const mode = getObjectiveAnswerMode(question);
+  if (mode === "numeric") return question.numericAnswer?.value;
+  const choices = mode === "multiple" ? question.correctAnswers ?? [] : [getSingleChoiceAnswer(question)];
+  return choices.filter(Number.isInteger).map((choice) => (
+    <div key={choice}>
+      {String.fromCharCode(65 + choice)}. {renderNavtaContent(question.options?.[choice] || "")}
+    </div>
+  ));
 }
 
 export default function NavtaTestPage() {
@@ -1588,6 +1612,12 @@ export default function NavtaTestPage() {
   const [answerFeedback, setAnswerFeedback] = useState({});
   const [writtenAnswers, setWrittenAnswers] = useState({});
   const [writtenFeedback, setWrittenFeedback] = useState({});
+  const [scoringPolicy, setScoringPolicy] = useState({
+    correctMarks: 1,
+    incorrectPenalty: 0,
+    partialCredit: false,
+  });
+  const [savedScore, setSavedScore] = useState(null);
 
   const [timeLeft, setTimeLeft] = useState(0);
   const [submitted, setSubmitted] = useState(false);
@@ -1658,6 +1688,7 @@ export default function NavtaTestPage() {
   }, [timeLeft]);
 
   const currentTestQuestion = questions[currentQuestion];
+  const objectiveAnswerMode = getObjectiveAnswerMode(currentTestQuestion);
 
   useEffect(() => {
     if (
@@ -1760,6 +1791,7 @@ export default function NavtaTestPage() {
     setTestDurationSeconds(0);
     setResultSaveStatus("idle");
     setResultSaveMessage("");
+    setSavedScore(null);
     setCoinsAwarded(0);
     setUpdatedCoinBalance(null);
     attemptIdRef.current = "";
@@ -1827,17 +1859,7 @@ export default function NavtaTestPage() {
     setStep("subject");
   };
 
-  const getCorrectAnswerIndex = (question) => {
-    if (typeof question?.correctAnswer === "number") {
-      return question.correctAnswer;
-    }
-
-    if (typeof question?.answer === "number") {
-      return question.answer;
-    }
-
-    return Number(question?.correctAnswer);
-  };
+  const getCorrectAnswerIndex = getSingleChoiceAnswer;
 
   const getMistakeSource = () => {
     if (isRevenge) return "revenge";
@@ -1856,27 +1878,27 @@ export default function NavtaTestPage() {
     );
   };
 
-  const createAttemptId = () => {
-    if (
-      typeof crypto !== "undefined" &&
-      typeof crypto.randomUUID === "function"
-    ) {
-      return crypto.randomUUID();
-    }
-
-    return `navta-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 12)}`;
+  const buildAttemptHeaders = () => {
+    const token = getStoredAuthToken();
+    return {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
   };
 
-  const beginTrackedAttempt = (durationSeconds) => {
+  const beginTrackedAttempt = (durationSeconds, attempt) => {
+    if (!attempt?.attemptId || !attempt.scoringPolicy) {
+      throw new Error("The server did not start this test. Please try again.");
+    }
     const safeDurationSeconds = Math.max(
       0,
       Math.round(Number(durationSeconds) || 0)
     );
 
-    attemptIdRef.current = createAttemptId();
+    attemptIdRef.current = attempt.attemptId;
     completionSubmitKeyRef.current = "";
+    setScoringPolicy(attempt.scoringPolicy);
+    setSavedScore(null);
 
     setTestDurationSeconds(safeDurationSeconds);
     setResultSaveStatus("idle");
@@ -2015,7 +2037,7 @@ export default function NavtaTestPage() {
     try {
       const response = await fetch("/api/navta-test/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: buildAttemptHeaders(),
         body: JSON.stringify({
           subject,
           exam: preparation,
@@ -2073,7 +2095,7 @@ export default function NavtaTestPage() {
             Number(selectedDuration) * 60
         );
 
-      beginTrackedAttempt(standardDurationSeconds);
+      beginTrackedAttempt(standardDurationSeconds, data.test);
       setTimeLeft(standardDurationSeconds);
       setSubmitted(false);
       setEvaluationError("");
@@ -2118,7 +2140,7 @@ export default function NavtaTestPage() {
     try {
       const response = await fetch("/api/navta-test/boss-battle", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: buildAttemptHeaders(),
         body: JSON.stringify({
           subject,
           exam: preparation,
@@ -2196,7 +2218,7 @@ export default function NavtaTestPage() {
       const bossDurationSeconds =
         returnedSeconds || fallbackSeconds;
 
-      beginTrackedAttempt(bossDurationSeconds);
+      beginTrackedAttempt(bossDurationSeconds, battle);
       setTimeLeft(bossDurationSeconds);
       setSubmitted(false);
       setEvaluationError("");
@@ -2232,7 +2254,7 @@ export default function NavtaTestPage() {
     try {
       const response = await fetch("/api/navta-test/revenge-battle", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: buildAttemptHeaders(),
         body: JSON.stringify({
           subject,
           exam: preparation,
@@ -2304,7 +2326,7 @@ export default function NavtaTestPage() {
       setMistakeSaveMessage({});
       questionStartedAtRef.current = Date.now();
 
-      beginTrackedAttempt(returnedSeconds);
+      beginTrackedAttempt(returnedSeconds, battle);
       setTimeLeft(returnedSeconds);
       setSubmitted(false);
       setEvaluationError("");
@@ -2348,26 +2370,25 @@ export default function NavtaTestPage() {
     }
   };
 
-  const selectAnswer = (answerIndex) => {
+  const selectAnswer = (response) => {
     if (answerFeedback[currentQuestion]) return;
 
     recordCurrentQuestionTime();
 
     const question = questions[currentQuestion];
-    const correctAnswer = getCorrectAnswerIndex(question);
-    const isCorrect = answerIndex === correctAnswer;
+    const isCorrect = isObjectiveAnswerCorrect(question, response);
+    const isPartial = scoringPolicy.partialCredit && getObjectivePartialFraction(question, response) > 0;
 
     setAnswers((previous) => ({
       ...previous,
-      [currentQuestion]: answerIndex,
+      [currentQuestion]: response,
     }));
 
     setAnswerFeedback((previous) => ({
       ...previous,
       [currentQuestion]: {
         isCorrect,
-        selectedAnswer: answerIndex,
-        correctAnswer,
+        isPartial,
       },
     }));
 
@@ -2383,6 +2404,7 @@ export default function NavtaTestPage() {
   };
 
   const evaluateWrittenAnswer = async () => {
+    const attemptId = attemptIdRef.current;
     const question = questions[currentQuestion];
     const studentAnswer = String(
       writtenAnswers[currentQuestion] || ""
@@ -2412,10 +2434,9 @@ export default function NavtaTestPage() {
         "/api/navta-test/evaluate-answer",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: buildAttemptHeaders(),
           body: JSON.stringify({
+            attemptId,
             questionId: question._id,
             studentAnswer,
           }),
@@ -2435,17 +2456,19 @@ export default function NavtaTestPage() {
         );
       }
 
-      setWrittenFeedback((previous) => ({
-        ...previous,
-        [currentQuestion]: data.evaluation,
-      }));
+      if (attemptIdRef.current === attemptId) {
+        setWrittenFeedback((previous) => ({
+          ...previous,
+          [currentQuestion]: data.evaluation,
+        }));
+      }
     } catch (error) {
       console.error("Written answer evaluation error:", error);
-      setEvaluationError(
-        error.message || "Unable to evaluate the answer."
-      );
+      if (attemptIdRef.current === attemptId) {
+        setEvaluationError(error.message || "Unable to evaluate the answer.");
+      }
     } finally {
-      setEvaluatingAnswer(false);
+      if (attemptIdRef.current === attemptId) setEvaluatingAnswer(false);
     }
   };
 
@@ -2455,7 +2478,7 @@ export default function NavtaTestPage() {
     return questions.reduce((total, question, index) => {
       return (
         total +
-        (answers[index] === getCorrectAnswerIndex(question) ? 1 : 0)
+        (isObjectiveAnswerCorrect(question, answers[index]) ? 1 : 0)
       );
     }, 0);
   }, [answers, questions, resolvedQuestionType]);
@@ -2481,24 +2504,32 @@ export default function NavtaTestPage() {
     );
   }, [questions, writtenFeedback, resolvedQuestionType]);
 
-  const resultAccuracy = useMemo(() => {
-    if (questions.length === 0) return 0;
+  const objectiveMarks = useMemo(() => {
+    const { correctMarks, incorrectPenalty, partialCredit } = scoringPolicy;
+    const total = questions.reduce((score, question, index) => {
+      const response = answers[index];
+      if (response == null || response === "" || (Array.isArray(response) && response.length === 0)) {
+        return score;
+      }
+      if (isObjectiveAnswerCorrect(question, response)) return score + correctMarks;
+      const fraction = partialCredit ? getObjectivePartialFraction(question, response) : 0;
+      if (fraction > 0) return score + Math.round(correctMarks * fraction * 100) / 100;
+      return score - incorrectPenalty;
+    }, 0);
+    return {
+      score: Math.round(total * 100) / 100,
+      maximumMarks: Math.round(questions.length * correctMarks * 100) / 100,
+    };
+  }, [answers, questions, scoringPolicy]);
 
-    if (resolvedQuestionType === "mcq") {
-      return Math.round((mcqScore / questions.length) * 100);
-    }
-
-    if (writtenMarks.maximum <= 0) return 0;
-
-    return Math.round(
-      (writtenMarks.awarded / writtenMarks.maximum) * 100
-    );
-  }, [
-    questions.length,
-    resolvedQuestionType,
-    mcqScore,
-    writtenMarks,
-  ]);
+  const resultMarks = savedScore ?? (resolvedQuestionType === "mcq"
+    ? objectiveMarks
+    : { score: writtenMarks.awarded, maximumMarks: writtenMarks.maximum });
+  const resultAccuracy = savedScore?.percentage ?? (
+    resultMarks.maximumMarks > 0
+      ? Math.max(0, Math.min(100, Math.round(resultMarks.score / resultMarks.maximumMarks * 100)))
+      : 0
+  );
 
   const speedBenchmarkSeconds = useMemo(() => {
     return Math.max(1, Number(minutesPerQuestion || 1) * 60);
@@ -2523,6 +2554,7 @@ export default function NavtaTestPage() {
   const saveCompletedNavtaResult = async () => {
     if (
       !submitted ||
+      evaluatingAnswer ||
       step !== "test" ||
       questions.length === 0 ||
       !attemptIdRef.current
@@ -2560,35 +2592,24 @@ export default function NavtaTestPage() {
     const submissionAnswers = questions.map(
       (question, index) => ({
         questionId: question?._id,
+        selectedAnswer: answers[index] ?? null,
         selectedOption:
-          answers[index] !== undefined
+          getObjectiveAnswerMode(question) === "single" && answers[index] !== undefined
             ? answers[index]
             : null,
         textAnswer:
           writtenAnswers[index] !== undefined
             ? String(writtenAnswers[index])
             : "",
-        evaluation:
-          writtenFeedback[index] || null,
       })
     );
 
     try {
-      const token = getStoredAuthToken();
-
-      const headers = {
-        "Content-Type": "application/json",
-      };
-
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-
       const response = await fetch(
         "/api/navta-test/complete",
         {
           method: "POST",
-          headers,
+          headers: buildAttemptHeaders(),
           credentials: "include",
           body: JSON.stringify({
             attemptId,
@@ -2628,6 +2649,16 @@ export default function NavtaTestPage() {
           data.message ||
             "Your score could not be saved."
         );
+      }
+
+      if (attemptIdRef.current !== attemptId) return;
+      const result = data?.data?.result;
+      if (result) {
+        setSavedScore({
+          score: result.score,
+          maximumMarks: result.maximumMarks ?? resultMarks.maximumMarks,
+          percentage: result.percentage,
+        });
       }
 
       const reward =
@@ -2688,6 +2719,7 @@ export default function NavtaTestPage() {
         );
       }
     } catch (error) {
+      if (attemptIdRef.current !== attemptId) return;
       console.error(
         "NAVTA result save error:",
         error
@@ -2713,7 +2745,7 @@ export default function NavtaTestPage() {
     }
     // The attempt ID guard prevents duplicate rewards/submissions.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitted]);
+  }, [submitted, evaluatingAnswer]);
 
   const difficultyPerformance = useMemo(() => {
     if (!isBoss) return {};
@@ -5203,7 +5235,9 @@ export default function NavtaTestPage() {
             <div style={styles.progress}>
               Question {currentQuestion + 1} of {questions.length}
               {" • "}
-              {getQuestionTypeLabel(resolvedQuestionType)}
+              {objectiveAnswerMode === "numeric" ? "Numerical Answer" :
+                objectiveAnswerMode === "multiple" ? "Multiple Correct Choices" :
+                  getQuestionTypeLabel(resolvedQuestionType)}
               {shouldUseNavtaQuestionScreenshot(
                 currentTestQuestion
               )
@@ -5218,6 +5252,16 @@ export default function NavtaTestPage() {
                     question={currentTestQuestion}
                   />
 
+                  {objectiveAnswerMode !== "single" ? (
+                    <StructuredAnswerInput
+                      key={currentTestQuestion._id}
+                      question={currentTestQuestion}
+                      disabled={Boolean(answerFeedback[currentQuestion])}
+                      onAnswer={selectAnswer}
+                      renderContent={renderNavtaContent}
+                      submitStyle={styles.nextButton}
+                    />
+                  ) : (
                   <div
                     className={
                       shouldUseNavtaQuestionScreenshot(
@@ -5283,6 +5327,7 @@ export default function NavtaTestPage() {
                       }
                     )}
                   </div>
+                  )}
                 </div>
 
                 {answerFeedback[currentQuestion] &&
@@ -5294,7 +5339,7 @@ export default function NavtaTestPage() {
                           color: "var(--nt-danger-text)",
                         }}
                       >
-                        ✕ Incorrect
+                        {answerFeedback[currentQuestion].isPartial ? "Partially correct" : "✕ Incorrect"}
                       </h3>
 
                       <div
@@ -5303,24 +5348,8 @@ export default function NavtaTestPage() {
                           fontWeight: 700,
                         }}
                       >
-                        Correct Answer:{" "}
-                        {String.fromCharCode(
-                          65 +
-                            answerFeedback[currentQuestion]
-                              .correctAnswer
-                        )}
-                        <>
-                          .{" "}
-                          {renderNavtaContent(
-                            currentTestQuestion
-                              .options[
-                                answerFeedback[
-                                  currentQuestion
-                                ]
-                                  .correctAnswer
-                              ] || ""
-                          )}
-                        </>
+                        Correct answer
+                        <div>{renderObjectiveAnswerKey(currentTestQuestion)}</div>
                       </div>
 
                       <div
@@ -5339,6 +5368,7 @@ export default function NavtaTestPage() {
                         )}
                       </div>
 
+                      {objectiveAnswerMode === "single" && (
                       <div className="navta-mistake-box">
                         <h4>📕 Add to Mistake Notebook</h4>
 
@@ -5412,6 +5442,7 @@ export default function NavtaTestPage() {
                         </div>
                       </div>
 
+                      )}
                       <button
                         type="button"
                         style={{
@@ -5437,7 +5468,11 @@ export default function NavtaTestPage() {
                           .isCorrect
                         ? "✓ Correct — moving to next question..."
                         : "Review the explanation, then continue."
-                      : "Select one answer"}
+                      : objectiveAnswerMode === "numeric"
+                        ? "Enter a numerical answer"
+                        : objectiveAnswerMode === "multiple"
+                          ? "Select all correct choices"
+                          : "Select one answer"}
                   </span>
                 </div>
               </>
@@ -5477,7 +5512,7 @@ export default function NavtaTestPage() {
                     value={
                       writtenAnswers[currentQuestion] || ""
                     }
-                    disabled={Boolean(
+                    disabled={evaluatingAnswer || Boolean(
                       writtenFeedback[currentQuestion]
                     )}
                     onChange={(e) => {
@@ -5722,7 +5757,6 @@ export default function NavtaTestPage() {
                 questionTimes={questionTimes}
                 answers={answers}
                 writtenFeedback={writtenFeedback}
-                getCorrectAnswerIndex={getCorrectAnswerIndex}
                 accuracy={resultAccuracy}
                 benchmarkSeconds={speedBenchmarkSeconds}
                 questionType={resolvedQuestionType}
@@ -5849,7 +5883,7 @@ export default function NavtaTestPage() {
               {resolvedQuestionType === "mcq" ? (
                 <>
                   <div className="navta-result-score">
-                    {mcqScore}/{questions.length}
+                    {resultMarks.score}/{resultMarks.maximumMarks}
                   </div>
 
                   <p style={{ color: "#94a3b8" }}>
@@ -5860,8 +5894,7 @@ export default function NavtaTestPage() {
               ) : (
                 <>
                   <div className="navta-result-score">
-                    {writtenMarks.awarded}/
-                    {writtenMarks.maximum}
+                    {resultMarks.score}/{resultMarks.maximumMarks}
                   </div>
 
                   <p style={{ color: "#94a3b8" }}>
@@ -5927,7 +5960,6 @@ export default function NavtaTestPage() {
                 questionTimes={questionTimes}
                 answers={answers}
                 writtenFeedback={writtenFeedback}
-                getCorrectAnswerIndex={getCorrectAnswerIndex}
                 accuracy={resultAccuracy}
                 benchmarkSeconds={speedBenchmarkSeconds}
                 questionType={resolvedQuestionType}
@@ -5960,7 +5992,6 @@ function SpeedAccuracyAnalytics({
   questionTimes,
   answers,
   writtenFeedback,
-  getCorrectAnswerIndex,
   accuracy,
   benchmarkSeconds,
   questionType,
@@ -5973,9 +6004,7 @@ function SpeedAccuracyAnalytics({
 
     if (questionType === "mcq") {
       const hasAnswer = answers[index] !== undefined;
-      isCorrect =
-        hasAnswer &&
-        answers[index] === getCorrectAnswerIndex(question);
+      isCorrect = hasAnswer && isObjectiveAnswerCorrect(question, answers[index]);
       status = hasAnswer
         ? isCorrect
           ? "Correct"

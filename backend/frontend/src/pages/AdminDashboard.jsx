@@ -4,6 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import { adminAPI, contentAPI, curriculumAPI } from '../utils/api';
 import Card from '../components/Card';
 import Button from '../components/Button';
+import AdminActivityPanel from '../components/AdminActivityPanel';
+import AdminCatalog from '../components/AdminCatalog';
+import AdminPagination from '../components/AdminPagination';
 
 import {
   Users,
@@ -29,6 +32,7 @@ import {
   Dna,
   ChevronDown,
   Crop,
+  History,
   Layers3
 } from 'lucide-react';
 
@@ -207,7 +211,15 @@ export default function AdminDashboard() {
   */
 
   const [stats, setStats] = useState(null);
-  const [users, setUsers] = useState([]);
+  const [userRegistry, setUserRegistry] = useState({ data: [], pagination: null, roleCounts: {} });
+  const [registryLoading, setRegistryLoading] = useState(true);
+  const [registryError, setRegistryError] = useState('');
+  const [registryPage, setRegistryPage] = useState(1);
+  const [registryRevision, setRegistryRevision] = useState(0);
+  const [userSearchInput, setUserSearchInput] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+  const [databaseStatus, setDatabaseStatus] = useState('checking');
+  const [readinessRevision, setReadinessRevision] = useState(0);
   const [subjects, setSubjects] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [curriculumClasses, setCurriculumClasses] = useState([]);
@@ -271,13 +283,6 @@ export default function AdminDashboard() {
   | Reward Form
   |--------------------------------------------------------------------------
   */
-
-  const [rewTitle, setRewTitle] = useState('');
-  const [rewDesc, setRewDesc] = useState('');
-  const [rewCoins, setRewCoins] = useState('');
-  const [rewBadge, setRewBadge] = useState('star');
-  const [rewType, setRewType] = useState('badge');
-
 
   /*
   |--------------------------------------------------------------------------
@@ -352,12 +357,6 @@ export default function AdminDashboard() {
   |--------------------------------------------------------------------------
   */
 
-  const [pyqYear, setPyqYear] = useState('');
-  const [pyqExam, setPyqExam] = useState('');
-  const [pyqTitle, setPyqTitle] = useState('');
-  const [pyqPdf, setPyqPdf] = useState('');
-
-
   /*
   |--------------------------------------------------------------------------
   | Quiz
@@ -397,8 +396,8 @@ const fetchData = async () => {
     // A single slow or broken API request must NEVER keep
     // the complete admin dashboard stuck on the spinner.
     //
-    // Each request gets a 10 second timeout and all four
-    // resources are handled independently.
+    // Each request gets a 10 second timeout and the resources
+    // are handled independently.
     // ===================================================
 
     const withTimeout = (promise, name, timeoutMs = 10000) =>
@@ -419,17 +418,12 @@ const fetchData = async () => {
     try {
       const [
         statsResult,
-        usersResult,
         subjectsResult,
         questionsResult
       ] = await Promise.allSettled([
         withTimeout(
           adminAPI.getDashboardStats(),
           'Dashboard stats'
-        ),
-        withTimeout(
-          adminAPI.getUsers(),
-          'Users'
         ),
         withTimeout(
           contentAPI.getNavtaSubjects(),
@@ -466,39 +460,6 @@ const fetchData = async () => {
         );
 
         setStats(null);
-      }
-
-      // =================================================
-      // USERS
-      // =================================================
-
-      if (usersResult.status === 'fulfilled') {
-        const response = usersResult.value;
-
-        console.log(
-          'NAVTA USERS RESPONSE:',
-          response
-        );
-
-        const userData =
-          Array.isArray(response)
-            ? response
-            : Array.isArray(response?.data)
-              ? response.data
-              : Array.isArray(response?.users)
-                ? response.users
-                : Array.isArray(response?.data?.users)
-                  ? response.data.users
-                  : [];
-
-        setUsers(userData);
-      } else {
-        console.error(
-          'NAVTA USERS FAILED:',
-          usersResult.reason
-        );
-
-        setUsers([]);
       }
 
       // =================================================
@@ -633,6 +594,44 @@ const fetchData = async () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (activeSection !== 'users') return;
+
+    const controller = new AbortController();
+    setRegistryLoading(true);
+    setRegistryError('');
+    adminAPI.getUsers({ role: userRoleFilter, search: userSearch, page: registryPage, limit: 25 }, controller.signal)
+      .then((response) => {
+        if (!controller.signal.aborted) setUserRegistry(response);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setRegistryError('Unable to load the user registry.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setRegistryLoading(false);
+      });
+    return () => controller.abort();
+  }, [activeSection, userRoleFilter, userSearch, registryPage, registryRevision]);
+
+  useEffect(() => {
+    if (activeSection !== 'stats') return;
+
+    const controller = new AbortController();
+    const checkReadiness = async () => {
+      try {
+        const response = await adminAPI.getReadiness(controller.signal);
+        if (!controller.signal.aborted) setDatabaseStatus(response.database === 'ready' ? 'ready' : 'unavailable');
+      } catch {
+        if (!controller.signal.aborted) setDatabaseStatus('unknown');
+      }
+    };
+    checkReadiness();
+    const interval = setInterval(checkReadiness, 30000);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, [activeSection, readinessRevision]);
 
   /*
   |--------------------------------------------------------------------------
@@ -648,6 +647,7 @@ const fetchData = async () => {
     const validSections = [
       'stats',
       'users',
+      'activity',
       'studyMaterial',
       'curriculum',
       'chapter',
@@ -1181,7 +1181,7 @@ const fetchData = async () => {
         'User verification status updated!'
       );
 
-      fetchData();
+      setRegistryRevision((current) => current + 1);
 
     } catch (err) {
 
@@ -1209,6 +1209,7 @@ const fetchData = async () => {
         'User account deleted successfully.'
       );
 
+      setRegistryRevision((current) => current + 1);
       fetchData();
 
     } catch (err) {
@@ -1239,6 +1240,11 @@ const fetchData = async () => {
       setUName('');
       setUEmail('');
       setUPassword('');
+      setUserRoleFilter(uRole);
+      setUserSearch('');
+      setUserSearchInput('');
+      setRegistryPage(1);
+      setRegistryRevision((current) => current + 1);
 
       fetchData();
 
@@ -1258,24 +1264,8 @@ const fetchData = async () => {
       .replace(/\s+/g, '_')
       .replace(/-/g, '_');
 
-  const filteredUsers = users.filter(
-    (u) => normalizeUserRole(u.role) === userRoleFilter
-  );
-
-  const userRoleCounts = {
-    admin: users.filter(
-      (u) => normalizeUserRole(u.role) === 'admin'
-    ).length,
-    student: users.filter(
-      (u) => normalizeUserRole(u.role) === 'student'
-    ).length,
-    teacher: users.filter(
-      (u) => normalizeUserRole(u.role) === 'teacher'
-    ).length,
-    external_teacher: users.filter(
-      (u) => normalizeUserRole(u.role) === 'external_teacher'
-    ).length
-  };
+  const filteredUsers = registryError ? [] : userRegistry.data;
+  const userRoleCounts = userRegistry.roleCounts;
 
   const userRoleTabs = [
     { id: 'admin', label: 'Admin', icon: ShieldCheck },
@@ -1321,7 +1311,7 @@ const fetchData = async () => {
       setEditXp('');
       setEditLevel('');
 
-      fetchData();
+      setRegistryRevision((current) => current + 1);
 
     } catch (err) {
 
@@ -1489,38 +1479,6 @@ const fetchData = async () => {
   | Reward
   |--------------------------------------------------------------------------
   */
-
-  const handleAddReward = async (e) => {
-
-    e.preventDefault();
-
-    try {
-
-      await adminAPI.createReward({
-        title: rewTitle,
-        description: rewDesc,
-        costCoins: rewCoins,
-        badgeImage: rewBadge,
-        type: rewType
-      });
-
-      alert(
-        'Reward catalog item created successfully!'
-      );
-
-      setRewTitle('');
-      setRewDesc('');
-      setRewCoins('');
-
-      fetchData();
-
-    } catch (err) {
-
-      alert(err.message);
-
-    }
-  };
-
 
   /*
   |--------------------------------------------------------------------------
@@ -2030,53 +1988,6 @@ const fetchData = async () => {
   |--------------------------------------------------------------------------
   */
 
-  const handleAddPYQ = async (e) => {
-
-    e.preventDefault();
-
-    try {
-
-      await adminAPI.createPYQ({
-
-        subjectId:
-          selectedSubject,
-
-        chapterId:
-          selectedChapter ||
-          undefined,
-
-        year:
-          pyqYear,
-
-        examName:
-          pyqExam,
-
-        title:
-          pyqTitle,
-
-        pdfUrl:
-          pyqPdf
-
-      });
-
-      alert(
-        'PYQ paper added successfully!'
-      );
-
-      setPyqYear('');
-      setPyqExam('');
-      setPyqTitle('');
-      setPyqPdf('');
-
-    } catch (err) {
-
-      alert(err.message);
-
-    }
-
-  };
-
-
   /*
   |--------------------------------------------------------------------------
   | Quiz
@@ -2381,6 +2292,12 @@ const fetchData = async () => {
           },
 
           {
+            id: 'activity',
+            label: 'Activity Log',
+            icon: History
+          },
+
+          {
             id: 'studyMaterial',
             label: 'Study Material',
             icon: BookOpen
@@ -2406,7 +2323,7 @@ const fetchData = async () => {
 
           {
             id: 'pyq',
-            label: 'Upload PYQ',
+            label: 'PYQs',
             icon: FileText
           },
 
@@ -2500,8 +2417,19 @@ const fetchData = async () => {
         <div className="grid md:grid-cols-2 gap-6">
 
           <Card
-            title="System Health Logs"
-            subtitle="General system status"
+            title="System Health"
+            action={
+              <Button
+                variant="secondary"
+                disabled={databaseStatus === 'checking'}
+                onClick={() => {
+                  setDatabaseStatus('checking');
+                  setReadinessRevision((current) => current + 1);
+                }}
+              >
+                Check now
+              </Button>
+            }
           >
 
             <div className="space-y-4 mt-4 text-sm">
@@ -2512,12 +2440,13 @@ const fetchData = async () => {
                   Database Connection
                 </span>
 
-                <span className="text-emerald-500 font-bold flex items-center gap-1">
-
-                  <Check className="w-4 h-4" />
-
-                  Connected
-
+                <span role="status" className={`font-bold ${databaseStatus === 'ready' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                  {{
+                    checking: 'Checking…',
+                    ready: 'Ready',
+                    unavailable: 'Unavailable',
+                    unknown: 'Unable to verify'
+                  }[databaseStatus]}
                 </span>
 
               </div>
@@ -2712,8 +2641,34 @@ const fetchData = async () => {
 
           <Card
             title="User Registry"
-            subtitle="Manage users separately by account type"
           >
+            <form
+              className="flex flex-wrap items-end gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setRegistryPage(1);
+                setUserSearch(userSearchInput.trim());
+              }}
+            >
+              <label className="min-w-48 flex-1">
+                <span className={labelClass}>Search by name or email</span>
+                <input
+                  className={inputClass}
+                  type="search"
+                  maxLength={120}
+                  value={userSearchInput}
+                  onChange={(event) => setUserSearchInput(event.target.value)}
+                />
+              </label>
+              <Button type="submit">Search</Button>
+              {userSearch && (
+                <Button variant="secondary" onClick={() => {
+                  setUserSearch('');
+                  setUserSearchInput('');
+                  setRegistryPage(1);
+                }}>Clear</Button>
+              )}
+            </form>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5 mb-6">
 
@@ -2727,7 +2682,11 @@ const fetchData = async () => {
                   <button
                     key={roleTab.id}
                     type="button"
-                    onClick={() => setUserRoleFilter(roleTab.id)}
+                    aria-pressed={active}
+                    onClick={() => {
+                      setUserRoleFilter(roleTab.id);
+                      setRegistryPage(1);
+                    }}
                     className={`relative rounded-2xl border p-4 text-left transition-all duration-200 ${
                       active
                         ? 'border-primary-500 bg-primary-500/10 shadow-md shadow-primary-500/10'
@@ -2754,7 +2713,7 @@ const fetchData = async () => {
                             : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300'
                         }`}
                       >
-                        {userRoleCounts[roleTab.id]}
+                        {registryLoading || registryError ? '—' : userRoleCounts[roleTab.id] || 0}
                       </div>
 
                     </div>
@@ -2769,12 +2728,6 @@ const fetchData = async () => {
                         }`}
                       >
                         {roleTab.label}
-                      </p>
-
-                      <p className="text-[11px] text-slate-400 mt-1">
-                        {userRoleCounts[roleTab.id] === 1
-                          ? '1 account'
-                          : `${userRoleCounts[roleTab.id]} accounts`}
                       </p>
 
                     </div>
@@ -2801,16 +2754,13 @@ const fetchData = async () => {
                 </p>
 
                 <p className="text-xs text-slate-400 mt-1">
-                  {filteredUsers.length === 1
-                    ? '1 registered account'
-                    : `${filteredUsers.length} registered accounts`}
+                  {registryLoading || registryError
+                    ? ''
+                    : `${userRegistry.pagination?.total ?? filteredUsers.length} matching accounts`}
                 </p>
 
               </div>
 
-              <div className="px-3 py-1.5 rounded-full bg-primary-500/10 text-primary-600 dark:text-primary-400 text-xs font-bold">
-                {filteredUsers.length} Users
-              </div>
 
             </div>
 
@@ -2835,7 +2785,20 @@ const fetchData = async () => {
 
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
 
-                  {filteredUsers.length > 0 ? (
+                  {registryLoading || registryError ? (
+                    <tr>
+                      <td colSpan={5} className="py-5">
+                        {registryLoading ? (
+                          <p role="status" className="text-slate-500">Loading accounts…</p>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-3">
+                            <p role="alert" className="text-red-600 dark:text-red-400">{registryError}</p>
+                            <Button variant="secondary" onClick={() => setRegistryRevision((current) => current + 1)}>Retry</Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ) : filteredUsers.length > 0 ? (
 
                     filteredUsers.map((u) => (
 
@@ -2915,10 +2878,7 @@ const fetchData = async () => {
                             <Users className="w-5 h-5 text-slate-400" />
                           </div>
                           <p className="font-bold text-slate-700 dark:text-slate-300">
-                            No users in this section
-                          </p>
-                          <p className="text-xs text-slate-400 mt-1">
-                            Create a user with this role to see them here.
+                            No matching accounts
                           </p>
                         </div>
                       </td>
@@ -2932,6 +2892,11 @@ const fetchData = async () => {
 
             </div>
 
+            <AdminPagination
+              pagination={userRegistry.pagination}
+              loading={registryLoading || Boolean(registryError)}
+              onPageChange={setRegistryPage}
+            />
           </Card>
 
         </div>
@@ -4065,196 +4030,9 @@ F = ma
           PYQ
       ================================================================= */}
 
-      {activeSection === 'pyq' && (
+      {activeSection === 'activity' && <AdminActivityPanel />}
 
-        <Card
-          title="Upload PYQ Paper"
-          subtitle="Add previous-year examination papers"
-        >
-
-          <form
-            onSubmit={handleAddPYQ}
-            className="space-y-5 mt-4 max-w-2xl"
-          >
-
-            <div className="grid md:grid-cols-2 gap-4">
-
-              <div>
-
-                <label className={labelClass}>
-                  Subject
-                </label>
-
-                <select
-                  value={selectedSubject}
-                  onChange={(e) =>
-                    handleSubjectChange(
-                      e.target.value
-                    )
-                  }
-                  className={inputClass}
-                >
-
-                  {subjects.map((s) => (
-
-                    <option
-                      key={s._id || s.id}
-                      value={s._id || s.id}
-                    >
-                      {s.name}
-                    </option>
-
-                  ))}
-
-                </select>
-
-              </div>
-
-
-              <div>
-
-                <label className={labelClass}>
-                  Chapter
-                </label>
-
-                <select
-                  value={selectedChapter}
-                  onChange={(e) =>
-                    setSelectedChapter(
-                      e.target.value
-                    )
-                  }
-                  className={inputClass}
-                >
-
-                  <option value="">
-                    None
-                  </option>
-
-                  {chapters.map((c) => (
-
-                    <option
-                      key={
-                        c._id || c.id
-                      }
-                      value={
-                        c._id || c.id
-                      }
-                    >
-                      Ch {c.chapterNumber}: {c.title}
-                    </option>
-
-                  ))}
-
-                </select>
-
-              </div>
-
-            </div>
-
-
-            <div className="grid md:grid-cols-2 gap-4">
-
-              <div>
-
-                <label className={labelClass}>
-                  Exam Year
-                </label>
-
-                <input
-                  type="number"
-                  required
-                  value={pyqYear}
-                  onChange={(e) =>
-                    setPyqYear(
-                      e.target.value
-                    )
-                  }
-                  placeholder="2026"
-                  className={inputClass}
-                />
-
-              </div>
-
-
-              <div>
-
-                <label className={labelClass}>
-                  Exam Name
-                </label>
-
-                <input
-                  required
-                  value={pyqExam}
-                  onChange={(e) =>
-                    setPyqExam(
-                      e.target.value
-                    )
-                  }
-                  placeholder="JEE Mains"
-                  className={inputClass}
-                />
-
-              </div>
-
-            </div>
-
-
-            <div>
-
-              <label className={labelClass}>
-                Paper Title
-              </label>
-
-              <input
-                required
-                value={pyqTitle}
-                onChange={(e) =>
-                  setPyqTitle(
-                    e.target.value
-                  )
-                }
-                placeholder="JEE Mains Physics 2026"
-                className={inputClass}
-              />
-
-            </div>
-
-
-            <div>
-
-              <label className={labelClass}>
-                PDF URL
-              </label>
-
-              <input
-                type="url"
-                required
-                value={pyqPdf}
-                onChange={(e) =>
-                  setPyqPdf(
-                    e.target.value
-                  )
-                }
-                placeholder="https://example.com/paper.pdf"
-                className={inputClass}
-              />
-
-            </div>
-
-
-            <Button
-              type="submit"
-              icon={Upload}
-            >
-              Upload PYQ
-            </Button>
-
-          </form>
-
-        </Card>
-
-      )}
+      {activeSection === 'pyq' && <AdminCatalog key="pyq" kind="pyq" subjects={subjects} />}
 
 
       {/* ================================================================
@@ -4658,121 +4436,7 @@ F = ma
           REWARD
       ================================================================= */}
 
-      {activeSection === 'reward' && (
-
-        <Card
-          title="Reward Catalogue"
-          subtitle="Create rewards for students"
-        >
-
-          <form
-            onSubmit={handleAddReward}
-            className="space-y-4 mt-4 max-w-xl"
-          >
-
-            <input
-              required
-              value={rewTitle}
-              onChange={(e) =>
-                setRewTitle(
-                  e.target.value
-                )
-              }
-              placeholder="Reward Title"
-              className={inputClass}
-            />
-
-
-            <input
-              type="number"
-              required
-              value={rewCoins}
-              onChange={(e) =>
-                setRewCoins(
-                  e.target.value
-                )
-              }
-              placeholder="Coins"
-              className={inputClass}
-            />
-
-
-            <select
-              value={rewType}
-              onChange={(e) =>
-                setRewType(
-                  e.target.value
-                )
-              }
-              className={inputClass}
-            >
-
-              <option value="badge">
-                Badge
-              </option>
-
-              <option value="coupon">
-                Coupon
-              </option>
-
-              <option value="resource">
-                Resource
-              </option>
-
-            </select>
-
-
-            <select
-              value={rewBadge}
-              onChange={(e) =>
-                setRewBadge(
-                  e.target.value
-                )
-              }
-              className={inputClass}
-            >
-
-              <option value="star">
-                Star
-              </option>
-
-              <option value="crown">
-                Crown
-              </option>
-
-              <option value="award">
-                Award
-              </option>
-
-            </select>
-
-
-            <textarea
-              required
-              rows="3"
-              value={rewDesc}
-              onChange={(e) =>
-                setRewDesc(
-                  e.target.value
-                )
-              }
-              placeholder="Reward description"
-              className={inputClass}
-            />
-
-
-            <Button
-              type="submit"
-              icon={Award}
-            >
-              Create Reward
-            </Button>
-
-          </form>
-
-        </Card>
-
-      )}
+      {activeSection === 'reward' && <AdminCatalog key="reward" kind="reward" subjects={subjects} />}
 
 
       {/* ================================================================
