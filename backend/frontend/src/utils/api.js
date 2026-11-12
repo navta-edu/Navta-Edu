@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getPortalTestHeaders, portalTestHeader, setPortalTestRole } from './portalTest';
 
 // ============================================
 // API BASE URL
@@ -53,6 +54,7 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization =
         `Bearer ${token}`;
+      Object.assign(config.headers, getPortalTestHeaders());
     }
 
     // ========================================
@@ -113,7 +115,8 @@ api.interceptors.response.use(
 
   (error) => {
     if (
-      error.response?.status === 401
+      error.response?.status === 401 &&
+      error.config?.headers?.Authorization === 'Bearer ' + localStorage.getItem('token')
     ) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -1508,6 +1511,11 @@ const executeRequest = async (
 // ============================================
 
 export const authAPI = {
+  startPortalTest: async (role) => {
+    const { data } = await api.post('/auth/portal-test', { role });
+    return data;
+  },
+
   register: async (data) => {
     try {
       const response =
@@ -1563,6 +1571,12 @@ export const authAPI = {
 
       return response.data;
     } catch (error) {
+      if (error.response?.data?.code === 'PORTAL_TEST_UNAVAILABLE' &&
+          error.config?.headers?.[portalTestHeader]) {
+        setPortalTestRole(null);
+        const response = await api.get('/auth/me');
+        return response.data;
+      }
       if (
         import.meta.env.DEV &&
         !error.response
