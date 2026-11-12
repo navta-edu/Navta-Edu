@@ -29,6 +29,7 @@ import {
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import 'katex/contrib/mhchem';
+import { getAuthenticatedHeaders } from '../utils/portalTest';
 
 // =====================================================
 // FILTER VALUES
@@ -500,28 +501,7 @@ function renderPaperText(value = '') {
 // =====================================================
 
 function getAuthHeaders() {
-  const token =
-    localStorage.getItem(
-      'token'
-    ) ||
-    localStorage.getItem(
-      'authToken'
-    ) ||
-    localStorage.getItem(
-      'accessToken'
-    );
-
-  const headers = {
-    Accept:
-      'application/json'
-  };
-
-  if (token) {
-    headers.Authorization =
-      `Bearer ${token}`;
-  }
-
-  return headers;
+  return getAuthenticatedHeaders({ Accept: 'application/json' });
 }
 
 // =====================================================

@@ -20,6 +20,7 @@ import {
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import Footer from './components/Footer';
+import { PortalTestBanner } from './components/PortalTestControls';
 
 // =====================================================
 // PUBLIC PAGES
@@ -148,6 +149,7 @@ function PublicLayout() {
           bg-transparent
         "
       >
+        <PortalTestBanner />
         <Outlet />
       </main>
 
@@ -268,6 +270,7 @@ function DashboardLayout() {
             navta-main-content
           "
         >
+          <PortalTestBanner />
           <Outlet />
         </main>
       </div>

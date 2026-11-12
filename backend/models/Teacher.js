@@ -6,6 +6,12 @@ const TeacherSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  portalTestOwner: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'User',
+    default: null,
+    select: false
+  },
   qualification: {
     type: String,
     required: [true, 'Please add qualifications']

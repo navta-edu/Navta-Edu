@@ -8,6 +8,12 @@ const StudentSchema = new mongoose.Schema({
     unique: true,
     index: true
   },
+  portalTestOwner: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'User',
+    default: null,
+    select: false
+  },
 
   coins: {
     type: Number,
