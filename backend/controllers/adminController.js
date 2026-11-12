@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Student = require('../models/Student');
 const Teacher = require('../models/Teacher');
@@ -8,15 +9,83 @@ const Chapter = require('../models/Chapter');
 const Note = require('../models/Note');
 const PYQ = require('../models/PYQ');
 const Question = require('../models/Question');
-// @desc    Get all platform users
+const AdminActivity = require('../models/AdminActivity');
+const { recordAdminActivity } = require('../services/adminActivity');
+
+const userRoleNames = ['admin', 'student', 'teacher', 'external_teacher'];
+const userFields = 'name email role isVerified createdAt avatar schoolName department stream address classLevel isProfileComplete';
+
+function safeUser(user) {
+  const fields = Object.fromEntries(userFields.split(' ').map((name) => [name, user[name]]));
+  return { _id: user._id, ...fields };
+}
+
+function pagination(query, total) {
+  const limit = Math.min(100, Math.max(1, Number.parseInt(query.limit, 10) || 25));
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const page = Math.min(totalPages, Math.max(1, Number.parseInt(query.page, 10) || 1));
+  return { page, limit, total, totalPages };
+}
+
+// @desc    Search and page through platform users
 // @route   GET /api/admin/users
 // @access  Private (Admin)
 exports.getUsers = async (req, res) => {
   try {
-    const users = await User.find().sort('-createdAt');
-    res.status(200).json({ success: true, count: users.length, data: users });
+    const { role, search, page, limit } = req.query;
+    if ([role, search, page, limit].every((value) => value === undefined)) {
+      const users = await User.find().select(userFields).sort({ createdAt: -1, _id: -1 });
+      return res.status(200).json({ success: true, count: users.length, data: users });
+    }
+
+    const searchText = typeof search === 'string' ? search.trim().slice(0, 120) : '';
+    const escapedSearch = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchQuery = escapedSearch
+      ? { $or: [{ name: { $regex: escapedSearch, $options: 'i' } }, { email: { $regex: escapedSearch, $options: 'i' } }] }
+      : {};
+    const query = { ...searchQuery };
+
+    if (role && role !== 'all') {
+      if (!userRoleNames.includes(role)) {
+        return res.status(400).json({ success: false, message: 'Select a valid account type.' });
+      }
+      query.role = { $regex: `^${role.replace('_', '[ _-]')}$`, $options: 'i' };
+    }
+
+    const [total, counts] = await Promise.all([
+      User.countDocuments(query),
+      User.aggregate([{ $match: searchQuery }, { $group: { _id: '$role', count: { $sum: 1 } } }])
+    ]);
+    const roleCounts = Object.fromEntries(userRoleNames.map((name) => [name, 0]));
+    for (const entry of counts) {
+      const roleName = String(entry._id || '').trim().toLowerCase().replace(/[ -]+/g, '_');
+      if (userRoleNames.includes(roleName)) roleCounts[roleName] += entry.count;
+    }
+
+    const paging = pagination(req.query, total);
+    const users = await User.find(query)
+      .select('name email role isVerified createdAt')
+      .sort({ createdAt: -1, _id: -1 })
+      .skip((paging.page - 1) * paging.limit)
+      .limit(paging.limit);
+
+    return res.status(200).json({ success: true, count: users.length, data: users, roleCounts, pagination: paging });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({ success: false, message: 'Unable to load the user registry.' });
+  }
+};
+
+exports.getAdminActivity = async (req, res) => {
+  try {
+    const paging = pagination(req.query, await AdminActivity.countDocuments());
+    const data = await AdminActivity.find()
+      .sort({ createdAt: -1, _id: -1 })
+      .skip((paging.page - 1) * paging.limit)
+      .limit(paging.limit)
+      .lean();
+    return res.json({ success: true, data, pagination: paging });
+  } catch {
+    return res.status(500).json({ success: false, message: 'Unable to load admin activity.' });
   }
 };
 
@@ -33,15 +102,20 @@ exports.createUser = async (req, res) => {
 
     const user = await User.create({ name, email, password, role, isVerified: true });
 
-    if (role === 'student') {
+    if (user.role === 'student') {
       await Student.create({ user: user._id });
-    } else if (role === 'teacher') {
+    } else if (user.role === 'teacher') {
       await Teacher.create({ user: user._id, qualification: 'Qualified Educator' });
     }
 
-    res.status(201).json({ success: true, message: 'User created successfully', data: user });
+    await recordAdminActivity(req.user, 'Created', 'User', user._id);
+    res.status(201).json({ success: true, message: 'User created successfully', data: safeUser(user) });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    if (err.code === 11000) return res.status(400).json({ success: false, message: 'User already exists' });
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ success: false, message: 'Check the name, email, role, and password before creating this user.' });
+    }
+    return res.status(500).json({ success: false, message: 'Unable to create this user.' });
   }
 };
 
@@ -82,7 +156,8 @@ exports.updateUser = async (req, res) => {
     }
 
     await user.save();
-    res.status(200).json({ success: true, message: 'User updated successfully', data: user });
+    await recordAdminActivity(req.user, 'Updated', 'User', user._id);
+    res.status(200).json({ success: true, message: 'User updated successfully', data: safeUser(user) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -106,6 +181,7 @@ exports.updateStudentProfile = async (req, res) => {
     if (stream !== undefined) student.stream = stream;
 
     await student.save();
+    await recordAdminActivity(req.user, 'Updated', 'Student profile', student._id);
     res.status(200).json({ success: true, message: 'Student profile updated', data: student });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -126,6 +202,7 @@ exports.deleteUser = async (req, res) => {
     await Student.deleteOne({ user: user._id });
     await Teacher.deleteOne({ user: user._id });
     await User.deleteOne({ _id: user._id });
+    await recordAdminActivity(req.user, 'Deleted', 'User', user._id);
 
     res.status(200).json({ success: true, message: 'User account deleted successfully' });
   } catch (err) {
@@ -154,6 +231,7 @@ exports.createSubject = async (req, res) => {
       preparationMethods: Array.isArray(preparationMethods) ? preparationMethods : []
     });
 
+    await recordAdminActivity(req.user, 'Created', 'Subject', subject._id);
     res.status(201).json({ success: true, data: subject });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -276,6 +354,7 @@ exports.createChapter = async (req, res) => {
     }
 
     const chapter = await Chapter.create(chapterData);
+    await recordAdminActivity(req.user, 'Created', 'Chapter', chapter._id);
 
     const sortField = Chapter.schema.path('title')
       ? 'title'
@@ -393,6 +472,7 @@ exports.deleteSubject = async (req, res) => {
     
     // Check if chapters exist, ideally we should cascade delete or throw error.
     await Subject.deleteOne({ _id: req.params.id });
+    await recordAdminActivity(req.user, 'Deleted', 'Subject', subject._id);
     res.status(200).json({ success: true, message: 'Subject deleted successfully' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -408,6 +488,7 @@ exports.deleteChapter = async (req, res) => {
     if (!chapter) return res.status(404).json({ success: false, message: 'Chapter not found' });
     
     await Chapter.deleteOne({ _id: req.params.id });
+    await recordAdminActivity(req.user, 'Deleted', 'Chapter', chapter._id);
     res.status(200).json({ success: true, message: 'Chapter deleted successfully' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -423,6 +504,7 @@ exports.deleteNote = async (req, res) => {
     if (!note) return res.status(404).json({ success: false, message: 'Note not found' });
     
     await Note.deleteOne({ _id: req.params.id });
+    await recordAdminActivity(req.user, 'Deleted', 'Study note', note._id);
     res.status(200).json({ success: true, message: 'Note deleted successfully' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -438,37 +520,176 @@ exports.deletePYQ = async (req, res) => {
     if (!pyq) return res.status(404).json({ success: false, message: 'PYQ not found' });
     
     await PYQ.deleteOne({ _id: req.params.id });
+    await recordAdminActivity(req.user, 'Deleted', 'PYQ', pyq._id);
     res.status(200).json({ success: true, message: 'PYQ deleted successfully' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// @desc    Create new reward item
-// @route   POST /api/admin/rewards
-// @access  Private (Admin)
-exports.createReward = async (req, res) => {
+async function listCatalog(req, res, Model, populate = []) {
   try {
-    const { title, description, costCoins, badgeImage, type } = req.body;
+    const filter = {};
+    if (req.query.status === 'active') filter.archivedAt = null;
+    if (req.query.status === 'archived') filter.archivedAt = { $ne: null };
 
-    const rewardExists = await Reward.findOne({ title });
-    if (rewardExists) {
-      return res.status(400).json({ success: false, message: 'Reward item already exists' });
+    const paging = pagination(req.query, await Model.countDocuments(filter));
+    const data = await Model.find(filter)
+      .populate(populate)
+      .sort({ createdAt: -1, _id: -1 })
+      .skip((paging.page - 1) * paging.limit)
+      .limit(paging.limit)
+      .lean();
+    return res.json({ success: true, data, pagination: paging });
+  } catch {
+    return res.status(500).json({ success: false, message: 'Unable to load the catalogue.' });
+  }
+}
+
+exports.getPYQs = (req, res) => listCatalog(req, res, PYQ, [
+  { path: 'subject', select: 'name' },
+  { path: 'chapter', select: 'title' }
+]);
+
+exports.getRewards = (req, res) => listCatalog(req, res, Reward);
+
+const isId = (value) => mongoose.isObjectIdOrHexString(value);
+const trimmed = (value) => typeof value === 'string' ? value.trim() : '';
+const numericValue = (value) =>
+  typeof value === 'number' || (typeof value === 'string' && value.trim()) ? Number(value) : NaN;
+
+function isHttpUrl(value) {
+  try {
+    return ['http:', 'https:'].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}
+
+async function savePYQ(req, res, updating) {
+  try {
+    let paper = null;
+    if (updating) {
+      if (!isId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid PYQ ID.' });
+      paper = await PYQ.findById(req.params.id);
+      if (!paper) return res.status(404).json({ success: false, message: 'PYQ not found.' });
     }
 
-    const reward = await Reward.create({
-      title,
-      description,
-      costCoins,
-      badgeImage,
-      type
-    });
+    const { subjectId, chapterId, title, examName, year, pdfUrl } = req.body;
+    const subject = subjectId ?? paper?.subject;
+    const chapter = (chapterId === undefined ? paper?.chapter : chapterId) || null;
+    const paperTitle = title === undefined ? paper?.title : trimmed(title);
+    const exam = examName === undefined ? paper?.examName : trimmed(examName);
+    const examYear = year === undefined ? paper?.year : numericValue(year);
+    const url = pdfUrl === undefined ? paper?.pdfUrl || '' : trimmed(pdfUrl);
 
-    res.status(201).json({ success: true, data: reward });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    if (!paperTitle || !exam || !Number.isInteger(examYear) || examYear < 1 || examYear > 9999) {
+      return res.status(400).json({ success: false, message: 'Enter a paper title, exam name, and valid exam year.' });
+    }
+    if ((!updating || pdfUrl !== undefined) && url && !isHttpUrl(url)) {
+      return res.status(400).json({ success: false, message: 'Enter an HTTP or HTTPS PDF link.' });
+    }
+    if (!isId(subject) || !await Subject.exists({ _id: subject })) {
+      return res.status(400).json({ success: false, message: 'Select a valid subject.' });
+    }
+    if (chapter && (!isId(chapter) || !await Chapter.exists({ _id: chapter, subject }))) {
+      return res.status(400).json({ success: false, message: 'Select a chapter that belongs to the subject.' });
+    }
+
+    const fields = { subject, chapter, title: paperTitle, examName: exam, year: examYear, pdfUrl: url };
+    if (paper) {
+      paper.set(fields);
+      await paper.save();
+    } else {
+      paper = await PYQ.create({ ...fields, uploadedBy: req.user._id || req.user.id });
+    }
+
+    await recordAdminActivity(req.user, updating ? 'Updated' : 'Created', 'PYQ', paper._id);
+    return res.status(updating ? 200 : 201).json({ success: true, data: paper });
+  } catch (error) {
+    const invalid = error.name === 'ValidationError';
+    return res.status(invalid ? 400 : 500).json({
+      success: false,
+      message: invalid ? 'Check the paper details before saving.' : 'Unable to save this PYQ.'
+    });
   }
-};
+}
+
+exports.createPYQ = (req, res) => savePYQ(req, res, false);
+exports.updatePYQ = (req, res) => savePYQ(req, res, true);
+
+async function saveReward(req, res, updating) {
+  try {
+    let reward = null;
+    if (updating) {
+      if (!isId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid reward ID.' });
+      reward = await Reward.findById(req.params.id);
+      if (!reward) return res.status(404).json({ success: false, message: 'Reward not found.' });
+    }
+
+    const { title, description, costCoins, badgeImage, type } = req.body;
+    const fields = {
+      title: title === undefined ? reward?.title : trimmed(title),
+      description: description === undefined ? reward?.description : trimmed(description),
+      costCoins: costCoins === undefined ? reward?.costCoins : numericValue(costCoins),
+      badgeImage: badgeImage === undefined ? reward?.badgeImage || 'award' : trimmed(badgeImage) || 'award',
+      type: type === undefined ? reward?.type || 'badge' : type
+    };
+    if (!fields.title || !fields.description || !['coupon', 'badge', 'resource'].includes(fields.type)) {
+      return res.status(400).json({ success: false, message: 'Enter a reward title, description, and valid type.' });
+    }
+    if (!Number.isFinite(fields.costCoins) || fields.costCoins < 0 || fields.costCoins > Number.MAX_SAFE_INTEGER) {
+      return res.status(400).json({ success: false, message: 'Enter a valid nonnegative coin cost.' });
+    }
+
+    if (reward) {
+      reward.set(fields);
+      await reward.save();
+    } else {
+      reward = await Reward.create(fields);
+    }
+
+    await recordAdminActivity(req.user, updating ? 'Updated' : 'Created', 'Reward', reward._id);
+    return res.status(updating ? 200 : 201).json({ success: true, data: reward });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'Reward item already exists.' });
+    }
+    const invalid = error.name === 'ValidationError';
+    return res.status(invalid ? 400 : 500).json({
+      success: false,
+      message: invalid ? 'Check the reward details before saving.' : 'Unable to save this reward.'
+    });
+  }
+}
+
+exports.createReward = (req, res) => saveReward(req, res, false);
+exports.updateReward = (req, res) => saveReward(req, res, true);
+
+async function setCatalogArchived(req, res, Model, resource) {
+  try {
+    const { archived } = req.body;
+    const { id } = req.params;
+    if (!isId(id) || typeof archived !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'Select a valid item and archive status.' });
+    }
+
+    const updated = await Model.findOneAndUpdate(
+      { _id: id, archivedAt: archived ? null : { $ne: null } },
+      { $set: { archivedAt: archived ? new Date() : null } },
+      { new: true }
+    );
+    const item = updated || await Model.findById(id);
+    if (!item) return res.status(404).json({ success: false, message: `${resource} not found.` });
+    if (updated) await recordAdminActivity(req.user, archived ? 'Archived' : 'Restored', resource, id);
+    return res.json({ success: true, data: item });
+  } catch {
+    return res.status(500).json({ success: false, message: `Unable to change the archive status of this ${resource}.` });
+  }
+}
+
+exports.setPYQArchived = (req, res) => setCatalogArchived(req, res, PYQ, 'PYQ');
+exports.setRewardArchived = (req, res) => setCatalogArchived(req, res, Reward, 'Reward');
 
 // @desc    Get system global usage reports
 // @route   GET /api/admin/dashboard-stats
@@ -548,6 +769,7 @@ exports.createQuestion = async (req, res) => {
     }
 
     const question = await Question.create(questionData);
+    await recordAdminActivity(req.user, 'Created', 'Question', question._id);
     res.status(201).json({ success: true, data: question });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -563,6 +785,7 @@ exports.deleteQuestion = async (req, res) => {
     if (!question) return res.status(404).json({ success: false, message: 'Question not found' });
     
     await Question.deleteOne({ _id: req.params.id });
+    await recordAdminActivity(req.user, 'Deleted', 'Question', question._id);
     res.status(200).json({ success: true, message: 'Question deleted successfully' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

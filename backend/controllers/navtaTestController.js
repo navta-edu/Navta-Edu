@@ -2,7 +2,24 @@ const NavtaQuestion = require("../models/NavtaQuestion");
 const NavtaAIImportJob = require("../models/NavtaAIImportJob");
 const Result = require("../models/Result");
 const Student = require("../models/Student");
+const NavtaTestAttempt = require("../models/NavtaTestAttempt");
+const { createAttempt, findAttempt } = require("../services/navtaAttempts");
+const { gradeQuestion, parseNumber, roundMarks, writtenAnswerDigest } = require("../services/navtaScoring");
+const { selectStandardQuestions, publicQuestion } = require("../services/navtaStandardQuestions");
+
+const BATTLE_QUESTION_FILTER = {
+  answerMode: { $in: [null, "single"] },
+  "caseStudy.id": { $in: [null, ""] },
+};
 const cloudinary = require("../config/cloudinary");
+const { recordAdminActivity } = require("../services/adminActivity");
+const {
+  buildQuestionBankFilter,
+  findQuestionDuplicates,
+  getWorkflowStatus,
+  hashQuestionImage,
+  initialWorkflowFields,
+} = require("../services/navtaQuestionBankService");
 const { loadImage, createCanvas } = require("@napi-rs/canvas");
 const {
   applyNavtaStreakActivity,
@@ -660,12 +677,6 @@ function isAllowedDuration(exam, questionType, duration) {
 // ============================================
 // NAVTA RESULT / COIN HELPERS
 // ============================================
-
-const NAVTA_RESULT_TYPES = [
-  "standard",
-  "boss",
-  "revenge",
-];
 
 function calculateNavtaCoins(
   percentage,
@@ -1808,14 +1819,12 @@ exports.createPDFCropQuestion = async (
       });
     }
 
-    const uploaded =
-      await uploadAdminCropBuffer(
-        req.file.buffer,
-        {
-          folder:
-            "navta/pdf-question-crops",
-        }
-      );
+    const workflow = initialWorkflowFields(req.body?.workflowStatus);
+    const imageContentHash = hashQuestionImage(req.file.buffer);
+    const duplicates = await findQuestionDuplicates({
+      subject, exam, classLevel, questionType, imageContentHash, ...answerFields,
+    });
+    const uploaded = await uploadAdminCropBuffer(req.file.buffer, { folder: "navta/pdf-question-crops" });
 
     const imageUrl =
       String(
@@ -1867,9 +1876,8 @@ exports.createPDFCropQuestion = async (
       questionType,
       ...answerFields,
       explanation: typeof explanation === "string" ? explanation.trim() : "",
-
-      isActive:
-        true,
+      ...workflow,
+      imageContentHash,
 
       hasVisual:
         true,
@@ -1953,14 +1961,18 @@ exports.createPDFCropQuestion = async (
       }
     );
 
+    await recordAdminActivity(req.user, "Created", "NAVTA TEST question", newQuestion._id);
+    const savedQuestion = newQuestion.toObject();
+    delete savedQuestion.imageContentHash;
+
     return res.status(201).json({
       success: true,
 
       message:
-        "Cropped PDF question added to NAVTA TEST successfully.",
+        workflow.workflowStatus === "draft" ? "Cropped PDF question saved as a draft." : "Cropped PDF question published.",
 
-      question:
-        newQuestion,
+      question: savedQuestion,
+      duplicates,
 
       questionImage,
     });
@@ -1970,7 +1982,7 @@ exports.createPDFCropQuestion = async (
       error
     );
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
 
       message:
@@ -1984,6 +1996,56 @@ exports.createPDFCropQuestion = async (
 // ============================================
 // CREATE QUESTION
 // ============================================
+
+exports.createStructuredQuestions = async (req, res) => {
+  const { buildStructuredQuestions } = require("../services/navtaStructuredQuestionService");
+  const input = req.body ?? {};
+  const { subject, exam, classLevel, chapter, difficulty } = input;
+
+  if (!Object.hasOwn(allowedExams, subject) || !allowedExams[subject].includes(exam) ||
+      !allowedChapters[subject]?.[classLevel]?.includes(chapter) ||
+      !validDifficulties.includes(difficulty)) {
+    return res.status(400).json({ success: false, message: "Choose a valid subject, preparation, class, chapter and difficulty." });
+  }
+
+  let questions;
+  try {
+    questions = buildStructuredQuestions(input).map((item) => ({
+      ...item,
+      subject,
+      exam,
+      classLevel,
+      chapter,
+      difficulty,
+      workflowStatus: "draft",
+      isActive: false,
+    }));
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+
+  const groupId = questions[0].caseStudy?.id;
+  try {
+    const duplicates = await Promise.all(questions.map((item) => findQuestionDuplicates(item)));
+    const saved = await NavtaQuestion.insertMany(questions);
+    await recordAdminActivity(req.user, "Created", groupId ? "NAVTA TEST case study" : "NAVTA TEST question", saved[0]._id);
+    return res.status(201).json({
+      success: true,
+      questionIds: saved.map((item) => item._id),
+      duplicateCount: duplicates.filter((matches) => matches.length > 0).length,
+    });
+  } catch (error) {
+    if (groupId) {
+      try {
+        await NavtaQuestion.deleteMany({ "caseStudy.id": groupId, workflowStatus: "draft" });
+      } catch (cleanupError) {
+        console.error("Failed to remove an incomplete case study draft:", cleanupError);
+      }
+    }
+    console.error("CREATE STRUCTURED QUESTIONS ERROR:", error);
+    return res.status(500).json({ success: false, message: "Could not save the question draft." });
+  }
+};
 
 exports.createQuestion = async (req, res) => {
   try {
@@ -2079,8 +2141,7 @@ exports.createQuestion = async (req, res) => {
       explanation: String(
         explanation || ""
       ).trim(),
-
-      isActive: true,
+      ...initialWorkflowFields(req.body.workflowStatus),
     };
 
     // ========================================
@@ -2243,16 +2304,19 @@ exports.createQuestion = async (req, res) => {
         ).trim();
     }
 
+    const duplicates = await findQuestionDuplicates(payload);
     const newQuestion =
       await NavtaQuestion.create(
         payload
       );
 
+    await recordAdminActivity(req.user, "Created", "NAVTA TEST question", newQuestion._id);
     return res.status(201).json({
       success: true,
       message:
         "Question added successfully.",
       question: newQuestion,
+      duplicates,
     });
   } catch (error) {
     console.error(
@@ -2260,10 +2324,10 @@ exports.createQuestion = async (req, res) => {
       error
     );
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message:
-        "Failed to add question.",
+        error.statusCode === 400 ? error.message : "Failed to add question.",
       error: error.message,
     });
   }
@@ -2275,51 +2339,24 @@ exports.createQuestion = async (req, res) => {
 
 exports.getQuestions = async (req, res) => {
   try {
-    const {
-      subject,
-      exam,
-      classLevel,
-      chapter,
-      difficulty,
-      questionType,
-    } = req.query;
-
-    const filter = {};
-
-    if (subject) {
-      filter.subject = subject;
-    }
-
-    if (exam) {
-      filter.exam = exam;
-    }
-
-    if (classLevel) {
-      filter.classLevel = classLevel;
-    }
-
-    if (chapter) {
-      filter.chapter = chapter;
-    }
-
-    if (difficulty) {
-      filter.difficulty = difficulty;
-    }
-
-    if (questionType) {
-      filter.questionType = questionType;
-    }
-
-    const questions =
-      await NavtaQuestion.find(filter)
-        .sort({
-          createdAt: -1,
-        });
+    const filter = buildQuestionBankFilter(req.query);
+    const paginated = req.query.page !== undefined || req.query.pageSize !== undefined;
+    const query = NavtaQuestion.find(filter).sort({ createdAt: -1, _id: -1 }).lean();
+    const total = paginated ? await NavtaQuestion.countDocuments(filter) : undefined;
+    const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 25));
+    const pageCount = paginated ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+    const page = Math.min(pageCount, Math.max(1, Number.parseInt(req.query.page, 10) || 1));
+    if (paginated) query.skip((page - 1) * pageSize).limit(pageSize);
+    const questions = (await query).map(question => ({
+      ...question,
+      workflowStatus: getWorkflowStatus(question),
+    }));
 
     return res.json({
       success: true,
       count: questions.length,
       questions,
+      ...(paginated ? { total, page, pageCount, pageSize } : {}),
     });
   } catch (error) {
     console.error(
@@ -2327,10 +2364,10 @@ exports.getQuestions = async (req, res) => {
       error
     );
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message:
-        "Failed to fetch questions.",
+        error.statusCode === 400 ? error.message : "Failed to fetch questions.",
       error: error.message,
     });
   }
@@ -2346,11 +2383,13 @@ exports.deleteQuestion = async (req, res) => {
       req.params;
 
     const deletedQuestion =
-      await NavtaQuestion.findByIdAndDelete(
-        id
-      );
+      await NavtaQuestion.findOneAndDelete({ _id: id, "caseStudy.id": { $in: [null, ""] } });
 
     if (!deletedQuestion) {
+      const groupedQuestion = await NavtaQuestion.exists({ _id: id, "caseStudy.id": { $nin: [null, ""] } });
+      if (groupedQuestion) {
+        return res.status(409).json({ success: false, message: "Archive this case study as a group." });
+      }
       return res.status(404).json({
         success: false,
         message:
@@ -2358,6 +2397,7 @@ exports.deleteQuestion = async (req, res) => {
       });
     }
 
+    await recordAdminActivity(req.user, "Deleted", "NAVTA TEST question", deletedQuestion._id);
     return res.json({
       success: true,
       message:
@@ -2929,6 +2969,7 @@ exports.confirmAIImport = async (req, res) => {
 
     const {
       questions,
+      workflowStatus,
     } = req.body || {};
 
     if (
@@ -2974,6 +3015,7 @@ exports.confirmAIImport = async (req, res) => {
       });
     }
 
+    const workflow = initialWorkflowFields(workflowStatus);
     const questionsToSave = [];
 
     const rejectedQuestions = [];
@@ -3216,8 +3258,7 @@ exports.confirmAIImport = async (req, res) => {
 
         explanation,
 
-        isActive:
-          true,
+        ...workflow,
       };
 
       const normalizeConfidence = (value) => {
@@ -3889,6 +3930,8 @@ exports.confirmAIImport = async (req, res) => {
         }
       );
 
+    await recordAdminActivity(req.user, "Imported", "NAVTA TEST questions");
+
     // ========================================
     // SUCCESS
     // ========================================
@@ -3925,7 +3968,7 @@ exports.confirmAIImport = async (req, res) => {
       success: true,
 
       message:
-        `${savedQuestions.length} new question(s) imported successfully. ${duplicateQuestions.length} duplicate(s) skipped.`,
+        `${savedQuestions.length} question(s) ${workflowStatus === "draft" ? "saved as drafts" : "imported successfully"}. ${duplicateQuestions.length} duplicate(s) skipped.`,
 
       imported:
         savedQuestions.length,
@@ -3952,11 +3995,11 @@ exports.confirmAIImport = async (req, res) => {
       error
     );
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
 
       message:
-        "Failed to import approved questions.",
+        error.statusCode === 400 ? error.message : "Failed to import approved questions.",
 
       error:
         error.message,
@@ -3978,19 +4021,21 @@ exports.generateTest = async (req, res) => {
       difficulty,
       questionType,
       duration,
-    } = req.body;
+    } = req.body ?? {};
 
     if (
-      !subject ||
-      !exam ||
-      !classLevel ||
-      !chapter ||
-      !difficulty
+      typeof subject !== "string" ||
+      !Object.hasOwn(allowedExams, subject) ||
+      !allowedExams[subject].includes(exam) ||
+      !["Class 11", "Class 12"].includes(classLevel) ||
+      typeof chapter !== "string" ||
+      !chapter.trim() ||
+      !validDifficulties.includes(difficulty)
     ) {
       return res.status(400).json({
         success: false,
         message:
-          "Subject, preparation, class, chapter and difficulty are required.",
+            "Choose a valid subject, preparation, class, chapter and difficulty.",
       });
     }
 
@@ -4054,74 +4099,32 @@ exports.generateTest = async (req, res) => {
       isActive: true,
     };
 
-    const availableCount =
-      await NavtaQuestion.countDocuments(
-        matchFilter
-      );
-
-    if (
-      availableCount <
-      questionCount
-    ) {
+    const { questions, available } = await selectStandardQuestions(matchFilter, questionCount);
+    if (questions.length !== questionCount) {
       return res.status(400).json({
         success: false,
-
-        message:
-          "Not enough questions are currently available for this test.",
-
-        required:
-          questionCount,
-
-        available:
-          availableCount,
+        message: "There are not enough matching questions to build this test with complete case studies.",
+        required: questionCount,
+        available,
       });
     }
 
-    const questions =
-      await NavtaQuestion.aggregate([
-        {
-          $match:
-            matchFilter,
-        },
-
-        {
-          $sample: {
-            size:
-              questionCount,
-          },
-        },
-
-        {
-          $project: {
-            question: 1,
-            questionType: 1,
-            options: 1,
-            difficulty: 1,
-            maxMarks: 1,
-            correctAnswer: 1,
-            explanation: 1,
-            chapter: 1,
-
-            // NAVTA AI visual / screenshot fields
-            questionImage: 1,
-            questionImages: 1,
-            imageCropSource: 1,
-            hasVisual: 1,
-            visualType: 1,
-            visualDescription: 1,
-            visualBoundingBox: 1,
-            questionBoundingBox: 1,
-            studentQuestionFormat: 1,
-            sourceDocument: 1,
-          },
-        },
-      ]);
+    const attempt = await createAttempt(req.user._id, "standard", {
+      subject,
+      exam,
+      classLevel,
+      chapter,
+      difficulty,
+      questionType: resolvedQuestionType,
+      durationMinutes: numericDuration,
+    }, questions);
 
     return res.status(200).json({
       success: true,
 
       test: {
         mode: "standard",
+        ...attempt,
 
         subject,
         exam,
@@ -4143,7 +4146,7 @@ exports.generateTest = async (req, res) => {
 
         minutesPerQuestion,
 
-        questions,
+        questions: questions.map(publicQuestion),
       },
     });
   } catch (error) {
@@ -4315,6 +4318,7 @@ exports.generateBossBattle = async (req, res) => {
           chapter,
 
           questionType: "mcq",
+          ...BATTLE_QUESTION_FILTER,
 
           difficulty: {
             $in: [
@@ -4399,6 +4403,7 @@ exports.generateBossBattle = async (req, res) => {
         },
 
         questionType: "mcq",
+        ...BATTLE_QUESTION_FILTER,
 
         difficulty: {
           $in: [
@@ -4888,10 +4893,19 @@ exports.generateBossBattle = async (req, res) => {
     // RETURN BOSS BATTLE
     // ========================================
 
+    const attempt = await createAttempt(req.user._id, "boss", {
+      subject,
+      exam,
+      classLevel,
+      chapters: selectedChapters,
+      questionType: "mcq",
+      durationMinutes,
+    }, questions);
+
     return res.status(200).json({
       success: true,
-
       bossBattle: {
+        ...attempt,
         mode: "boss",
 
         winPercentage:
@@ -5185,8 +5199,8 @@ exports.generateRevengeBattle = async (req, res) => {
                 selectedChapters,
             },
 
-            questionType:
-              "mcq",
+            questionType: "mcq",
+            ...BATTLE_QUESTION_FILTER,
 
             isActive: true,
           })
@@ -5389,8 +5403,8 @@ exports.generateRevengeBattle = async (req, res) => {
             selectedChapters,
         },
 
-        questionType:
-          "mcq",
+        questionType: "mcq",
+        ...BATTLE_QUESTION_FILTER,
 
         difficulty: {
           $in: [
@@ -5899,10 +5913,19 @@ exports.generateRevengeBattle = async (req, res) => {
     // RETURN REVENGE BATTLE
     // ========================================
 
+    const attempt = await createAttempt(req.user._id, "revenge", {
+      subject,
+      exam,
+      classLevel,
+      chapters: selectedChapters,
+      questionType: "mcq",
+      durationMinutes,
+    }, questions);
+
     return res.status(200).json({
       success: true,
-
       revengeBattle: {
+        ...attempt,
         mode:
           "revenge",
 
@@ -6017,20 +6040,7 @@ exports.completeNavtaTest =
         });
       }
 
-      const {
-        attemptId,
-        testType = "standard",
-        subject,
-        exam,
-        classLevel,
-        chapter,
-        chapters = [],
-        difficulty,
-        questionType,
-        selectedDuration,
-        timeTaken,
-        answers = [],
-      } = req.body;
+      const { attemptId, timeTaken, answers } = req.body ?? {};
 
       // ========================================
       // ATTEMPT ID
@@ -6112,518 +6122,76 @@ exports.completeNavtaTest =
         });
       }
 
-      // ========================================
-      // BASIC TEST VALIDATION
-      // ========================================
-
-      if (
-        !NAVTA_RESULT_TYPES.includes(
-          testType
-        )
-      ) {
-        return res.status(400).json({
+      const attempt = await findAttempt(userId, cleanedAttemptId);
+      if (!attempt) {
+        return res.status(409).json({
           success: false,
-          message:
-            "Invalid NAVTA Test type.",
+          message: "This NAVTA TEST session is no longer available. Start a new test.",
         });
       }
 
-      if (
-        !subject ||
-        !exam ||
-        !classLevel
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Subject, preparation and class are required.",
-        });
-      }
-
-      if (
-        !allowedExams[subject] ||
-        !allowedExams[
-          subject
-        ].includes(exam)
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid subject or preparation.",
-        });
-      }
-
-      if (
-        classLevel !==
-          "Class 11" &&
-        classLevel !==
-          "Class 12"
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid class.",
-        });
-      }
-
+      const testType = attempt.mode;
+      const {
+        subject,
+        exam,
+        classLevel,
+        chapter,
+        difficulty,
+        questionType: resolvedQuestionType,
+        durationMinutes: numericDuration,
+      } = attempt.setup;
+      const assignedIds = new Set(attempt.questions.map((question) => question.questionId));
       if (
         !Array.isArray(answers) ||
-        answers.length === 0
+        answers.length !== assignedIds.size ||
+        new Set(answers.map((answer) => answer?.questionId)).size !== assignedIds.size ||
+        answers.some((answer) => !assignedIds.has(answer?.questionId))
       ) {
         return res.status(400).json({
           success: false,
-          message:
-            "Completed test answers are required.",
+          message: "Submit one answer for every question assigned to this attempt.",
         });
       }
 
-      // ========================================
-      // DURATION
-      // ========================================
-
-      const numericDuration =
-        Number(selectedDuration);
-
-      if (
-        !Number.isFinite(
-          numericDuration
-        ) ||
-        numericDuration <= 0
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "A valid selected test duration is required.",
-        });
-      }
-
-      // ========================================
-      // QUESTION IDS
-      // ========================================
-
-      const questionIds =
-        answers
-          .map(
-            (item) =>
-              String(
-                item?.questionId ||
-                  ""
-              ).trim()
-          )
-          .filter(Boolean);
-
-      const uniqueQuestionIds = [
-        ...new Set(
-          questionIds
-        ),
-      ];
-
-      if (
-        uniqueQuestionIds.length !==
-        answers.length
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Every submitted answer must contain one unique question ID.",
-        });
-      }
-
-      // ========================================
-      // LOAD REAL QUESTIONS FROM DATABASE
-      // ========================================
-
-      const storedQuestions =
-        await NavtaQuestion.find({
-          _id: {
-            $in:
-              uniqueQuestionIds,
-          },
-          subject,
-          exam,
-          classLevel,
-          isActive: true,
-        })
-          .select(
-            "_id chapter difficulty questionType correctAnswer maxMarks modelAnswer"
-          )
-          .lean();
-
-      if (
-        storedQuestions.length !==
-        uniqueQuestionIds.length
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "One or more submitted questions are invalid for this NAVTA Test.",
-        });
-      }
-
-      const questionMap =
-        new Map(
-          storedQuestions.map(
-            (item) => [
-              String(item._id),
-              item,
-            ]
-          )
+      const submittedAnswers = new Map(answers.map((answer) => [answer.questionId, answer]));
+      const writtenGrades = new Map(attempt.writtenGrades.map((grade) => [grade.questionId, grade]));
+      const resultChapter = testType === "standard" ? chapter : undefined;
+      const resultChapters = [...new Set(attempt.questions.map((question) => question.chapter).filter(Boolean))];
+      const gradedAnswers = attempt.questions.map((question) => {
+        const submitted = submittedAnswers.get(question.questionId);
+        const grade = gradeQuestion(
+          question,
+          submitted,
+          attempt.scoringPolicy,
+          writtenGrades.get(question.questionId)
         );
+        const response = submitted.selectedAnswer ?? submitted.selectedOption;
+        const isSingleChoice = question.questionType === "mcq" && question.answerMode === "single";
+        const selectedOption = isSingleChoice ? parseNumber(response) : null;
+        let selectedAnswer;
+        if (question.answerMode === "numeric") selectedAnswer = parseNumber(response);
+        if (question.answerMode === "multiple" && Array.isArray(response) && response.length <= 4) {
+          selectedAnswer = response.filter((option) => Number.isInteger(option) && option >= 0 && option <= 3);
+        }
+        return {
+          question: question.questionId,
+          selectedOption: Number.isInteger(selectedOption) && selectedOption >= 0 && selectedOption <= 3
+            ? selectedOption
+            : null,
+          selectedAnswer,
+          textAnswer: question.questionType !== "mcq" && typeof submitted.textAnswer === "string"
+            ? submitted.textAnswer
+            : "",
+          ...grade,
+        };
+      });
 
-      // ========================================
-      // STANDARD TEST VALIDATION
-      // ========================================
-
-      const resolvedQuestionType =
-        normaliseQuestionType(
-          exam,
-          questionType
-        );
+      const earnedMarks = gradedAnswers.reduce((sum, answer) => sum + answer.awardedMarks, 0);
+      const maximumMarks = roundMarks(gradedAnswers.reduce((sum, answer) => sum + answer.maximumMarks, 0));
+      const correctAnswers = gradedAnswers.filter((answer) => answer.isCorrect).length;
 
       if (
-        testType ===
-        "standard"
-      ) {
-        if (
-          !chapter ||
-          !difficulty ||
-          !validDifficulties.includes(
-            difficulty
-          ) ||
-          !validQuestionTypes.includes(
-            resolvedQuestionType
-          )
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Chapter, difficulty and question type are required for a Standard Test.",
-          });
-        }
-
-        if (
-          !isAllowedDuration(
-            exam,
-            resolvedQuestionType,
-            numericDuration
-          )
-                  ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Invalid duration for this Standard Test.",
-          });
-        }
-
-        const expectedQuestionCount =
-          getQuestionCount(
-            exam,
-            resolvedQuestionType,
-            numericDuration
-          );
-
-        if (
-          answers.length !==
-          expectedQuestionCount
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "The submitted Standard Test question count does not match the selected duration.",
-          });
-        }
-
-        const invalidStandardQuestion =
-          storedQuestions.some(
-            (item) =>
-              item.chapter !==
-                chapter ||
-              item.difficulty !==
-                difficulty ||
-              item.questionType !==
-                resolvedQuestionType
-          );
-
-        if (
-          invalidStandardQuestion
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "One or more questions do not match the selected Standard Test setup.",
-          });
-        }
-      }
-
-      // ========================================
-      // BOSS / REVENGE VALIDATION
-      // ========================================
-
-      let cleanedChapters = [];
-
-      if (
-        testType === "boss" ||
-        testType === "revenge"
-      ) {
-        cleanedChapters = [
-          ...new Set(
-            (Array.isArray(
-              chapters
-            )
-              ? chapters
-              : []
-            )
-              .map(
-                (item) =>
-                  String(
-                    item || ""
-                  ).trim()
-              )
-              .filter(Boolean)
-          ),
-        ];
-
-        if (
-          cleanedChapters.length <
-          2
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Boss and Revenge Battle results require at least 2 selected chapters.",
-          });
-        }
-
-        if (
-          !BOSS_BATTLE_SIZES.includes(
-            answers.length
-          )
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Boss and Revenge Battle results must contain 15, 30 or 50 questions.",
-          });
-        }
-
-        const invalidBattleQuestion =
-          storedQuestions.some(
-            (item) =>
-              item.questionType !==
-                "mcq" ||
-              !cleanedChapters.includes(
-                item.chapter
-              ) ||
-              !validDifficulties.includes(
-                item.difficulty
-              )
-          );
-
-        if (
-          invalidBattleQuestion
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "One or more questions do not match the Boss/Revenge Battle setup.",
-          });
-        }
-
-        const expectedDuration =
-          answers.length *
-          (exam === "JEE"
-            ? 2
-            : 1);
-
-        if (
-          numericDuration !==
-          expectedDuration
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "The submitted Boss/Revenge duration does not match the official battle timer.",
-          });
-        }
-      }
-
-      // ========================================
-      // CANONICAL RESULT CONTEXT
-      // ========================================
-      //
-      // The submitted questions above have already
-      // been validated against subject, exam and
-      // classLevel. Build the stored chapter context
-      // from those real database questions so Panic
-      // Mode receives trustworthy Class 11 / Class 12
-      // chapter history.
-      // ========================================
-
-      const verifiedChapters = [
-        ...new Set(
-          storedQuestions
-            .map((item) =>
-              String(
-                item.chapter || ""
-              ).trim()
-            )
-            .filter(Boolean)
-        ),
-      ];
-
-      const resultChapter =
-        testType === "standard"
-          ? verifiedChapters[0] ||
-            String(
-              chapter || ""
-            ).trim()
-          : undefined;
-
-      const resultChapters =
-        testType === "standard"
-          ? resultChapter
-            ? [resultChapter]
-            : []
-          : verifiedChapters;
-
-      // ========================================
-      // GRADE TEST ON SERVER
-      // ========================================
-
-      let earnedMarks = 0;
-      let maximumMarks = 0;
-      let correctAnswers = 0;
-
-      const gradedAnswers =
-        answers.map(
-          (submitted) => {
-            const id =
-              String(
-                submitted.questionId
-              );
-
-            const question =
-              questionMap.get(id);
-
-            if (!question) {
-              return null;
-            }
-
-            // ------------------------------------
-            // MCQ
-            // ------------------------------------
-
-            if (
-              question.questionType ===
-              "mcq"
-            ) {
-              const selectedOption =
-                normaliseSubmittedAnswer(
-                  submitted.selectedOption
-                );
-
-              const correctOption =
-                Number(
-                  question.correctAnswer
-                );
-
-              const isCorrect =
-                Number.isInteger(
-                  selectedOption
-                ) &&
-                selectedOption ===
-                  correctOption;
-
-              maximumMarks += 1;
-
-              if (isCorrect) {
-                earnedMarks += 1;
-                correctAnswers += 1;
-              }
-
-              return {
-                question:
-                  question._id,
-                selectedOption,
-                textAnswer: "",
-                isCorrect,
-              };
-            }
-
-            // ------------------------------------
-            // WRITTEN
-            // ------------------------------------
-            //
-            // Written answers have already been
-            // evaluated by the backend evaluation
-            // endpoint during the test.
-            //
-            // We cap submitted marks to the real
-            // stored maxMarks so impossible values
-            // cannot be stored.
-            //
-            // ------------------------------------
-
-            const maxMarks =
-              Math.max(
-                1,
-                Number(
-                  question.maxMarks ||
-                    1
-                )
-              );
-
-            const rawAwarded =
-              Number(
-                submitted
-                  ?.evaluation
-                  ?.marksAwarded
-              );
-
-            const awarded =
-              Number.isFinite(
-                rawAwarded
-              )
-                ? Math.max(
-                    0,
-                    Math.min(
-                      maxMarks,
-                      rawAwarded
-                    )
-                  )
-                : 0;
-
-            maximumMarks +=
-              maxMarks;
-
-            earnedMarks +=
-              awarded;
-
-            const isCorrect =
-              awarded >= maxMarks;
-
-            if (isCorrect) {
-              correctAnswers += 1;
-            }
-
-            return {
-              question:
-                question._id,
-              selectedOption:
-                null,
-              textAnswer:
-                String(
-                  submitted.textAnswer ||
-                    ""
-                ),
-              isCorrect,
-            };
-          }
-        )
-        .filter(Boolean);
-
-      if (
-        maximumMarks <= 0
+        !Number.isFinite(maximumMarks) || maximumMarks <= 0
       ) {
         return res.status(400).json({
           success: false,
@@ -6647,12 +6215,9 @@ exports.completeNavtaTest =
         );
 
       const totalQuestions =
-        storedQuestions.length;
+        attempt.questions.length;
 
-      const score =
-        Math.round(
-          earnedMarks * 100
-        ) / 100;
+      const score = roundMarks(earnedMarks);
 
       // 70% is retained as the NAVTA
       // performance success threshold.
@@ -6681,9 +6246,7 @@ exports.completeNavtaTest =
           numericTimeTaken
         ) &&
         numericTimeTaken >= 0
-          ? Math.round(
-              numericTimeTaken
-            )
+          ? Math.min(Math.round(numericTimeTaken), numericDuration * 60)
           : 0;
 
       // ========================================
@@ -6725,6 +6288,8 @@ exports.completeNavtaTest =
               gradedAnswers,
             score,
             percentage,
+            maximumMarks,
+            scoringPolicy: attempt.scoringPolicy,
             timeTaken:
               safeTimeTaken,
             selectedDuration:
@@ -6742,8 +6307,8 @@ exports.completeNavtaTest =
               resultChapters,
             difficulty:
               testType === "standard"
-                ? String(difficulty || "")
-                : "",
+                ? difficulty
+                : undefined,
             questionType:
               testType === "standard"
                 ? resolvedQuestionType
@@ -6924,6 +6489,7 @@ exports.completeNavtaTest =
           result,
           percentage,
           score,
+          maximumMarks,
           correctAnswers,
           totalQuestions,
           selectedDuration:
@@ -6964,66 +6530,54 @@ exports.completeNavtaTest =
 // BOARDS WRITTEN ANSWER EVALUATION
 // ============================================
 
+function replyWithWrittenGrade(res, grade, answerDigest) {
+  if (!grade || grade.answerDigest !== answerDigest) {
+    return res.status(409).json({
+      success: false,
+      message: "This written question is already evaluated or the attempt is unavailable.",
+    });
+  }
+  return res.json({ success: true, evaluation: grade.evaluation });
+}
+
 exports.evaluateWrittenAnswer =
   async (req, res) => {
     try {
-      const {
-        questionId,
-        studentAnswer,
-      } = req.body;
-
-      // ========================================
-      // VALIDATE INPUT
-      // ========================================
-
-      if (
-        !questionId ||
-        !String(
-          studentAnswer || ""
-        ).trim()
-      ) {
+      const { attemptId, questionId, studentAnswer } = req.body ?? {};
+      if (!questionId || typeof studentAnswer !== "string" || !studentAnswer.trim()) {
         return res.status(400).json({
           success: false,
-          message:
-            "Question ID and student answer are required.",
+          message: "Question ID and student answer are required.",
         });
       }
 
-      // ========================================
-      // FIND QUESTION
-      // ========================================
-
-      const question =
-        await NavtaQuestion.findById(
-          questionId
-        );
-
-      if (!question) {
-        return res.status(404).json({
+      const userId = req.user._id;
+      const attempt = await findAttempt(userId, attemptId);
+      if (!attempt || attempt.mode !== "standard" || attempt.setup.exam !== "Boards") {
+        return res.status(409).json({
           success: false,
-          message:
-            "Question not found.",
+          message: "Start a Boards written test before requesting an evaluation.",
         });
       }
 
-      // ========================================
-      // ONLY BOARDS WRITTEN ANSWERS
-      // ========================================
-
-      if (
-        question.exam !==
-          "Boards" ||
-        ![
-          "short",
-          "long",
-        ].includes(
-          question.questionType
-        )
-      ) {
+      const question = attempt.questions.find((item) => item.questionId === questionId);
+      if (!question || !["short", "long"].includes(question.questionType)) {
         return res.status(400).json({
           success: false,
-          message:
-            "AI evaluation is only available for Boards written-answer questions.",
+          message: "This written question is not assigned to your attempt.",
+        });
+      }
+
+      const answerDigest = writtenAnswerDigest(studentAnswer);
+      const savedGrade = attempt.writtenGrades.find((grade) => grade.questionId === questionId);
+      if (savedGrade) {
+        return replyWithWrittenGrade(res, savedGrade, answerDigest);
+      }
+
+      if (await Result.exists({ user: userId, attemptId })) {
+        return res.status(409).json({
+          success: false,
+          message: "This test has already been submitted.",
         });
       }
 
@@ -7228,15 +6782,13 @@ incorrect
           JSON.parse(
             rawText
           );
+        if (!evaluation || typeof evaluation !== "object" || Array.isArray(evaluation)) {
+          throw new Error("The evaluation must be an object.");
+        }
       } catch (parseError) {
         console.error(
           "AI JSON PARSE ERROR:",
           parseError
-        );
-
-        console.error(
-          "AI RAW RESPONSE:",
-          rawText
         );
 
         return res.status(502).json({
@@ -7277,50 +6829,28 @@ incorrect
           )
         );
 
-      // ========================================
-      // VALIDATE STATUS
-      // ========================================
-
-      const allowedStatuses = [
-        "correct",
-        "partially_correct",
-        "incorrect",
-      ];
-
-      const status =
-        allowedStatuses.includes(
-          evaluation.status
-        )
-          ? evaluation.status
-          : "incorrect";
-
-      // ========================================
-      // RETURN EVALUATION
-      // ========================================
-
-      return res.status(200).json({
-        success: true,
-
-        evaluation: {
-          status,
-
-          marksAwarded,
-
-          maxMarks,
-
-          feedback:
-            evaluation.feedback ||
-            question.explanation ||
-            "",
-
-          missingPoints:
-            Array.isArray(
-              evaluation.missingPoints
-            )
-              ? evaluation.missingPoints
-              : [],
-        },
-      });
+      const status = marksAwarded >= maxMarks
+        ? "correct"
+        : marksAwarded > 0 ? "partially_correct" : "incorrect";
+      const savedEvaluation = {
+        status,
+        marksAwarded,
+        maxMarks,
+        feedback: typeof evaluation.feedback === "string" && evaluation.feedback.trim()
+          ? evaluation.feedback
+          : question.explanation || "",
+        missingPoints: Array.isArray(evaluation.missingPoints)
+          ? evaluation.missingPoints.filter((point) => typeof point === "string")
+          : [],
+      };
+      const savedAttempt = await NavtaTestAttempt.findOneAndUpdate(
+        { _id: attemptId, user: userId, expiresAt: { $gt: new Date() }, "writtenGrades.questionId": { $ne: questionId } },
+        { $push: { writtenGrades: { questionId, answerDigest, evaluation: savedEvaluation } } },
+        { new: true }
+      ).lean();
+      const currentAttempt = savedAttempt || await findAttempt(userId, attemptId);
+      const grade = currentAttempt?.writtenGrades.find((item) => item.questionId === questionId);
+      return replyWithWrittenGrade(res, grade, answerDigest);
     } catch (error) {
       console.error(
         "AI WRITTEN ANSWER EVALUATION ERROR:",
