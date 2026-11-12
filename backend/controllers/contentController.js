@@ -676,8 +676,8 @@ exports.getPYQs = async (req, res) => {
 
     const pyqs =
       await PYQ.find({
-        subject:
-          subjectId
+        subject: subjectId,
+        archivedAt: null
       })
         .populate(
           'chapter',

@@ -1869,9 +1869,10 @@ exports.redeemReward = async (
       req.user.id;
 
     const reward =
-      await Reward.findById(
-        req.params.rewardId
-      );
+      await Reward.findOne({
+        _id: req.params.rewardId,
+        archivedAt: null
+      });
 
     if (!reward) {
       return res.status(404).json({
@@ -2063,7 +2064,7 @@ exports.getRewards = async (
 ) => {
   try {
     const rewards =
-      await Reward.find();
+      await Reward.find({ archivedAt: null });
 
     return res.status(200).json({
       success: true,

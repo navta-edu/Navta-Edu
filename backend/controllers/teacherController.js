@@ -8,6 +8,7 @@ const Question = require('../models/Question');
 const Test = require('../models/Test');
 const Student = require('../models/Student');
 const Result = require('../models/Result');
+const { recordAdminActivity } = require('../services/adminActivity');
 
 const cloudinary =
   require('../config/cloudinary');
@@ -1166,6 +1167,7 @@ exports.createNote =
 
       const savedNote =
         await note.save();
+      await recordAdminActivity(req.user, 'Created', 'Study note', savedNote._id);
 
       const verification =
         await Note.findById(
@@ -1387,6 +1389,7 @@ exports.createPYQ =
             req.user.id
         });
 
+      await recordAdminActivity(req.user, 'Created', 'PYQ', pyq._id);
       return res
         .status(201)
         .json({
@@ -1533,6 +1536,7 @@ exports.createTest =
             40
         });
 
+      await recordAdminActivity(req.user, 'Created', 'Quiz', test._id);
       return res
         .status(201)
         .json({
@@ -3029,6 +3033,8 @@ exports.getQuestionBank = async (req, res) => {
 
             questionType:
               type,
+            answerMode: question.answerMode || 'single',
+            caseStudy: question.caseStudy?.id ? question.caseStudy : null,
 
             question:
               question.question,

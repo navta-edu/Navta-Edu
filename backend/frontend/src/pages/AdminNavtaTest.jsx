@@ -1,12 +1,30 @@
 import React, {
   useEffect,
   useMemo,
+  useRef,
   useState
 } from "react";
 
 import katex from "katex";
+import NavtaScoringSettings from "../components/NavtaScoringSettings";
 import "katex/dist/katex.min.css";
 import "katex/contrib/mhchem";
+import AdvancedQuestionAuthoring from "../components/AdvancedQuestionAuthoring";
+import QuestionBankEditor from "../components/QuestionBankEditor";
+
+const questionStatusLabels = {
+  draft: "Draft",
+  review: "In review",
+  published: "Published",
+  archived: "Archived",
+};
+
+const questionWorkflowActions = {
+  draft: [["review", "Send to review"], ["published", "Publish"], ["archived", "Archive"]],
+  review: [["draft", "Return to draft"], ["published", "Publish"], ["archived", "Archive"]],
+  published: [["draft", "Return to draft"], ["archived", "Archive"]],
+  archived: [["draft", "Restore as draft"]],
+};
 
 // =====================================================
 // NAVTA CLASSIFICATION DATA
@@ -1704,6 +1722,13 @@ export default function AdminNavtaTest() {
     setDeletingFilteredQuestions
   ] = useState(false);
 
+  const [bankDialog, setBankDialog] = useState(null);
+  const [bankAction, setBankAction] = useState("");
+  const [bankDuplicates, setBankDuplicates] = useState([]);
+  const [bankPagination, setBankPagination] = useState({ page: 1, pageCount: 1, total: 0 });
+  const [appliedQuestionFilters, setAppliedQuestionFilters] = useState({});
+  const bankRequest = useRef(0);
+
   // ===================================================
   // ADMIN IMAGE CROP EDITOR
   // ===================================================
@@ -1722,6 +1747,8 @@ export default function AdminNavtaTest() {
     chapter: "",
     difficulty: "",
     questionType: "",
+    workflowStatus: "",
+    search: "",
   });
 
   // ===================================================
@@ -1730,8 +1757,10 @@ export default function AdminNavtaTest() {
 
   const fetchSavedQuestions =
     async (
-      filters = questionFilters
+      filters = questionFilters,
+      page = 1
     ) => {
+      const requestId = ++bankRequest.current;
       setQuestionBankLoading(
         true
       );
@@ -1739,10 +1768,11 @@ export default function AdminNavtaTest() {
       setQuestionBankMessage(
         ""
       );
+      setBankDuplicates([]);
 
       try {
         const params =
-          new URLSearchParams();
+          new URLSearchParams({ page: String(page), pageSize: "25" });
 
         Object.entries(
           filters
@@ -1798,18 +1828,13 @@ export default function AdminNavtaTest() {
           );
         }
 
-        setSavedQuestions(
-          Array.isArray(
-            data.questions
-          )
-            ? data.questions
-            : Array.isArray(
-                data.data
-              )
-              ? data.data
-              : []
-        );
+        if (requestId !== bankRequest.current) return;
+        const questions = Array.isArray(data.questions) ? data.questions : data.data || [];
+        setSavedQuestions(questions);
+        setAppliedQuestionFilters(filters);
+        setBankPagination({ page: data.page || 1, pageCount: data.pageCount || 1, total: data.total ?? questions.length });
       } catch (error) {
+        if (requestId !== bankRequest.current) return;
         console.error(
           "NAVTA question bank load error:",
           error
@@ -1824,11 +1849,58 @@ export default function AdminNavtaTest() {
             "Unable to load NAVTA TEST questions."
         );
       } finally {
-        setQuestionBankLoading(
-          false
-        );
+        if (requestId === bankRequest.current) setQuestionBankLoading(false);
       }
     };
+
+  const requestBankAction = async (question, path, body) => {
+    const response = await fetch(`/api/navta-test/questions/${question._id}${path}`, {
+      method: body ? "PATCH" : "GET",
+      credentials: "include",
+      headers: buildAdminHeaders(body ? { "Content-Type": "application/json" } : {}),
+      ...(body ? { body: JSON.stringify({ updatedAt: question.updatedAt ?? null, version: question.__v ?? null, ...body }) } : {}),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "The question could not be updated.");
+    return data;
+  };
+
+  const saveBankQuestion = async (question, changes) => {
+    const data = await requestBankAction(question, "", { changes });
+    setBankDialog(null);
+    await fetchSavedQuestions(appliedQuestionFilters, bankPagination.page);
+    setBankDuplicates(data.duplicates || []);
+    setQuestionBankMessage("Question changes saved.");
+  };
+
+  const changeBankWorkflow = async (question, workflowStatus) => {
+    setBankAction(question._id);
+    setBankDuplicates([]);
+    try {
+      await requestBankAction(question, "/workflow", { workflowStatus });
+      await fetchSavedQuestions(appliedQuestionFilters, bankPagination.page);
+      setQuestionBankMessage(`${question.caseStudy?.id ? "Case study" : "Question"} status changed to ${questionStatusLabels[workflowStatus].toLowerCase()}.`);
+    } catch (error) {
+      setQuestionBankMessage(error.message);
+    } finally {
+      setBankAction("");
+    }
+  };
+
+  const checkBankDuplicates = async (question) => {
+    setBankAction(question._id);
+    setBankDuplicates([]);
+    try {
+      const data = await requestBankAction(question, "/duplicates");
+      setBankDuplicates(data.duplicates || []);
+      setQuestionBankMessage(data.duplicates?.length ? "Possible duplicates found." : "No matching questions found.");
+      document.getElementById("navta-question-bank-results")?.scrollIntoView({ block: "nearest" });
+    } catch (error) {
+      setQuestionBankMessage(error.message);
+    } finally {
+      setBankAction("");
+    }
+  };
 
   const deleteSavedQuestion =
     async (
@@ -1895,20 +1967,7 @@ export default function AdminNavtaTest() {
           );
         }
 
-        setSavedQuestions(
-          (previous) =>
-            previous.filter(
-              (item) =>
-                String(
-                  item?._id ||
-                    item?.id
-                ) !==
-                String(
-                  questionId
-                )
-            )
-        );
-
+        await fetchSavedQuestions(appliedQuestionFilters, bankPagination.page);
         setQuestionBankMessage(
           data.message ||
             "Question deleted successfully."
@@ -1981,6 +2040,10 @@ export default function AdminNavtaTest() {
           "Difficulty",
         questionType:
           "Question Type",
+        workflowStatus:
+          "Status",
+        search:
+          "Question search",
       };
 
       return Object.entries(
@@ -2019,9 +2082,6 @@ export default function AdminNavtaTest() {
           activeFilters
         );
 
-      const visibleCount =
-        savedQuestions.length;
-
       const subjectOnlyDelete =
         Boolean(
           activeFilters.subject
@@ -2031,12 +2091,8 @@ export default function AdminNavtaTest() {
 
       const warning =
         subjectOnlyDelete
-          ? `WARNING: This will permanently delete ALL saved ${activeFilters.subject} questions.\n\n${filterDescription}\n\nThis action cannot be undone. Continue?`
-          : `Permanently delete all NAVTA TEST questions matching these filters?\n\n${filterDescription}\n\nCurrently showing ${visibleCount} matching question${
-              visibleCount === 1
-                ? ""
-                : "s"
-            } in this view.\n\nThis action cannot be undone.`;
+          ? `Permanently delete all standalone ${activeFilters.subject} questions?\n\n${filterDescription}\n\nThis action cannot be undone.`
+          : `Permanently delete standalone NAVTA TEST questions matching these filters?\n\n${filterDescription}\n\nThis action cannot be undone.`;
 
       const confirmed =
         window.confirm(
@@ -2103,13 +2159,11 @@ export default function AdminNavtaTest() {
           );
         }
 
-        setQuestionBankMessage(
-          data.message ||
-            `${data.deletedCount || 0} filtered question(s) deleted successfully.`
-        );
-
         await fetchSavedQuestions(
           questionFilters
+        );
+        setQuestionBankMessage(
+          data.message || `${data.deletedCount || 0} filtered question(s) deleted successfully.`
         );
       } catch (
         error
@@ -2168,6 +2222,8 @@ export default function AdminNavtaTest() {
         chapter: "",
         difficulty: "",
         questionType: "",
+        workflowStatus: "",
+        search: "",
       };
 
       setQuestionFilters(
@@ -2291,6 +2347,7 @@ export default function AdminNavtaTest() {
   const submitQuestion =
     async (event) => {
       event.preventDefault();
+      const workflowStatus = event.nativeEvent?.submitter?.value === "draft" ? "draft" : "published";
 
       const questionText = getManualQuestionText(form);
       if (!questionText) {
@@ -2323,6 +2380,7 @@ export default function AdminNavtaTest() {
 
               body:
                 JSON.stringify({
+                  workflowStatus,
                   subject:
                     form.subject,
 
@@ -2438,9 +2496,8 @@ export default function AdminNavtaTest() {
           );
         }
 
-        setMessage(
-          "Question added successfully!"
-        );
+        const duplicateWarning = data.duplicates?.length ? ` ${data.duplicates.length} possible duplicate(s) found in the bank.` : "";
+        setMessage(`${workflowStatus === "draft" ? "Question saved as a draft." : "Question published."}${duplicateWarning}`);
 
         setMessageType(
           "success"
@@ -3343,7 +3400,7 @@ export default function AdminNavtaTest() {
   // ===================================================
 
   const approveAcceptedQuestions =
-    async () => {
+    async (workflowStatus) => {
       if (
         acceptedQuestions.length ===
         0
@@ -3386,6 +3443,7 @@ export default function AdminNavtaTest() {
 
               body:
                 JSON.stringify({
+                  workflowStatus,
                   questions:
                     acceptedQuestions,
                 }),
@@ -5150,10 +5208,18 @@ export default function AdminNavtaTest() {
           <a href="#manual-question-entry" className="admin-navta-secondary-button mb-5 inline-block">
             Add Question Manually
           </a>
+          <a href="#advanced-question-entry" className="admin-navta-secondary-button mb-5 ml-2 inline-block">
+            Advanced Question Formats
+          </a>
+          <a href="#navta-question-bank" className="admin-navta-secondary-button mb-5 ml-2 inline-block">
+            Question Bank
+          </a>
 
           {/* =================================================
               AI IMPORT
           ================================================= */}
+
+          <NavtaScoringSettings buildHeaders={buildAdminHeaders} />
 
           <div className="admin-navta-test-card admin-navta-ai-card">
 
@@ -6253,9 +6319,7 @@ export default function AdminNavtaTest() {
                     <button
                       type="button"
                       className="admin-navta-approve"
-                      onClick={
-                        approveAcceptedQuestions
-                      }
+                      onClick={() => approveAcceptedQuestions("published")}
                       disabled={
                         approveLoading ||
                         acceptedQuestions.length ===
@@ -6265,6 +6329,14 @@ export default function AdminNavtaTest() {
                       {approveLoading
                         ? "Importing Approved Questions..."
                         : `Approve & Import ${acceptedQuestions.length} Questions`}
+                    </button>
+                    <button
+                      type="button"
+                      className="admin-navta-secondary-button ml-2"
+                      onClick={() => approveAcceptedQuestions("draft")}
+                      disabled={approveLoading || acceptedQuestions.length === 0}
+                    >
+                      Save as drafts
                     </button>
                   </>
                 )}
@@ -6331,21 +6403,35 @@ export default function AdminNavtaTest() {
               MANAGE UPLOADED QUESTIONS
           ================================================= */}
 
-          <div className="admin-navta-info">
-            Question Manager: View saved NAVTA TEST questions, delete individual questions, or permanently delete all questions matching the selected Subject / Preparation / Class / Chapter / Difficulty / Question Type filters.
-          </div>
-
-          <div className="admin-navta-test-card">
+          <div id="navta-question-bank" className="admin-navta-test-card scroll-mt-24">
             <div className="admin-navta-form-section">
               <h2 className="admin-navta-section-title">
-                Manage Uploaded Questions
+                Question Bank
               </h2>
 
               <p className="admin-navta-help">
-                Showing {savedQuestions.length} saved question{savedQuestions.length === 1 ? "" : "s"}.
+                Showing {savedQuestions.length} of {bankPagination.total} matching questions.
               </p>
 
               <div className="admin-navta-bank-toolbar">
+                <input
+                  type="search"
+                  className="admin-navta-input"
+                  aria-label="Search saved questions"
+                  placeholder="Search question text"
+                  value={questionFilters.search}
+                  onChange={event => updateQuestionFilter("search", event.target.value)}
+                  onKeyDown={event => { if (event.key === "Enter") fetchSavedQuestions(); }}
+                />
+                <select
+                  className="admin-navta-select"
+                  aria-label="Question status"
+                  value={questionFilters.workflowStatus}
+                  onChange={event => updateQuestionFilter("workflowStatus", event.target.value)}
+                >
+                  <option value="">All statuses</option>
+                  {Object.entries(questionStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
                 <select
                   className="admin-navta-select"
                   value={questionFilters.subject}
@@ -6586,11 +6672,19 @@ export default function AdminNavtaTest() {
                 </button>
               </div>
 
-              {questionBankMessage && (
-                <div className="admin-navta-message">
-                  {questionBankMessage}
-                </div>
-              )}
+              <div id="navta-question-bank-results" role="status">
+                {questionBankMessage && <div className="admin-navta-message">{questionBankMessage}</div>}
+                {bankDuplicates.length > 0 && (
+                  <ul className="mt-3 space-y-2 rounded-xl border border-amber-300 p-3 dark:border-amber-700">
+                    {bankDuplicates.map(duplicate => (
+                      <li key={duplicate._id} className="text-sm">
+                        <strong>{questionStatusLabels[duplicate.workflowStatus]}</strong> · {duplicate.chapter}<br />
+                        {duplicate.question === NAVTA_VISUAL_MARKER ? "PDF image question" : duplicate.question}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
 
               {questionBankLoading ? (
                 <div className="admin-navta-empty-state">
@@ -6611,6 +6705,8 @@ export default function AdminNavtaTest() {
                         question?._id ||
                         question?.id ||
                         `${index}`;
+                      const status = question.workflowStatus || (question.isActive === false ? "archived" : "published");
+                      const actions = questionWorkflowActions[status] || [];
 
                       return (
                         <div
@@ -6622,6 +6718,12 @@ export default function AdminNavtaTest() {
                           className="admin-navta-bank-card"
                         >
                           <div className="admin-navta-bank-meta">
+                            <span className="admin-navta-bank-pill">{questionStatusLabels[status]}</span>
+                            {question.caseStudy?.id && (
+                              <span className="admin-navta-bank-pill">Case study · {question.caseStudy.order + 1} of {question.caseStudy.size}</span>
+                            )}
+                            {question.answerMode === "numeric" && <span className="admin-navta-bank-pill">Numerical</span>}
+                            {question.answerMode === "multiple" && <span className="admin-navta-bank-pill">Multiple correct</span>}
                             {question.subject && (
                               <span className="admin-navta-bank-pill">
                                 {question.subject}
@@ -6662,7 +6764,6 @@ export default function AdminNavtaTest() {
                           </div>
 
                           <div className="admin-navta-bank-question">
-                            <strong>{index + 1}.{" "}</strong>
                             <NavtaQuestionContent
                               question={question}
                               visualClassName="admin-navta-question-preview-image"
@@ -6703,7 +6804,17 @@ export default function AdminNavtaTest() {
                             </ol>
                           )}
 
-                          <button
+                          <div className="admin-navta-bank-actions" aria-label="Question actions">
+                            <button type="button" className="admin-navta-secondary-button" onClick={() => setBankDialog({ question, mode: "preview" })}>Student preview</button>
+                            <button type="button" className="admin-navta-secondary-button" onClick={() => setBankDialog({ question, mode: "edit" })} disabled={Boolean(bankAction)}>Edit question</button>
+                            <button type="button" className="admin-navta-secondary-button" onClick={() => checkBankDuplicates(question)} disabled={Boolean(bankAction)}>Check duplicates</button>
+                            {actions.map(([next, label]) => (
+                              <button key={next} type="button" className="admin-navta-secondary-button" disabled={Boolean(bankAction)} onClick={() => changeBankWorkflow(question, next)}>
+                                {label}{question.caseStudy?.id ? " case study" : ""}
+                              </button>
+                            ))}
+                          </div>
+                          {!question.caseStudy?.id && <button
                             type="button"
                             className="admin-navta-delete-question"
                             onClick={() =>
@@ -6724,12 +6835,19 @@ export default function AdminNavtaTest() {
                             )
                               ? "Deleting..."
                               : "Delete Question"}
-                          </button>
+                          </button>}
                         </div>
                       );
                     }
                   )}
                 </div>
+              )}
+              {bankPagination.pageCount > 1 && (
+                <nav className="mt-4 flex items-center justify-center gap-3" aria-label="Question bank pages">
+                  <button type="button" className="admin-navta-secondary-button" disabled={questionBankLoading || bankPagination.page <= 1} onClick={() => fetchSavedQuestions(appliedQuestionFilters, bankPagination.page - 1)}>Previous</button>
+                  <span>Page {bankPagination.page} of {bankPagination.pageCount}</span>
+                  <button type="button" className="admin-navta-secondary-button" disabled={questionBankLoading || bankPagination.page >= bankPagination.pageCount} onClick={() => fetchSavedQuestions(appliedQuestionFilters, bankPagination.page + 1)}>Next</button>
+                </nav>
               )}
             </div>
           </div>
@@ -6742,6 +6860,14 @@ export default function AdminNavtaTest() {
             Manual Entry: Select Subject → Preparation → Class → Chapter → Difficulty. For Boards, choose MCQ, Short Answer or Long Answer.
           </div>
 
+          <AdvancedQuestionAuthoring
+            subjects={SUBJECT_EXAMS}
+            classes={CLASSES}
+            chapters={CHAPTERS}
+            difficulties={DIFFICULTIES}
+            buildHeaders={buildAdminHeaders}
+            onSaved={fetchSavedQuestions}
+          />
           <div id="manual-question-entry" className="admin-navta-test-card scroll-mt-24" tabIndex={-1}>
 
             <form
@@ -7313,7 +7439,10 @@ export default function AdminNavtaTest() {
               >
                 {loading
                   ? "Adding Question..."
-                  : "Add Question"}
+                  : "Publish question"}
+              </button>
+              <button type="submit" value="draft" className="admin-navta-secondary-button ml-2" disabled={loading}>
+                Save as draft
               </button>
 
             </form>
@@ -7330,6 +7459,20 @@ export default function AdminNavtaTest() {
 
         </div>
       </div>
+
+      {bankDialog && (
+        <QuestionBankEditor
+          key={`${bankDialog.question._id}-${bankDialog.mode}`}
+          question={bankDialog.question}
+          mode={bankDialog.mode}
+          onClose={() => setBankDialog(null)}
+          onSave={saveBankQuestion}
+          renderText={renderNavtaContent}
+          renderQuestion={question => question.imageCropSource === "admin-pdf-crop" && getNavtaQuestionImage(question)?.url
+            ? <NavtaVisual question={question} className="admin-navta-question-preview-image" shellClassName="admin-navta-question-preview-image-shell" />
+            : <NavtaQuestionContent question={question} visualClassName="admin-navta-question-preview-image" visualShellClassName="admin-navta-question-preview-image-shell" />}
+        />
+      )}
 
       {imageCropEditor && (
         <div className="admin-navta-crop-backdrop" role="dialog" aria-modal="true" aria-label="Crop question image">

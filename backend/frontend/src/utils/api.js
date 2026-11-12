@@ -1270,13 +1270,24 @@ createNote:
       };
     },
 
-    getUsers: async () => {
-      const db = getMockDB();
+    getUsers: async (params) => {
+      const users = getMockDB().users.map(({ password: _password, ...user }) => user);
+      if (!params) return { success: true, data: users, count: users.length };
 
-      return {
-        success: true,
-        data: db.users
-      };
+      const search = String(params.search || '').toLowerCase();
+      const matches = users.filter((user) =>
+        [user.name, user.email].some((field) => String(field || '').toLowerCase().includes(search))
+      );
+      const roleCounts = {};
+      for (const user of matches) roleCounts[user.role] = (roleCounts[user.role] || 0) + 1;
+      const filtered = matches
+        .filter((user) => !params.role || params.role === 'all' || user.role === params.role)
+        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+      const limit = params.limit || 25;
+      const totalPages = Math.max(1, Math.ceil(filtered.length / limit));
+      const page = Math.min(totalPages, params.page || 1);
+      const data = filtered.slice((page - 1) * limit, page * limit);
+      return { success: true, data, count: data.length, roleCounts, pagination: { page, limit, total: filtered.length, totalPages } };
     },
 
     createUser:
@@ -1295,9 +1306,10 @@ createNote:
 
         saveMockDB(db);
 
+        const { password: _password, ...account } = user;
         return {
           success: true,
-          data: user
+          data: account
         };
       },
 
@@ -2696,20 +2708,36 @@ export const adminAPI = {
       }
     },
 
-  getUsers: async () => {
+  getReadiness: async (signal) => {
+    const response = await api.get('/readiness', {
+      signal,
+      timeout: 5000,
+      validateStatus: (status) => status === 200 || status === 503
+    });
+    return response.data;
+  },
+
+  getActivity: async (params, signal) => {
+    const response = await api.get('/admin/activity', { params, signal, timeout: 10000 });
+    return response.data;
+  },
+
+  getUsers: async (params, signal) => {
     try {
       const response =
         await api.get(
-          '/admin/users'
+          '/admin/users',
+          { params, signal, timeout: 10000 }
         );
 
       return response.data;
     } catch (error) {
       if (
         import.meta.env.DEV &&
-        !error.response
+        !error.response &&
+        !signal?.aborted
       ) {
-        return mockAPI.admin.getUsers();
+        return mockAPI.admin.getUsers(params);
       }
 
       throw error;
@@ -2846,6 +2874,11 @@ export const adminAPI = {
   // ==========================================
   // CHAPTERS
   // ==========================================
+
+  getChapters: async (params, signal) => {
+    const response = await api.get('/admin/chapters', { params, signal, timeout: 10000 });
+    return response.data;
+  },
 
   createChapter:
     async (data) => {
@@ -2992,16 +3025,31 @@ export const adminAPI = {
   // PYQ
   // ==========================================
 
+  getPYQs: async (params, signal) => {
+    const response = await api.get('/admin/pyqs', { params, signal, timeout: 10000 });
+    return response.data;
+  },
+
   createPYQ:
     async (data) => {
       const response =
         await api.post(
-          '/teacher/pyqs',
+          '/admin/pyqs',
           data
         );
 
       return response.data;
     },
+
+  updatePYQ: async (id, data) => {
+    const response = await api.patch(`/admin/pyqs/${id}`, data);
+    return response.data;
+  },
+
+  setPYQArchived: async (id, archived) => {
+    const response = await api.patch(`/admin/pyqs/${id}/archive`, { archived });
+    return response.data;
+  },
 
   deletePYQ:
     async (id) => {
@@ -3016,6 +3064,11 @@ export const adminAPI = {
   // ==========================================
   // REWARDS
   // ==========================================
+
+  getRewards: async (params, signal) => {
+    const response = await api.get('/admin/rewards', { params, signal, timeout: 10000 });
+    return response.data;
+  },
 
   createReward:
     async (data) => {
@@ -3040,6 +3093,16 @@ export const adminAPI = {
         throw error;
       }
     },
+
+  updateReward: async (id, data) => {
+    const response = await api.patch(`/admin/rewards/${id}`, data);
+    return response.data;
+  },
+
+  setRewardArchived: async (id, archived) => {
+    const response = await api.patch(`/admin/rewards/${id}/archive`, { archived });
+    return response.data;
+  },
 
   // ==========================================
   // QUESTIONS

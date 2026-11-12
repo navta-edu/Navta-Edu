@@ -115,6 +115,15 @@ const ResultSchema = new mongoose.Schema({
         type: Number,
       },
 
+      selectedAnswer: {
+        type: mongoose.Schema.Types.Mixed,
+        default: undefined,
+      },
+
+      awardedMarks: Number,
+
+      maximumMarks: Number,
+
       textAnswer: {
         type: String,
       },
@@ -132,6 +141,13 @@ const ResultSchema = new mongoose.Schema({
   score: {
     type: Number,
     required: true,
+  },
+
+  maximumMarks: Number,
+
+  scoringPolicy: {
+    type: mongoose.Schema.Types.Mixed,
+    default: undefined,
   },
 
   percentage: {

@@ -468,7 +468,7 @@ export default function PDFQuestionCropper() {
     return "";
   };
 
-  const saveQuestion = async ({ moveNext = false } = {}) => {
+  const saveQuestion = async ({ moveNext = false, workflowStatus = "published" } = {}) => {
     if (saving) return;
     const keyPoints = answerDetails.keyPoints
       .split("\n")
@@ -502,6 +502,7 @@ export default function PDFQuestionCropper() {
       formData.append("chapter", chapter);
       formData.append("difficulty", difficulty);
       formData.append("questionType", questionType);
+      formData.append("workflowStatus", workflowStatus);
       formData.append("explanation", answerDetails.explanation.trim());
 
       if (isWritten) {
@@ -555,7 +556,8 @@ export default function PDFQuestionCropper() {
 
       setSavedCount((previous) => previous + 1);
       setMessageType("success");
-      setMessage(data.message || "Question saved to NAVTA TEST successfully.");
+      const duplicateWarning = data.duplicates?.length ? ` ${data.duplicates.length} possible duplicate(s) found in the bank.` : "";
+      setMessage(`${data.message || "Question saved."}${duplicateWarning}`);
 
       setSelection(null);
       setCropPreview("");
@@ -1119,7 +1121,16 @@ export default function PDFQuestionCropper() {
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              Save Question
+              Publish Question
+            </button>
+
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => saveQuestion({ workflowStatus: "draft" })}
+              className="min-h-[50px] rounded-xl border border-slate-300 px-4 text-sm font-extrabold text-slate-900 disabled:opacity-50 dark:border-slate-700 dark:text-white"
+            >
+              Save as Draft
             </button>
 
             <button
@@ -1128,7 +1139,7 @@ export default function PDFQuestionCropper() {
               onClick={() => saveQuestion({ moveNext: true })}
               className="min-h-[50px] rounded-xl bg-slate-900 dark:bg-white px-4 text-sm font-extrabold text-white dark:text-slate-900 disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              Save & Next Page
+              Publish & Next Page
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>

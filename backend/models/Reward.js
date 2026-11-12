@@ -23,6 +23,10 @@ const RewardSchema = new mongoose.Schema({
     enum: ['coupon', 'badge', 'resource'],
     default: 'badge'
   },
+  archivedAt: {
+    type: Date,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

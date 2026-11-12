@@ -7,6 +7,7 @@ const NavtaQuestion =
 
 const {
   createQuestion,
+  createStructuredQuestions,
   createPDFCropQuestion,
   getQuestions,
   deleteQuestion,
@@ -28,38 +29,18 @@ const {
   // ADMIN - AI REVIEW IMAGE CROP
   cropAIReviewImage,
 } = require("../controllers/navtaTestController");
+const { getScoringPolicies, updateScoringPolicy } = require("../controllers/navtaScoringController");
+
+const { findDuplicates, transitionQuestion, updateQuestion } = require("../controllers/navtaQuestionBankController");
+const { buildQuestionBankFilter } = require("../services/navtaQuestionBankService");
+const { recordAdminActivity } = require("../services/adminActivity");
 
 const {
   protect,
   authorizeRoles,
 } = require("../middleware/auth");
 
-const cleanFilterValue = (value) => {
-  return String(value ?? "").trim();
-};
-
-const buildBulkDeleteFilter = (query = {}) => {
-  const allowedKeys = [
-    "subject",
-    "exam",
-    "classLevel",
-    "chapter",
-    "difficulty",
-    "questionType",
-  ];
-
-  const filter = {};
-
-  allowedKeys.forEach((key) => {
-    const value = cleanFilterValue(query[key]);
-
-    if (value) {
-      filter[key] = value;
-    }
-  });
-
-  return filter;
-};
+router.post("/questions/structured", protect, authorizeRoles("admin"), createStructuredQuestions);
 
 router.post(
   "/questions",
@@ -188,13 +169,17 @@ router.get(
   getQuestions
 );
 
+router.get("/questions/:id/duplicates", protect, authorizeRoles("admin"), findDuplicates);
+router.patch("/questions/:id", protect, authorizeRoles("admin"), updateQuestion);
+router.patch("/questions/:id/workflow", protect, authorizeRoles("admin"), transitionQuestion);
+
 router.delete(
   "/questions/bulk",
   protect,
   authorizeRoles("admin"),
   async (req, res) => {
     try {
-      const filter = buildBulkDeleteFilter(req.query);
+      const filter = buildQuestionBankFilter(req.query);
       const filterKeys = Object.keys(filter);
 
       if (filterKeys.length === 0) {
@@ -205,6 +190,7 @@ router.delete(
         });
       }
 
+      filter["caseStudy.id"] = { $in: [null, ""] };
       const matchedCount =
         await NavtaQuestion.countDocuments(filter);
 
@@ -222,6 +208,8 @@ router.delete(
 
       const deletedCount =
         Number(result?.deletedCount) || 0;
+
+      if (deletedCount) await recordAdminActivity(req.user, "Deleted", "Filtered NAVTA TEST questions");
 
       console.log(
         "NAVTA BULK QUESTION DELETE:",
@@ -251,7 +239,7 @@ router.delete(
         error
       );
 
-      return res.status(500).json({
+      return res.status(error.statusCode || 500).json({
         success: false,
         message:
           "Failed to delete filtered NAVTA TEST questions.",
@@ -338,16 +326,19 @@ router.post(
 
 router.post(
   "/generate",
+  protect,
   generateTest
 );
 
 router.post(
   "/boss-battle",
+  protect,
   generateBossBattle
 );
 
 router.post(
   "/revenge-battle",
+  protect,
   generateRevengeBattle
 );
 
@@ -360,7 +351,11 @@ router.post(
 
 router.post(
   "/evaluate-answer",
+  protect,
   evaluateWrittenAnswer
 );
+
+router.get("/scoring-policies", protect, authorizeRoles("admin"), getScoringPolicies);
+router.put("/scoring-policies/:exam", protect, authorizeRoles("admin"), updateScoringPolicy);
 
 module.exports = router;

@@ -964,18 +964,21 @@ export default function QuestionPaperBuilder() {
                   question.questionType
                 );
               const questionImage = getQuestionImage(question);
+              const passage = question.caseStudy?.passage &&
+                selectedQuestions[index - 1]?.caseStudy?.id !== question.caseStudy.id
+                ? `<p class="case-passage"><strong>Case study</strong><br>${renderPaperText(question.caseStudy.passage)}</p>`
+                : '';
 
               let optionsHtml =
                 '';
 
               if (
                 type === 'mcq' &&
-                Array.isArray(
-                  question.options
-                )
+                question.options?.length > 0
               ) {
                 optionsHtml = `
                   <div class="options">
+                    ${question.answerMode === 'multiple' ? '<p>Select all correct choices.</p>' : ''}
 
                     ${question.options
                       .map(
@@ -1002,9 +1005,13 @@ export default function QuestionPaperBuilder() {
                   </div>
                 `;
               }
+              if (question.answerMode === 'numeric') {
+                optionsHtml = '<p>Numerical answer ____________________</p>';
+              }
 
               return `
                 <div class="question">
+                  ${passage}
 
                   <div class="question-row">
 
@@ -2196,11 +2203,21 @@ export default function QuestionPaperBuilder() {
                                 </Tag>
 
                                 <Tag>
-                                  {getQuestionTypeLabel(
-                                    question.questionType
-                                  )}
+                                  {question.answerMode === 'numeric'
+                                    ? 'Numerical Answer'
+                                    : question.answerMode === 'multiple'
+                                      ? 'Multiple Correct Choices'
+                                      : getQuestionTypeLabel(question.questionType)}
                                 </Tag>
                               </div>
+
+                              {question.caseStudy?.passage && (
+                                <p className="mb-2 whitespace-pre-wrap text-sm">
+                                  <strong>Case study</strong>
+                                  <br />
+                                  {question.caseStudy.passage}
+                                </p>
+                              )}
 
                               <p
                                 className="
