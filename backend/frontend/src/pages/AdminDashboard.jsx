@@ -7,6 +7,7 @@ import Button from '../components/Button';
 import AdminActivityPanel from '../components/AdminActivityPanel';
 import AdminCatalog from '../components/AdminCatalog';
 import AdminPagination from '../components/AdminPagination';
+import { PortalTestSwitches } from '../components/PortalTestControls';
 
 import {
   Users,
@@ -2170,6 +2171,7 @@ const fetchData = async () => {
 
         </p>
 
+        <PortalTestSwitches />
       </div>
 
 

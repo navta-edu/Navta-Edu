@@ -4,6 +4,7 @@ import React, {
   useMemo,
   useState
 } from 'react';
+import { getAuthenticatedHeaders } from '../utils/portalTest';
 
 import {
   Link
@@ -63,29 +64,10 @@ const STATUS_FILTERS = [
 // AUTH HELPERS
 // =====================================================
 
-function getAuthToken() {
-  return (
-    localStorage.getItem('token') ||
-    localStorage.getItem('authToken') ||
-    localStorage.getItem('accessToken') ||
-    ''
-  );
-}
-
 function getAuthHeaders(
   extraHeaders = {}
 ) {
-  const token = getAuthToken();
-
-  return {
-    ...extraHeaders,
-    ...(token
-      ? {
-          Authorization:
-            `Bearer ${token}`
-        }
-      : {})
-  };
+  return getAuthenticatedHeaders(extraHeaders);
 }
 
 // =====================================================

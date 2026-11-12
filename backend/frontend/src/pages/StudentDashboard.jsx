@@ -3,6 +3,7 @@ import React, {
   useMemo,
   useState
 } from 'react';
+import { getAuthenticatedHeaders } from '../utils/portalTest';
 
 import {
   Link
@@ -151,23 +152,13 @@ export default function StudentDashboard() {
           // ===========================================
 
           try {
-            const token =
-              localStorage.getItem('token') ||
-              localStorage.getItem('authToken') ||
-              localStorage.getItem('accessToken');
-
             const mistakeResponse =
               await fetch(
                 '/api/mistake-notebook/stats',
                 {
                   method: 'GET',
                   credentials: 'include',
-                  headers: token
-                    ? {
-                        Authorization:
-                          `Bearer ${token}`
-                      }
-                    : {}
+                  headers: getAuthenticatedHeaders()
                 }
               );
 

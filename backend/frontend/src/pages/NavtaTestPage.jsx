@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { getAuthenticatedHeaders } from "../utils/portalTest";
 import { contentAPI, curriculumAPI } from "../utils/api";
 import katex from "katex";
 import "katex/dist/katex.min.css";
@@ -1862,24 +1863,9 @@ export default function NavtaTestPage() {
     return "standard";
   };
 
-  const getStoredAuthToken = () => {
-    if (typeof window === "undefined") return "";
-
-    return (
-      window.localStorage.getItem("token") ||
-      window.localStorage.getItem("authToken") ||
-      window.localStorage.getItem("accessToken") ||
-      ""
-    );
-  };
-
-  const buildAttemptHeaders = () => {
-    const token = getStoredAuthToken();
-    return {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-  };
+  const buildAttemptHeaders = () => getAuthenticatedHeaders({
+    "Content-Type": "application/json",
+  });
 
   const beginTrackedAttempt = (durationSeconds, attempt) => {
     if (!attempt?.attemptId || !attempt.scoringPolicy) {
@@ -1949,19 +1935,9 @@ export default function NavtaTestPage() {
     }));
 
     try {
-      const token = getStoredAuthToken();
-
-      const headers = {
-        "Content-Type": "application/json",
-      };
-
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-
       const response = await fetch("/api/mistake-notebook", {
         method: "POST",
-        headers,
+        headers: buildAttemptHeaders(),
         credentials: "include",
         body: JSON.stringify({
           questionId: question._id,
