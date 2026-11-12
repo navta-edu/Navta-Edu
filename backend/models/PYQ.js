@@ -30,6 +30,10 @@ const PYQSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  archivedAt: {
+    type: Date,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -67,6 +67,29 @@ const navtaQuestionSchema = new mongoose.Schema(
       required: true,
     },
 
+    answerMode: {
+      type: String,
+      enum: ["single", "numeric", "multiple"],
+      default: "single",
+    },
+
+    numericAnswer: {
+      value: Number,
+      tolerance: Number,
+    },
+
+    correctAnswers: {
+      type: [Number],
+      default: undefined,
+    },
+
+    caseStudy: {
+      id: String,
+      passage: String,
+      order: Number,
+      size: Number,
+    },
+
     // =====================================================
     // QUESTION
     // =====================================================
@@ -394,7 +417,7 @@ const navtaQuestionSchema = new mongoose.Schema(
 
       validate: {
         validator: function (value) {
-          if (this.questionType !== "mcq") {
+          if (this.questionType !== "mcq" || this.answerMode === "numeric") {
             return true;
           }
 
@@ -421,7 +444,7 @@ const navtaQuestionSchema = new mongoose.Schema(
       max: 3,
 
       required: function () {
-        return this.questionType === "mcq";
+        return this.questionType === "mcq" && this.answerMode === "single";
       },
 
       default: undefined,
@@ -512,6 +535,16 @@ const navtaQuestionSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
+    },
+
+    workflowStatus: {
+      type: String,
+      enum: ["draft", "review", "published", "archived"],
+    },
+
+    imageContentHash: {
+      type: String,
+      select: false,
     },
   },
 
@@ -647,15 +680,25 @@ navtaQuestionSchema.pre(
       this.keyPoints = [];
       this.evaluationInstructions = "";
 
-      if (
-        this.correctAnswer === undefined ||
-        this.correctAnswer === null
-      ) {
-        return next(
-          new Error(
-            "MCQ questions require a correct answer."
-          )
-        );
+      if (this.answerMode === "numeric") {
+        const { value, tolerance } = this.numericAnswer ?? {};
+        if (!Number.isFinite(value) || !Number.isFinite(tolerance) || tolerance < 0) {
+          return next(new Error("Enter a finite numerical answer and a nonnegative tolerance."));
+        }
+        this.options = [];
+      }
+
+      if (this.answerMode === "multiple") {
+        const answers = this.correctAnswers ?? [];
+        if (answers.length < 2 || answers.length > 4 ||
+            new Set(answers).size !== answers.length ||
+            answers.some((answer) => !Number.isInteger(answer) || answer < 0 || answer > 3)) {
+          return next(new Error("Select at least two distinct correct choices."));
+        }
+      }
+
+      if (this.answerMode === "single" && !Number.isInteger(this.correctAnswer)) {
+        return next(new Error("MCQ questions require a correct answer."));
       }
     }
 
@@ -677,6 +720,7 @@ navtaQuestionSchema.pre(
 
       this.options = [];
       this.correctAnswer = undefined;
+      this.answerMode = "single";
 
       if (!this.modelAnswer?.trim()) {
         return next(
@@ -696,6 +740,16 @@ navtaQuestionSchema.pre(
           )
         );
       }
+    }
+
+    if (this.answerMode !== "single") this.correctAnswer = undefined;
+    if (this.answerMode !== "numeric") this.numericAnswer = undefined;
+    if (this.answerMode !== "multiple") this.correctAnswers = undefined;
+
+    const { id, passage, order, size } = this.caseStudy ?? {};
+    if (id && (!passage?.trim() || !Number.isInteger(size) || size < 2 ||
+               !Number.isInteger(order) || order < 0 || order >= size)) {
+      return next(new Error("Invalid case study question position."));
     }
 
     next();
@@ -720,6 +774,9 @@ navtaQuestionSchema.index({
   "sourceDocument.importedByAI": 1,
   createdAt: -1,
 });
+
+navtaQuestionSchema.index({ workflowStatus: 1, createdAt: -1 });
+navtaQuestionSchema.index({ imageContentHash: 1 }, { sparse: true });
 
 // =====================================================
 // EXPORT
