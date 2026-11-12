@@ -13,11 +13,10 @@
   },
   "dependencies": {
     "axios": "^1.18.0",
-    "katex": "^0.16.22",
+    "katex": "^0.19.1",
     "lucide-react": "^1.20.0",
-    "pdfjs-dist": "^5.4.149",
+    "pdfjs-dist": "5.4.296",
     "react": "^19.2.6",
-    "react-katex": "^3.0.1",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.18.0",
     "react-pdf": "^10.2.0",
@@ -38,5 +37,13 @@
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.1",
     "vite": "^8.0.12"
+  },
+  "overrides": {
+    "eslint": {
+      "minimatch": "11.0.8"
+    },
+    "@eslint/config-array": {
+      "minimatch": "11.0.8"
+    }
   }
 }
