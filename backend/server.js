@@ -100,6 +100,7 @@ app.use(
     allowedHeaders: [
       "Content-Type",
       "Authorization",
+      "X-Navta-Portal-Test",
     ],
   })
 );
