@@ -34,15 +34,19 @@ exports.getUsers = async (req, res) => {
   try {
     const { role, search, page, limit } = req.query;
     if ([role, search, page, limit].every((value) => value === undefined)) {
-      const users = await User.find().select(userFields).sort({ createdAt: -1, _id: -1 });
+      const users = await User.find({ portalTestOwner: null }).select(userFields).sort({ createdAt: -1, _id: -1 });
       return res.status(200).json({ success: true, count: users.length, data: users });
     }
 
     const searchText = typeof search === 'string' ? search.trim().slice(0, 120) : '';
     const escapedSearch = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const searchQuery = escapedSearch
-      ? { $or: [{ name: { $regex: escapedSearch, $options: 'i' } }, { email: { $regex: escapedSearch, $options: 'i' } }] }
-      : {};
+    const searchQuery = { portalTestOwner: null };
+    if (escapedSearch) {
+      searchQuery.$or = [
+        { name: { $regex: escapedSearch, $options: 'i' } },
+        { email: { $regex: escapedSearch, $options: 'i' } }
+      ];
+    }
     const query = { ...searchQuery };
 
     if (role && role !== 'all') {
@@ -125,7 +129,7 @@ exports.createUser = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { name, role, isVerified, schoolName, department, stream, address } = req.body;
-    const user = await User.findById(req.params.userId);
+    const user = await User.findOne({ _id: req.params.userId, portalTestOwner: null });
 
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
@@ -169,7 +173,7 @@ exports.updateUser = async (req, res) => {
 exports.updateStudentProfile = async (req, res) => {
   try {
     const { coins, xp, level, stream } = req.body;
-    const student = await Student.findOne({ user: req.params.userId });
+    const student = await Student.findOne({ user: req.params.userId, portalTestOwner: null });
     
     if (!student) {
       return res.status(404).json({ success: false, message: 'Student profile not found' });
@@ -193,7 +197,7 @@ exports.updateStudentProfile = async (req, res) => {
 // @access  Private (Admin)
 exports.deleteUser = async (req, res) => {
   try {
-    const user = await User.findById(req.params.userId);
+    const user = await User.findOne({ _id: req.params.userId, portalTestOwner: null });
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -696,16 +700,26 @@ exports.setRewardArchived = (req, res) => setCatalogArchived(req, res, Reward, '
 // @access  Private (Admin)
 exports.getDashboardStats = async (req, res) => {
   try {
-    const studentsCount = await Student.countDocuments();
-    const teachersCount = await Teacher.countDocuments();
-    const subjectsCount = await Subject.countDocuments();
-    const resultsCount = await Result.countDocuments();
-    const rewardsCount = await Reward.countDocuments();
-
-    // Average performance scoring
-    const results = await Result.find();
-    const totalScorePercent = results.reduce((acc, curr) => acc + curr.percentage, 0);
-    const averageScore = resultsCount > 0 ? Math.round(totalScorePercent / resultsCount) : 0;
+    const [studentsCount, teachersCount, subjectsCount, rewardsCount, resultStats] = await Promise.all([
+      Student.countDocuments({ portalTestOwner: null }),
+      Teacher.countDocuments({ portalTestOwner: null }),
+      Subject.countDocuments(),
+      Reward.countDocuments(),
+      Result.aggregate([
+        {
+          $lookup: {
+            from: User.collection.name,
+            localField: 'user',
+            foreignField: '_id',
+            as: 'resultUser'
+          }
+        },
+        { $match: { 'resultUser.portalTestOwner': null } },
+        { $group: { _id: null, count: { $sum: 1 }, average: { $avg: { $ifNull: ['$percentage', 0] } } } }
+      ])
+    ]);
+    const resultsCount = resultStats[0]?.count || 0;
+    const averageScore = Math.round(resultStats[0]?.average || 0);
 
     res.status(200).json({
       success: true,

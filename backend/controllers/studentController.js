@@ -1380,7 +1380,7 @@ exports.getResultDetail = async (
     if (
       result.user.toString() !==
         req.user.id &&
-      req.user.role === 'student'
+      (req.user.role === 'student' || req.portalTest)
     ) {
       return res.status(403).json({
         success: false,
@@ -1983,7 +1983,10 @@ exports.redeemReward = async (
 // @access  Private
 exports.getLeaderboard = async (req, res) => {
   try {
-    const students = await Student.find()
+    const studentFilter = req.portalTest
+      ? { user: req.user._id, portalTestOwner: req.portalTest.ownerId }
+      : { portalTestOwner: null };
+    const students = await Student.find(studentFilter)
       .populate(
         'user',
         'name'

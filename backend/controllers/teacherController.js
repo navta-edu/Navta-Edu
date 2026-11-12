@@ -1570,16 +1570,20 @@ exports.createTest =
 
 exports.getStudentMetrics = async (req, res) => {
   try {
+    const portalTestOwner = req.portalTest?.ownerId || null;
     const students =
-      await Student.find({})
+      await Student.find({ portalTestOwner })
         .populate(
           'user',
           'name email'
         )
         .lean();
 
+    const resultFilter = req.portalTest
+      ? { user: { $in: students.map((student) => student.user?._id).filter(Boolean) } }
+      : { student: { $in: students.map((student) => student._id) } };
     const results =
-      await Result.find({})
+      await Result.find(resultFilter)
         .populate(
           'test',
           'title subject chapter'
@@ -1588,17 +1592,12 @@ exports.getStudentMetrics = async (req, res) => {
 
     const studentMetrics =
       students.map((student) => {
-        const studentId =
-          String(
-            student._id
-          );
+        const studentId = String(req.portalTest ? student.user?._id : student._id);
 
         const studentResults =
           results.filter(
             (result) =>
-              String(
-                result.student
-              ) === studentId
+              String(req.portalTest ? result.user : result.student) === studentId
           );
 
         const totalTests =

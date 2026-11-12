@@ -5,6 +5,7 @@ const Teacher = require('../models/Teacher');
 const Streak = require('../models/Streak');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
+const { isPortalTestEmail, isPortalTestRole, provisionPortalTestUser } = require('../services/portalTest');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -12,8 +13,8 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const getSignedToken = (id) => {
   return jwt.sign(
     { id },
-    process.env.JWT_SECRET || 'supersecretjwtkeyfornavtaplatform',
-    { expiresIn: '30d' }
+    process.env.JWT_SECRET,
+    { algorithm: 'HS256', expiresIn: '30d' }
   );
 };
 
@@ -55,6 +56,10 @@ exports.register = async (req, res) => {
         success: false,
         message: 'Please provide name, email and password'
       });
+    }
+
+    if ((role !== undefined && !isPortalTestRole(role)) || isPortalTestEmail(email)) {
+      return res.status(400).json({ success: false, message: 'Select a valid account type and email.' });
     }
 
     if (role === 'student' && !classLevel) {
@@ -128,7 +133,7 @@ exports.login = async (req, res) => {
 
     const user = await User.findOne({ email }).select('+password');
 
-    if (!user || !(await user.matchPassword(password))) {
+    if (!user || user.portalTestOwner || !(await user.matchPassword(password))) {
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
@@ -182,14 +187,8 @@ exports.login = async (req, res) => {
 // @route GET /api/auth/me
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
+    res.set('Cache-Control', 'no-store');
+    const user = req.user;
 
     let profile = null;
     let streak = null;
@@ -216,13 +215,29 @@ exports.getMe = async (req, res) => {
         classLevel: user.classLevel || ''
       },
       profile,
-      streak
+      streak,
+      ...(req.portalTest ? { portalTest: { role: req.portalTest.role } } : {})
     });
   } catch (err) {
     return res.status(500).json({
       success: false,
       message: err.message
     });
+  }
+};
+
+exports.startPortalTest = async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const { role } = req.body || {};
+  if (!isPortalTestRole(role)) {
+    return res.status(400).json({ success: false, message: 'Select Student or Educator.' });
+  }
+  try {
+    await provisionPortalTestUser(req.user._id, role);
+    return res.json({ success: true, role });
+  } catch (error) {
+    console.error('Unable to prepare portal test profile:', error.name, error.code);
+    return res.status(500).json({ success: false, message: 'Unable to open the test portal. Please try again.' });
   }
 };
 
@@ -260,7 +275,7 @@ exports.forgotPassword = async (req, res) => {
     const { email } = req.body;
     const user = await User.findOne({ email });
 
-    if (!user) {
+    if (!user || user.portalTestOwner) {
       return res.status(404).json({
         success: false,
         message: 'User with this email does not exist'
@@ -322,6 +337,10 @@ exports.googleAuth = async (req, res) => {
     let user = await User.findOne({
       $or: [{ googleId }, { email }]
     });
+
+    if (user?.portalTestOwner || isPortalTestEmail(email)) {
+      return res.status(401).json({ success: false, message: 'Google authentication failed' });
+    }
 
     if (user) {
       if (!user.googleId) user.googleId = googleId;
@@ -388,7 +407,12 @@ exports.completeProfile = async (req, res) => {
       });
     }
 
-    if (role) user.role = role;
+    if (role !== undefined && role !== user.role) {
+      if (!isPortalTestRole(role) || !isPortalTestRole(user.role)) {
+        return res.status(403).json({ success: false, message: 'This account type cannot be changed here.' });
+      }
+      user.role = role;
+    }
     if (stream) user.stream = stream;
     if (classLevel) user.classLevel = classLevel;
     if (department) user.department = department;
