@@ -10,6 +10,7 @@ import {
   authAPI,
   studentAPI
 } from '../utils/api';
+import { setPortalTestRole } from '../utils/portalTest';
 
 const AuthContext = createContext();
 
@@ -32,6 +33,7 @@ export const AuthProvider = ({ children }) => {
 
   const [error, setError] =
     useState(null);
+  const [portalTest, setPortalTest] = useState(null);
 
   /* ===================================================
      LOAD NAVTA TEST STREAK
@@ -147,6 +149,8 @@ export const AuthProvider = ({ children }) => {
           localStorage.getItem('token');
 
         if (!token) {
+          setPortalTestRole(null);
+          setPortalTest(null);
           setUser(null);
           setProfile(null);
           setStreak(null);
@@ -167,6 +171,7 @@ export const AuthProvider = ({ children }) => {
 
         setUser(currentUser);
         setProfile(currentProfile);
+        setPortalTest(response?.portalTest || null);
 
         await loadStudentStreak(
           currentUser,
@@ -195,6 +200,7 @@ export const AuthProvider = ({ children }) => {
 
           if (!token) {
             if (mounted) {
+              setPortalTestRole(null);
               setUser(null);
               setProfile(null);
               setStreak(null);
@@ -210,9 +216,10 @@ export const AuthProvider = ({ children }) => {
             err
           );
 
-          localStorage.removeItem(
-            'token'
-          );
+          if (err?.response?.status === 401) {
+            localStorage.removeItem('token');
+            setPortalTestRole(null);
+          }
 
           if (mounted) {
             setUser(null);
@@ -246,6 +253,8 @@ export const AuthProvider = ({ children }) => {
     ) => {
       setLoading(true);
       setError(null);
+      setPortalTestRole(null);
+      setPortalTest(null);
 
       try {
         const loginResponse =
@@ -326,6 +335,8 @@ export const AuthProvider = ({ children }) => {
     ) => {
       setLoading(true);
       setError(null);
+      setPortalTestRole(null);
+      setPortalTest(null);
 
       try {
         const loginResponse =
@@ -400,6 +411,8 @@ export const AuthProvider = ({ children }) => {
     ) => {
       setLoading(true);
       setError(null);
+      setPortalTestRole(null);
+      setPortalTest(null);
 
       try {
         const registerResponse =
@@ -468,6 +481,8 @@ export const AuthProvider = ({ children }) => {
   =================================================== */
 
   const logout = () => {
+    setPortalTestRole(null);
+    setPortalTest(null);
     localStorage.removeItem(
       'token'
     );
@@ -576,6 +591,7 @@ export const AuthProvider = ({ children }) => {
         user,
         profile,
         streak,
+        portalTest,
 
         loading,
         error,
