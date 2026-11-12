@@ -355,10 +355,51 @@ function getQuestionImage(question) {
   return visit(question);
 }
 
+function stripVisualMarker(value) {
+  return String(value ?? '').replace(/\[+\s*NAVTA[\s_-]*VISUAL\s*\]+/gi, '').trim();
+}
+
+function getQuestionDisplay(question) {
+  const rawText = String(question.question ?? '').trim();
+  const text = stripVisualMarker(rawText);
+  const image = getQuestionImage(question);
+  const isCrop = question.imageCropSource === 'admin-pdf-crop' || (!text && rawText !== '');
+  const options = Array.isArray(question.options) ? question.options : [];
+  const hasPrintedOptions = isCrop && options.length === 4 &&
+    options.every((option, index) => option === 'ABCD'[index]);
+
+  return {
+    text: text || (image ? '' : 'Question image unavailable.'),
+    image,
+    imageAlt: isCrop ? 'Cropped question' : 'Question diagram',
+    options: hasPrintedOptions ? [] : options
+  };
+}
+
+function QuestionImage({ src, alt }) {
+  return src ? (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      className="mt-2 block h-auto max-w-full rounded-md bg-white"
+    />
+  ) : null;
+}
+
+function SelectedQuestionPreview({ question }) {
+  const { text, image, imageAlt } = getQuestionDisplay(question);
+  return (
+    <div className="min-w-0 flex-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+      {text}
+      <QuestionImage src={image} alt={imageAlt} />
+    </div>
+  );
+}
+
 function renderPaperText(value = '') {
-  let text = normaliseNavtaLatex(String(value ?? ''));
-  // Hide the internal marker only; the saved diagram is inserted separately.
-  text = text.replace(/\[+\s*NAVTA[\s_-]*VISUAL\s*\]+/gi, '');
+  let text = normaliseNavtaLatex(stripVisualMarker(value));
   text = text.replace(/<br\s*\/?\s*>/gi, '\n');
 
   // Imported question-bank strings sometimes contain TeX commands without math
@@ -963,7 +1004,7 @@ export default function QuestionPaperBuilder() {
                 normalizeQuestionType(
                   question.questionType
                 );
-              const questionImage = getQuestionImage(question);
+              const { text, image, imageAlt, options } = getQuestionDisplay(question);
               const passage = question.caseStudy?.passage &&
                 selectedQuestions[index - 1]?.caseStudy?.id !== question.caseStudy.id
                 ? `<p class="case-passage"><strong>Case study</strong><br>${renderPaperText(question.caseStudy.passage)}</p>`
@@ -974,13 +1015,13 @@ export default function QuestionPaperBuilder() {
 
               if (
                 type === 'mcq' &&
-                question.options?.length > 0
+                options.length > 0
               ) {
                 optionsHtml = `
                   <div class="options">
                     ${question.answerMode === 'multiple' ? '<p>Select all correct choices.</p>' : ''}
 
-                    ${question.options
+                    ${options
                       .map(
                         (
                           option,
@@ -1021,7 +1062,7 @@ export default function QuestionPaperBuilder() {
                         ${index + 1}.
                       </strong>
 
-                      ${renderPaperText(question.question)}
+                      ${renderPaperText(text)}
 
                     </div>
 
@@ -1041,7 +1082,7 @@ export default function QuestionPaperBuilder() {
 
                   </div>
 
-                  ${questionImage ? `<div class="question-image-wrap"><img class="question-image" src="${escapeHtml(questionImage)}" alt="Question diagram" /></div>` : ''}
+                  ${image ? `<div class="question-image-wrap"><img class="question-image" src="${escapeHtml(image)}" alt="${imageAlt}" /></div>` : ''}
 
                   ${optionsHtml}
 
@@ -2102,6 +2143,7 @@ export default function QuestionPaperBuilder() {
                         isSelected(
                           question._id
                         );
+                      const { text, image, imageAlt, options } = getQuestionDisplay(question);
 
                       return (
                         <button
@@ -2230,16 +2272,16 @@ export default function QuestionPaperBuilder() {
                                 "
                               >
                                 {index + 1}.{' '}
-                                {question.question}
+                                {text}
                               </p>
+
+                              <QuestionImage src={image} alt={imageAlt} />
 
                               {normalizeQuestionType(
                                 question.questionType
                               ) ===
                                 'mcq' &&
-                                Array.isArray(
-                                  question.options
-                                ) && (
+                                options.length > 0 && (
                                   <div
                                     className="
                                       mt-3
@@ -2249,7 +2291,7 @@ export default function QuestionPaperBuilder() {
                                       gap-2
                                     "
                                   >
-                                    {question.options.map(
+                                    {options.map(
                                       (
                                         option,
                                         optionIndex
@@ -2615,17 +2657,7 @@ export default function QuestionPaperBuilder() {
                         {index + 1}
                       </span>
 
-                      <p
-                        className="
-                          flex-1
-                          text-xs
-                          font-semibold
-                          text-slate-700
-                          dark:text-slate-200
-                        "
-                      >
-                        {question.question}
-                      </p>
+                      <SelectedQuestionPreview question={question} />
 
                       <button
                         type="button"
