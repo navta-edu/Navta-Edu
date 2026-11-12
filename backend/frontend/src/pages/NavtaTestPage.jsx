@@ -2,11 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { contentAPI, curriculumAPI } from "../utils/api";
-import {
-  InlineMath,
-  BlockMath,
-} from "react-katex";
-
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import "katex/contrib/mhchem";
