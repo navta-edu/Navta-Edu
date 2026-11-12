@@ -1,4 +1,5 @@
 import React, {
+  memo,
   useEffect,
   useMemo,
   useState
@@ -24,6 +25,10 @@ import {
   ChevronDown,
   RefreshCw
 } from 'lucide-react';
+
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+import 'katex/contrib/mhchem';
 
 // =====================================================
 // FILTER VALUES
@@ -167,6 +172,12 @@ function escapeHtml(value = '') {
 const NAVTA_LATEX_COMMANDS =
   "begin|end|sum|prod|int|iint|iiint|oint|lim|frac|dfrac|tfrac|sqrt|binom|cdot|times|div|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|sin|cos|tan|cot|sec|csc|log|ln|exp|det|text|mathrm|mathbf|mathit|mathbb|mathcal|left|right|neq|ne|leq|geq|approx|equiv|sim|propto|pm|mp|infty|vec|overrightarrow|overleftarrow|hat|bar|dot|ddot|partial|nabla|rightarrow|leftarrow|leftrightarrow|Rightarrow|Leftarrow|Leftrightarrow|therefore|because|in|notin|subset|subseteq|supset|supseteq|cup|cap|emptyset|forall|exists|degree|circ|angle|perp|parallel|ce|pu";
 
+const escapedCommands = new RegExp(
+  '\\\\+(begin|end)(?=\\{(?:[pbBvV]?matrix|smallmatrix|cases|array|aligned|alignedat|gathered|split)\\})' +
+  '|\\\\{2,}(?=(?:' + NAVTA_LATEX_COMMANDS + ')\\b)',
+  'g'
+);
+
 function normaliseNavtaLatex(input = '') {
   let value = String(input ?? '')
     .replace(/```(?:latex|tex|math)?/gi, '')
@@ -177,14 +188,21 @@ function normaliseNavtaLatex(input = '') {
 
   if (!value) return '';
 
-  // Repair double-escaped LaTeX copied through JSON/API serialization.
-  // Collapse doubled slashes before commands and math delimiters, while leaving
-  // matrix line breaks and other intentional \ separators alone.
-  value = value
-    .replace(/\\\\(?=[A-Za-z])/g, '\\')
-    .replace(/\\\\(?=[()[\]])/g, '\\')
-    .replace(/\\\\(?=\$)/g, '\\');
-  value = value.replace(/\\\s+(?=[A-Za-z])/g, '\\');
+  // Repair extra escapes in imported commands without removing matrix rows.
+  let rowDepth = 0;
+  value = value.replace(escapedCommands, (match, boundary) => {
+    if (boundary === 'begin') {
+      rowDepth += 1;
+      return rowDepth === 1 ? '\\begin' : match;
+    }
+    if (boundary === 'end') {
+      rowDepth = Math.max(0, rowDepth - 1);
+      return '\\end';
+    }
+    return rowDepth ? match : '\\';
+  });
+  value = value.replace(/\\{2,}(?=[()[\]$])/g, '\\');
+  value = value.replace(/(?<!\\)\\[ \t]+(?=[A-Za-z])/g, '\\');
   value = value
     .replace(/\\cdotp\b/g, '\\cdot')
     .replace(/\\operatorname\s*\{C\}/g, 'C')
@@ -227,9 +245,9 @@ function normaliseNavtaLatex(input = '') {
   // when imported questions contain malformed sizing commands. The sizing is
   // optional, so remove these commands while preserving the delimiters themselves.
   value = value
-    .replace(/\\left\s*/g, '')
-    .replace(/\\right\s*/g, '')
-    .replace(/\\middle\s*/g, '');
+    .replace(/\\left\b\s*/g, '')
+    .replace(/\\right\b\s*/g, '')
+    .replace(/\\middle\b\s*/g, '');
 
   // Repair common unescaped fraction spellings from OCR/imported records.
   value = value
@@ -392,15 +410,18 @@ function SelectedQuestionPreview({ question }) {
   const { text, image, imageAlt } = getQuestionDisplay(question);
   return (
     <div className="min-w-0 flex-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
-      {text}
+      <PaperMathText value={text} />
       <QuestionImage src={image} alt={imageAlt} />
     </div>
   );
 }
 
-function renderPaperText(value = '') {
+function preparePaperMath(value = '') {
   let text = normaliseNavtaLatex(stripVisualMarker(value));
   text = text.replace(/<br\s*\/?\s*>/gi, '\n');
+  if (/^Assertion\s*\(A\)\s*:/i.test(text)) {
+    text = text.replace(/\s*(Reason\s*\(R\)\s*:)/i, '\n$1');
+  }
 
   // Imported question-bank strings sometimes contain TeX commands without math
   // delimiters, or have only one side of a \( ... \) delimiter. Repair those
@@ -426,12 +447,44 @@ function renderPaperText(value = '') {
     text = `\\(${text}\\)`;
   }
 
-  // Convert bare common fraction spellings even if the source omitted the slash.
-  text = text
-    .replace(/(^|[^\\A-Za-z])frac(?=\s*\{)/g, '$1\\frac')
-    .replace(/\\\\(?=(?:frac|sqrt|left|right|text|mathrm|sin|cos|tan|log|ln)\b)/g, '\\');
+  return text;
+}
 
-  return escapeHtml(text).replace(/\r?\n/g, '<br />');
+const paperMathSegments = /(\$\$[\s\S]+?\$\$|(?<!\\)\$(?!\$)(?:\\[\s\S]|[^$\\])+\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])/g;
+
+const PaperMathText = memo(function PaperMathText({ value }) {
+  return (
+    <span className="whitespace-pre-wrap">
+      {preparePaperMath(value).split(paperMathSegments).map((part, index) => {
+        if (index % 2 === 0) return part;
+
+        const displayMode = part.startsWith('$$') || part.startsWith('\\[');
+        const delimiterLength = part.startsWith('\\') || displayMode ? 2 : 1;
+        const equation = part.slice(delimiterLength, -delimiterLength);
+        try {
+          const html = katex.renderToString(equation, {
+            displayMode,
+            throwOnError: true,
+            strict: 'ignore',
+            trust: false
+          });
+          return (
+            <span
+              key={index}
+              className={displayMode ? 'block max-w-full overflow-x-auto' : 'inline-block max-w-full overflow-x-auto align-middle'}
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          );
+        } catch {
+          return <span key={index}>[Equation unavailable]</span>;
+        }
+      })}
+    </span>
+  );
+});
+
+function renderPaperText(value = '') {
+  return escapeHtml(preparePaperMath(value)).replace(/\r?\n/g, '<br />');
 }
 
 // =====================================================
@@ -1110,8 +1163,8 @@ export default function QuestionPaperBuilder() {
           <script>
             window.MathJax = {
               tex: {
-                inlineMath: [['$','$'], ['\\(','\\)']],
-                displayMath: [['$$','$$'], ['\\[','\\]']],
+                inlineMath: [['$','$'], ['\\\\(','\\\\)']],
+                displayMath: [['$$','$$'], ['\\\\[','\\\\]']],
                 processEscapes: true,
                 packages: {'[+]': ['ams', 'mhchem']}
               },
@@ -2257,7 +2310,7 @@ export default function QuestionPaperBuilder() {
                                 <p className="mb-2 whitespace-pre-wrap text-sm">
                                   <strong>Case study</strong>
                                   <br />
-                                  {question.caseStudy.passage}
+                                  <PaperMathText value={question.caseStudy.passage} />
                                 </p>
                               )}
 
@@ -2272,7 +2325,7 @@ export default function QuestionPaperBuilder() {
                                 "
                               >
                                 {index + 1}.{' '}
-                                {text}
+                                <PaperMathText value={text} />
                               </p>
 
                               <QuestionImage src={image} alt={imageAlt} />
@@ -2319,7 +2372,7 @@ export default function QuestionPaperBuilder() {
                                             .
                                           </strong>{' '}
 
-                                          {option}
+                                          <PaperMathText value={option} />
                                         </div>
                                       )
                                     )}
