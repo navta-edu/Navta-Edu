@@ -31,5 +31,10 @@
     "nodemon": "^3.1.0"
   },
   "author": "Navta Team",
-  "license": "ISC"
+  "license": "ISC",
+  "overrides": {
+    "nodemon": {
+      "minimatch": "11.0.8"
+    }
+  }
 }
