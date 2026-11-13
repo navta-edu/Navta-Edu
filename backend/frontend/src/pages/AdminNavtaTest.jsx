@@ -11,6 +11,7 @@ import "katex/dist/katex.min.css";
 import "katex/contrib/mhchem";
 import AdvancedQuestionAuthoring from "../components/AdvancedQuestionAuthoring";
 import QuestionBankEditor from "../components/QuestionBankEditor";
+import QuestionAttachments, { getQuestionAttachments, questionAttachmentRequest } from "../components/QuestionAttachments";
 
 const questionStatusLabels = {
   draft: "Draft",
@@ -1416,19 +1417,10 @@ function getNavtaQuestionImage(question = {}) {
 }
 
 function NavtaVisual({
-  question,
+  image,
   className = "",
   shellClassName = "",
 }) {
-  const image =
-    getNavtaQuestionImage(
-      question
-    );
-
-  if (!image?.url) {
-    return null;
-  }
-
   return (
     <div
       className={
@@ -1443,7 +1435,7 @@ function NavtaVisual({
     >
       <img
         src={image.url}
-        alt={image.altText}
+        alt={image.altText || "Question image"}
         className={className}
         loading="eager"
         decoding="async"
@@ -1474,80 +1466,17 @@ function NavtaQuestionContent({
       question?.question || ""
     );
 
-  const image =
-    getNavtaQuestionImage(
-      question
-    );
-
-  if (!image?.url) {
-    return (
-      <>
-        {renderNavtaContent(
-          text
-            .split(
-              NAVTA_VISUAL_MARKER
-            )
-            .join("")
-            .trim()
-        )}
-      </>
-    );
-  }
-
-  if (
-    !text.includes(
-      NAVTA_VISUAL_MARKER
-    )
-  ) {
-    return (
-      <>
-        {renderNavtaContent(
-          text
-        )}
-
-        <NavtaVisual
-          question={question}
-          className={
-            visualClassName
-          }
-          shellClassName={
-            visualShellClassName
-          }
-        />
-      </>
-    );
-  }
-
-  const [
-    beforeVisual,
-    ...afterParts
-  ] =
-    text.split(
-      NAVTA_VISUAL_MARKER
-    );
-
-  const afterVisual =
-    afterParts.join("");
+  const images = getQuestionAttachments(question);
+  const fallback = images.length ? null : getNavtaQuestionImage(question);
+  if (fallback) images.push(fallback);
+  const imageOnly = images.length > 0 && question.imageCropSource === "admin-pdf-crop";
+  const [beforeVisual, ...afterParts] = text.split(NAVTA_VISUAL_MARKER);
 
   return (
     <>
-      {renderNavtaContent(
-        beforeVisual
-      )}
-
-      <NavtaVisual
-        question={question}
-        className={
-          visualClassName
-        }
-        shellClassName={
-          visualShellClassName
-        }
-      />
-
-      {renderNavtaContent(
-        afterVisual
-      )}
+      {!imageOnly && renderNavtaContent(images.length ? beforeVisual : [beforeVisual, ...afterParts].join(""))}
+      {images.map(image => <NavtaVisual key={image.url} image={image} className={visualClassName} shellClassName={visualShellClassName} />)}
+      {!imageOnly && images.length > 0 && renderNavtaContent(afterParts.join(""))}
     </>
   );
 }
@@ -1631,6 +1560,7 @@ export default function AdminNavtaTest() {
 
   const [form, setForm] =
     useState(emptyForm);
+  const [manualAttachments, setManualAttachments] = useState([]);
 
   const isWrittenQuestion = form.exam === "Boards" && form.questionType !== "mcq";
   const isAssertionReason = form.questionFormat === "assertion-reason";
@@ -1871,20 +1801,26 @@ export default function AdminNavtaTest() {
       }
     };
 
-  const requestBankAction = async (question, path, body) => {
+  const requestBankAction = async (question, path, body, attachments = null) => {
+    const payload = { updatedAt: question.updatedAt ?? null, version: question.__v ?? null, ...body };
+    const request = body
+      ? attachments === null
+        ? { body: JSON.stringify(payload), headers: { "Content-Type": "application/json" } }
+        : questionAttachmentRequest(payload, attachments, true)
+      : {};
     const response = await fetch(`/api/navta-test/questions/${question._id}${path}`, {
       method: body ? "PATCH" : "GET",
       credentials: "include",
-      headers: buildAdminHeaders(body ? { "Content-Type": "application/json" } : {}),
-      ...(body ? { body: JSON.stringify({ updatedAt: question.updatedAt ?? null, version: question.__v ?? null, ...body }) } : {}),
+      body: request.body,
+      headers: buildAdminHeaders(request.headers),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || "The question could not be updated.");
     return data;
   };
 
-  const saveBankQuestion = async (question, changes) => {
-    const data = await requestBankAction(question, "", { changes });
+  const saveBankQuestion = async (question, changes, attachments) => {
+    const data = await requestBankAction(question, "", { changes }, attachments);
     setBankDialog(null);
     await fetchSavedQuestions(appliedQuestionFilters, bankPagination.page);
     setBankDuplicates(data.duplicates || []);
@@ -2384,20 +2320,7 @@ export default function AdminNavtaTest() {
       setMessageType("");
 
       try {
-        const response =
-          await fetch(
-            "/api/navta-test/questions",
-            {
-              method: "POST",
-
-              headers:
-                buildAdminHeaders({
-                  "Content-Type":
-                    "application/json",
-                }),
-
-              body:
-                JSON.stringify({
+        const request = questionAttachmentRequest({
                   workflowStatus,
                   subject:
                     form.subject,
@@ -2494,9 +2417,12 @@ export default function AdminNavtaTest() {
 
                   explanation:
                     form.explanation.trim(),
-                }),
-            }
-          );
+        }, manualAttachments);
+        const response = await fetch("/api/navta-test/questions", {
+          method: "POST",
+          headers: buildAdminHeaders(request.headers),
+          body: request.body,
+        });
 
         let data = {};
 
@@ -2526,6 +2452,7 @@ export default function AdminNavtaTest() {
         setForm(
           emptyForm
         );
+        setManualAttachments([]);
       } catch (error) {
         console.error(
           "Navta TEST admin error:",
@@ -6864,8 +6791,8 @@ export default function AdminNavtaTest() {
 
                           {getNavtaQuestionImage(question)?.url && (
                             <div className="admin-navta-image-actions">
-                              <button type="button" className="admin-navta-image-edit-button" onClick={() => openImageCropEditor(question)}>✂ Edit / Crop Image</button>
-                              <button type="button" className="admin-navta-image-reset-button" onClick={() => resetSavedQuestionImage(question)}>↺ Reset to AI Crop</button>
+                              <button type="button" className="admin-navta-image-edit-button" onClick={() => openImageCropEditor(question)}>Crop first image</button>
+                              {question.originalAIQuestionImage?.url && <button type="button" className="admin-navta-image-reset-button" onClick={() => resetSavedQuestionImage(question)}>Restore original crop</button>}
                             </div>
                           )}
 
@@ -7309,6 +7236,10 @@ export default function AdminNavtaTest() {
                     </>
                   )}
 
+                  <div className="admin-navta-field full">
+                    <QuestionAttachments images={manualAttachments} onChange={setManualAttachments} disabled={loading} />
+                  </div>
+
                   {!isWrittenQuestion && (
                     <>
                       {[
@@ -7559,9 +7490,7 @@ export default function AdminNavtaTest() {
           onClose={() => setBankDialog(null)}
           onSave={saveBankQuestion}
           renderText={renderNavtaContent}
-          renderQuestion={question => question.imageCropSource === "admin-pdf-crop" && getNavtaQuestionImage(question)?.url
-            ? <NavtaVisual question={question} className="admin-navta-question-preview-image" shellClassName="admin-navta-question-preview-image-shell" />
-            : <NavtaQuestionContent question={question} visualClassName="admin-navta-question-preview-image" visualShellClassName="admin-navta-question-preview-image-shell" />}
+          renderQuestion={question => <NavtaQuestionContent question={question} visualClassName="admin-navta-question-preview-image" visualShellClassName="admin-navta-question-preview-image-shell" />}
         />
       )}
 
