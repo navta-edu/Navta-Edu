@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import QuestionAttachments, { getQuestionAttachments } from "./QuestionAttachments";
 
 const choices = ["A", "B", "C", "D"];
 const fieldClass = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900";
@@ -27,6 +28,7 @@ function makeDraft(question) {
 export default function QuestionBankEditor({ question, mode, onClose, onSave, renderQuestion, renderText }) {
   const dialog = useRef(null);
   const [draft, setDraft] = useState(() => makeDraft(question));
+  const [attachments, setAttachments] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [showFeedback, setShowFeedback] = useState(false);
@@ -65,7 +67,7 @@ export default function QuestionBankEditor({ question, mode, onClose, onSave, re
     }
 
     try {
-      await onSave(question, changes);
+      await onSave(question, changes, attachments);
     } catch (failure) {
       setError(failure.message);
       setSaving(false);
@@ -135,6 +137,7 @@ export default function QuestionBankEditor({ question, mode, onClose, onSave, re
           <EditField label="Question text">
             <textarea rows={4} className={fieldClass} value={draft.question} onChange={event => update("question", event.target.value)} required />
           </EditField>
+          <QuestionAttachments images={attachments ?? getQuestionAttachments(question)} onChange={setAttachments} disabled={saving} />
           <EditField label="Explanation shown to students">
             <textarea rows={3} className={fieldClass} value={draft.explanation} onChange={event => update("explanation", event.target.value)} />
           </EditField>
