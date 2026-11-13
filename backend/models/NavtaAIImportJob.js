@@ -41,6 +41,8 @@ const navtaAIImportJobSchema = new mongoose.Schema(
         trim: true,
         default: "",
       },
+      completedPages: { type: Number, min: 0 },
+      totalPages: { type: Number, min: 1 },
     },
 
     result: {
