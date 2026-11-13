@@ -34,6 +34,7 @@ const { getScoringPolicies, updateScoringPolicy } = require("../controllers/navt
 const { findDuplicates, transitionQuestion, updateQuestion } = require("../controllers/navtaQuestionBankController");
 const { buildQuestionBankFilter } = require("../services/navtaQuestionBankService");
 const { recordAdminActivity } = require("../services/adminActivity");
+const { readQuestionAttachments } = require("../services/navtaQuestionAttachments");
 
 const {
   protect,
@@ -46,6 +47,7 @@ router.post(
   "/questions",
   protect,
   authorizeRoles("admin"),
+  readQuestionAttachments,
   createQuestion
 );
 
@@ -170,7 +172,7 @@ router.get(
 );
 
 router.get("/questions/:id/duplicates", protect, authorizeRoles("admin"), findDuplicates);
-router.patch("/questions/:id", protect, authorizeRoles("admin"), updateQuestion);
+router.patch("/questions/:id", protect, authorizeRoles("admin"), readQuestionAttachments, updateQuestion);
 router.patch("/questions/:id/workflow", protect, authorizeRoles("admin"), transitionQuestion);
 
 router.delete(
