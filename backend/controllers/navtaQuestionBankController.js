@@ -2,6 +2,11 @@ const { isObjectIdOrHexString } = require("mongoose");
 const NavtaQuestion = require("../models/NavtaQuestion");
 const { recordAdminActivity } = require("../services/adminActivity");
 const {
+  planQuestionAttachments,
+  uploadQuestionAttachments,
+  discardUploadedAttachments,
+} = require("../services/navtaQuestionAttachments");
+const {
   findQuestionDuplicates,
   getWorkflowStatus,
   workflowFields,
@@ -126,6 +131,8 @@ function responseQuestion(question) {
 }
 
 async function updateQuestion(req, res) {
+  const uploadedIds = [];
+  let persisted = false;
   try {
     const question = await readQuestion(req.params.id);
     const { updatedAt, version, changes } = req.body || {};
@@ -134,7 +141,23 @@ async function updateQuestion(req, res) {
       throw requestError(400, "Question changes are required.");
     }
     applyEditableFields(question, changes);
+    const imagePlan = planQuestionAttachments(changes.attachments, req.files, question);
+    if (imagePlan && !imagePlan.length && !question.question.replace(/\[\[NAVTA_VISUAL\]\]/gi, "").trim()) {
+      throw requestError(400, "Keep an image or enter the question text.");
+    }
     await validateQuestion(question);
+    if (imagePlan) {
+      const images = await uploadQuestionAttachments(imagePlan, uploadedIds);
+      const primaryChanged = question.questionImage?.url !== images[0]?.url;
+      question.questionImage = images[0] || null;
+      question.questionImages = images;
+      if (primaryChanged) {
+        question.originalAIQuestionImage = null;
+        question.adminImageCrop = null;
+        question.imageContentHash = undefined;
+        question.imageCropSource = "ai";
+      }
+    }
     const duplicates = await findQuestionDuplicates(question, { excludeId: question._id });
     const update = question.getChanges();
     const changed = Object.keys(update).length > 0;
@@ -142,9 +165,11 @@ async function updateQuestion(req, res) {
       ? await NavtaQuestion.findOneAndUpdate(versionFilter(question), { ...update, $inc: { ...update.$inc, __v: 1 } }, { new: true })
       : question;
     if (!saved) throw requestError(409, "This question changed. Refresh the question bank before saving.");
+    persisted = true;
     if (changed) await recordAdminActivity(req.user, "Updated", "NAVTA TEST question", saved._id);
     return res.json({ success: true, question: responseQuestion(saved), duplicates });
   } catch (error) {
+    if (!persisted) await discardUploadedAttachments(uploadedIds);
     return respondWithError(res, error);
   }
 }

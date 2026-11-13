@@ -6,6 +6,12 @@ const NavtaTestAttempt = require("../models/NavtaTestAttempt");
 const { createAttempt, findAttempt } = require("../services/navtaAttempts");
 const { gradeQuestion, parseNumber, roundMarks, writtenAnswerDigest } = require("../services/navtaScoring");
 const { selectStandardQuestions, publicQuestion } = require("../services/navtaStandardQuestions");
+const {
+  getSavedAttachments,
+  planQuestionAttachments,
+  uploadQuestionAttachments,
+  discardUploadedAttachments,
+} = require("../services/navtaQuestionAttachments");
 
 const BATTLE_QUESTION_FILTER = {
   answerMode: { $in: [null, "single"] },
@@ -1306,9 +1312,10 @@ exports.cropAIQuestionImage = async (
       });
     }
 
+    const savedImages = getSavedAttachments(question);
     const currentImage =
       normalizeQuestionImage(
-        question.questionImage,
+        savedImages[0],
         {
           altText:
             question.visualDescription ||
@@ -1387,8 +1394,7 @@ exports.cropAIQuestionImage = async (
     question.questionImage =
       nextImage;
 
-    question.questionImages =
-      [nextImage];
+    question.questionImages = [nextImage, ...savedImages.slice(1)];
 
     question.hasVisual =
       true;
@@ -1410,8 +1416,7 @@ exports.cropAIQuestionImage = async (
         "imageCropSource"
       )
     ) {
-      question.imageCropSource =
-        "admin-ai-crop";
+      if (question.imageCropSource !== "admin-pdf-crop") question.imageCropSource = "admin-ai-crop";
     }
 
     if (
@@ -1433,14 +1438,12 @@ exports.cropAIQuestionImage = async (
       questionImage:
         nextImage,
 
-      questionImages:
-        [nextImage],
+      questionImages: question.questionImages,
 
       crop:
         cropBox,
 
-      imageCropSource:
-        "admin-ai-crop",
+      imageCropSource: question.imageCropSource,
     });
   } catch (error) {
     console.error(
@@ -1495,11 +1498,11 @@ exports.resetAIQuestionImage = async (
       });
     }
 
+    const savedImages = getSavedAttachments(question);
     question.questionImage =
       original;
 
-    question.questionImages =
-      [original];
+    question.questionImages = [original, ...savedImages.slice(1).filter(image => image.url !== original.url)];
 
     question.hasVisual =
       true;
@@ -1509,8 +1512,7 @@ exports.resetAIQuestionImage = async (
         "imageCropSource"
       )
     ) {
-      question.imageCropSource =
-        "ai";
+      if (question.imageCropSource !== "admin-pdf-crop") question.imageCropSource = "ai";
     }
 
     if (
@@ -1532,11 +1534,9 @@ exports.resetAIQuestionImage = async (
       questionImage:
         original,
 
-      questionImages:
-        [original],
+      questionImages: question.questionImages,
 
-      imageCropSource:
-        "ai",
+      imageCropSource: question.imageCropSource,
     });
   } catch (error) {
     console.error(
@@ -2048,6 +2048,8 @@ exports.createStructuredQuestions = async (req, res) => {
 };
 
 exports.createQuestion = async (req, res) => {
+  const uploadedIds = [];
+  let persisted = false;
   try {
     const {
       subject,
@@ -2304,12 +2306,19 @@ exports.createQuestion = async (req, res) => {
         ).trim();
     }
 
+    const imagePlan = planQuestionAttachments(req.body.attachments, req.files);
+    if (imagePlan?.length) {
+      await new NavtaQuestion(payload).validate();
+      payload.questionImages = await uploadQuestionAttachments(imagePlan, uploadedIds);
+      payload.questionImage = payload.questionImages[0];
+    }
     const duplicates = await findQuestionDuplicates(payload);
     const newQuestion =
       await NavtaQuestion.create(
         payload
       );
 
+    persisted = true;
     await recordAdminActivity(req.user, "Created", "NAVTA TEST question", newQuestion._id);
     return res.status(201).json({
       success: true,
@@ -2319,15 +2328,16 @@ exports.createQuestion = async (req, res) => {
       duplicates,
     });
   } catch (error) {
+    if (!persisted) await discardUploadedAttachments(uploadedIds);
     console.error(
       "CREATE NAVTA QUESTION ERROR:",
       error
     );
 
-    return res.status(error.statusCode || 500).json({
+    return res.status(error.statusCode || (error.name === "ValidationError" ? 400 : 500)).json({
       success: false,
       message:
-        error.statusCode === 400 ? error.message : "Failed to add question.",
+        error.statusCode || error.name === "ValidationError" ? error.message : "Failed to add question.",
       error: error.message,
     });
   }
