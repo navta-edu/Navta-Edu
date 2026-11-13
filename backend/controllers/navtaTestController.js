@@ -2446,7 +2446,29 @@ exports.importQuestionsWithAI = async (req, res) => {
       exam = "",
       classLevel = "",
       chapter = "",
+      startPage,
+      endPage,
     } = req.body || {};
+
+    const fileType = String(req.file.originalname || "").split(".").pop().toLowerCase();
+    const readPage = (value) => {
+      if (value === undefined || value === null || value === "") return undefined;
+      if (typeof value !== "number" && (typeof value !== "string" || !/^\d+$/.test(value.trim()))) return NaN;
+      const page = Number(value);
+      return Number.isSafeInteger(page) && page > 0 ? page : NaN;
+    };
+    const firstPage = readPage(startPage);
+    const lastPage = readPage(endPage);
+    if (Number.isNaN(firstPage) || Number.isNaN(lastPage) ||
+        (firstPage !== undefined && lastPage !== undefined && firstPage > lastPage)) {
+      return res.status(400).json({
+        success: false,
+        message: "Enter positive whole page numbers with the first page on or before the last page.",
+      });
+    }
+    if (fileType !== "pdf" && (firstPage !== undefined || lastPage !== undefined)) {
+      return res.status(400).json({ success: false, message: "Page ranges are available for PDF files." });
+    }
 
     const adminUserId =
       req.user?._id ||
@@ -2456,10 +2478,7 @@ exports.importQuestionsWithAI = async (req, res) => {
     const job = await NavtaAIImportJob.create({
       status: "queued",
       fileName: req.file.originalname || "",
-      fileType: String(req.file.originalname || "")
-        .split(".")
-        .pop()
-        .toLowerCase(),
+      fileType,
       createdBy: adminUserId || undefined,
       progress: {
         stage: "queued",
@@ -2481,10 +2500,7 @@ exports.importQuestionsWithAI = async (req, res) => {
       message: "NAVTA AI analysis started.",
     });
 
-    const uploadedFile = {
-      ...req.file,
-      buffer: Buffer.from(req.file.buffer),
-    };
+    const uploadedFile = req.file;
 
     const hints = {
       subject,
@@ -2515,9 +2531,24 @@ exports.importQuestionsWithAI = async (req, res) => {
           `NAVTA AI async import started: ${uploadedFile.originalname} job=${jobId}`
         );
 
+        // The scanner throttles progress reports. Serialize writes and leave
+        // a terminal job untouched even if a progress callback is still queued.
+        let progressWrite = Promise.resolve();
+        const onProgress = (progress) => {
+          progressWrite = progressWrite.then(() =>
+            NavtaAIImportJob.updateOne({ _id: jobId, status: "processing" }, { $set: { progress } })
+          ).catch((error) => {
+            console.warn("NAVTA could not update scan progress:", error?.name);
+          });
+          return progressWrite;
+        };
+
         const result = await analyseNavtaImport({
           file: uploadedFile,
           ...hints,
+          startPage: firstPage,
+          endPage: lastPage,
+          onProgress,
         });
 
         const acceptedQuestions =
@@ -2626,10 +2657,10 @@ exports.getAIImportJob = async (req, res) => {
   try {
     const jobId = String(req.params?.jobId || "").trim();
 
-    if (!jobId) {
+    if (!/^[0-9a-f]{24}$/i.test(jobId)) {
       return res.status(400).json({
         success: false,
-        message: "NAVTA AI import job ID is required.",
+        message: "A valid NAVTA AI import job ID is required.",
       });
     }
 
