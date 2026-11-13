@@ -45,7 +45,37 @@ const normalizeScale = (scale) => {
 const normalizeMaxPages = (maxPages) => {
   const value = Number(maxPages);
   if (!Number.isFinite(value) || value <= 0) return 250;
-  return Math.floor(value);
+  return Math.max(1, Math.floor(value));
+};
+
+const invalidPageRange = (message) => Object.assign(new Error(message), { statusCode: 400 });
+
+const readPageNumber = (value, label, fallback) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  const number = typeof value === "string" && /^\d+$/.test(value.trim())
+    ? Number(value)
+    : value;
+  if (!Number.isSafeInteger(number) || number < 1) {
+    throw invalidPageRange(`${label} must be a positive whole number.`);
+  }
+  return number;
+};
+
+const readSupportingPageText = async (page) => {
+  const limit = 3500;
+  try {
+    const content = await page.getTextContent();
+    let text = "";
+    for (const item of content.items) {
+      if (typeof item.str !== "string") continue;
+      text += item.str.slice(0, limit - text.length) + (item.hasEOL ? "\n" : " ");
+      if (text.length >= limit) break;
+    }
+    return text.slice(0, limit).trim();
+  } catch {
+    // The page image remains the source for PDFs without usable text.
+    return "";
+  }
 };
 
 const renderPdfPageToPng = async ({ page, scale = 2.4 }) => {
@@ -53,7 +83,18 @@ const renderPdfPageToPng = async ({ page, scale = 2.4 }) => {
     throw new Error("A valid PDF page is required.");
   }
 
-  const safeScale = normalizeScale(scale);
+  const source = page.getViewport({ scale: 1 });
+  if (!Number.isFinite(source.width) || !Number.isFinite(source.height) ||
+      source.width <= 0 || source.height <= 0) {
+    throw new Error("The PDF page size is invalid.");
+  }
+  // Keep ordinary pages at their requested resolution and bound canvas
+  // allocation for oversized originals.
+  const safeScale = Math.min(
+    normalizeScale(scale),
+    Math.sqrt(12_000_000 / (source.width * source.height)),
+    8192 / Math.max(source.width, source.height)
+  );
   const viewport = page.getViewport({ scale: safeScale });
   const width = Math.max(1, Math.ceil(viewport.width));
   const height = Math.max(1, Math.ceil(viewport.height));
@@ -92,15 +133,9 @@ const openPdf = async (buffer) => {
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(buffer),
 
-    // IMPORTANT FOR NAVTA DIAGRAM LABELS:
-    // Some exam PDFs use non-embedded/custom fonts. With useSystemFonts=false,
-    // PDF.js can render those missing glyphs as rectangular boxes. Allowing
-    // system-font fallback gives PDF.js a usable replacement while embedded
-    // fonts are still used whenever the PDF provides them.
-    // Render PDF glyph outlines directly whenever possible. In Node,
-    // relying on canvas font-face substitution can turn custom exam-PDF
-    // symbols/labels into empty rectangular boxes.
-    useSystemFonts: true,
+    // Outline rendering needs PDF.js's bundled standard fonts. Node may
+    // otherwise choose an unavailable system font and omit the glyphs.
+    useSystemFonts: false,
     disableFontFace: true,
     fontExtraProperties: true,
 
@@ -111,7 +146,12 @@ const openPdf = async (buffer) => {
     ...resources,
   });
 
-  return loadingTask.promise;
+  try {
+    return await loadingTask.promise;
+  } catch (error) {
+    try { await loadingTask.destroy(); } catch {}
+    throw error;
+  }
 };
 
 const closePdf = async (pdf) => {
@@ -124,31 +164,61 @@ const renderPdfPages = async ({
   buffer,
   scale = 2.4,
   maxPages = 250,
+  startPage,
+  endPage,
+  onProgress = () => {},
 }) => {
   validatePdfBuffer(buffer);
+  const firstPage = readPageNumber(startPage, "Start page", 1);
+  const lastRequestedPage = readPageNumber(endPage, "End page", null);
+  if (lastRequestedPage !== null && lastRequestedPage < firstPage) {
+    throw invalidPageRange("End page must be on or after the start page.");
+  }
   const pdf = await openPdf(buffer);
   const pages = [];
+  const failedPages = [];
 
   try {
     const totalPages = Number(pdf.numPages) || 0;
+    if (firstPage > totalPages) {
+      throw invalidPageRange(`Start page exceeds the PDF's ${totalPages} page(s).`);
+    }
     const safeMaxPages = normalizeMaxPages(maxPages);
-    const pagesToRender = Math.min(totalPages, safeMaxPages);
+    const requestedEnd = Math.min(totalPages, lastRequestedPage ?? totalPages);
+    const lastPage = Math.min(requestedEnd, firstPage + safeMaxPages - 1);
+    const pagesToRender = lastPage - firstPage + 1;
+    const report = (completedPages) => onProgress({
+      stage: "rendering",
+      message: `Rendering PDF pages (${completedPages}/${pagesToRender}).`,
+      completedPages,
+      totalPages: pagesToRender,
+    });
+    report(0);
 
-    for (let pageNumber = 1; pageNumber <= pagesToRender; pageNumber += 1) {
-      const page = await pdf.getPage(pageNumber);
+    for (let pageNumber = firstPage; pageNumber <= lastPage; pageNumber += 1) {
+      let page;
       try {
+        page = await pdf.getPage(pageNumber);
         const rendered = await renderPdfPageToPng({ page, scale });
-        pages.push({ pageNumber, ...rendered });
+        const text = await readSupportingPageText(page);
+        pages.push({ pageNumber, ...rendered, text });
+      } catch (error) {
+        failedPages.push(pageNumber);
+        console.warn(`NAVTA could not render PDF page ${pageNumber}:`, error?.message || error);
       } finally {
-        try { if (typeof page.cleanup === "function") page.cleanup(); } catch {}
+        try { page?.cleanup?.(); } catch {}
       }
+      report(pageNumber - firstPage + 1);
     }
 
     return {
       totalPages,
       renderedPages: pages.length,
       pages,
-      truncated: totalPages > pagesToRender,
+      startPage: firstPage,
+      endPage: lastPage,
+      truncated: requestedEnd > lastPage,
+      failedPages,
     };
   } finally {
     await closePdf(pdf);

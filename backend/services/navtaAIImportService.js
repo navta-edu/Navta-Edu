@@ -1,10 +1,6 @@
 const path = require("path");
 
 const {
-  processNavtaDocument,
-} = require("./navtaDocumentService");
-
-const {
   renderPdfPages,
 } = require("./navtaPdfVisualService");
 
@@ -2166,8 +2162,10 @@ const removeImportDuplicates = (
 const processPdfImport =
   async ({
     file,
-    documentResult,
     hints,
+    startPage,
+    endPage,
+    onProgress,
   }) => {
     // =================================================
     // RENDER PDF PAGES
@@ -2183,6 +2181,10 @@ const processPdfImport =
 
         maxPages:
           MAX_PDF_PAGES_PER_IMPORT,
+
+        startPage,
+        endPage,
+        onProgress,
       });
 
     if (
@@ -2216,16 +2218,13 @@ const processPdfImport =
     // and hit the API quota.
     // =================================================
 
-    const detectedQuestionsRaw =
+    const { questions: detectedQuestionsRaw, failedPages: failedAnalysisPages } =
       await analyseRenderedPages({
         pages:
           rendered.pages,
 
-        text:
-          documentResult?.text ||
-          "",
-
         hints,
+        onProgress,
       });
 
     // =================================================
@@ -2346,6 +2345,13 @@ const processPdfImport =
     // labelled scientific figure
     // =================================================
 
+    onProgress({
+      stage: "processing-visuals",
+      message: "Preparing extracted questions and diagrams for review.",
+      completedPages: rendered.renderedPages,
+      totalPages: rendered.renderedPages,
+    });
+
     const processed =
       await mapWithConcurrency(
         preliminaryAccepted,
@@ -2465,6 +2471,11 @@ const processPdfImport =
         renderedPages:
           rendered.renderedPages,
 
+        scannedPages: rendered.renderedPages - failedAnalysisPages.length,
+        startPage: rendered.startPage,
+        endPage: rendered.endPage,
+        failedPages: [...rendered.failedPages, ...failedAnalysisPages].sort((a, b) => a - b),
+
         truncated:
           Boolean(
             rendered.truncated
@@ -2480,10 +2491,11 @@ const processPdfImport =
 const processTextImport =
   async ({
     file,
-    documentResult,
     hints,
     fileType,
   }) => {
+    const { processNavtaDocument } = require("./navtaDocumentService");
+    const documentResult = await processNavtaDocument(file);
     // =================================================
     // AI QUESTION SEPARATION
     // =================================================
@@ -2593,6 +2605,27 @@ const processTextImport =
 // MAIN NAVTA AI IMPORT
 // =====================================================
 
+const makeProgressReporter = (onProgress) => {
+  let lastStage;
+  let lastUpdate = 0;
+  return (progress) => {
+    if (typeof onProgress !== "function") return;
+    const now = Date.now();
+    if (
+      progress.stage === lastStage &&
+      progress.completedPages < progress.totalPages &&
+      now - lastUpdate < 1000
+    ) return;
+    lastStage = progress.stage;
+    lastUpdate = now;
+
+    // Reporting cannot slow down scanning or turn a successful import into a failure.
+    Promise.resolve().then(() => onProgress(progress)).catch((error) => {
+      console.warn("NAVTA could not report PDF scan progress:", error?.message || error);
+    });
+  };
+};
+
 const analyseNavtaImport =
   async ({
     file,
@@ -2600,6 +2633,9 @@ const analyseNavtaImport =
     exam,
     classLevel,
     chapter,
+    startPage,
+    endPage,
+    onProgress,
   }) => {
     // =================================================
     // FILE VALIDATION
@@ -2651,15 +2687,6 @@ const analyseNavtaImport =
     console.log(
       `NAVTA AI import started: ${file.originalname}`
     );
-
-    // =================================================
-    // EXTRACT DOCUMENT CONTENT
-    // =================================================
-
-    const documentResult =
-      await processNavtaDocument(
-        file
-      );
 
     // =================================================
     // NORMALIZE ADMIN SELECTIONS
@@ -2724,14 +2751,13 @@ const analyseNavtaImport =
         ? await processPdfImport({
             file,
 
-            documentResult,
-
             hints,
+            startPage,
+            endPage,
+            onProgress: makeProgressReporter(onProgress),
           })
         : await processTextImport({
             file,
-
-            documentResult,
 
             hints,
 
