@@ -256,6 +256,18 @@ const emptyImportHints = {
   chapter: "",
 };
 
+const emptyPdfImportRange = { startPage: "", endPage: "" };
+const maxImportFileBytes = 30 * 1024 * 1024;
+
+function parsePdfImportPage(value) {
+  if (!value) return null;
+  const page = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(page) || page < 1) {
+    throw new Error("Enter a positive whole number for each page.");
+  }
+  return page;
+}
+
 // =====================================================
 // ADMIN AUTH HELPERS
 // =====================================================
@@ -1641,6 +1653,11 @@ export default function AdminNavtaTest() {
 
   const [importFile, setImportFile] =
     useState(null);
+  const importFileInputRef = useRef(null);
+  const importInFlightRef = useRef(false);
+  const [pdfImportRange, setPdfImportRange] = useState(emptyPdfImportRange);
+  const [importDocumentInfo, setImportDocumentInfo] = useState(null);
+  const isPdfImport = /\.pdf$/i.test(importFile?.name || "");
 
   const [
     importHints,
@@ -1692,6 +1709,7 @@ export default function AdminNavtaTest() {
     activeImportTab,
     setActiveImportTab
   ] = useState("accepted");
+  const importBusy = importLoading || approveLoading;
 
   // ===================================================
   // SAVED QUESTION BANK MANAGEMENT
@@ -2771,8 +2789,36 @@ export default function AdminNavtaTest() {
   // AI ANALYZE FILE
   // ===================================================
 
+  const clearImportReview = () => {
+    setAcceptedQuestions([]);
+    setDroppedQuestions([]);
+    setImportSummary({ detected: 0, accepted: 0, dropped: 0 });
+    setImportDocumentInfo(null);
+    setActiveImportTab("accepted");
+  };
+
+  const chooseImportFile = (event) => {
+    if (importInFlightRef.current) return;
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    let error = "";
+    if (!/\.(pdf|docx|txt)$/i.test(file.name)) {
+      error = "Choose a PDF, DOCX or TXT file.";
+    } else if (file.size === 0 || file.size > maxImportFileBytes) {
+      error = "Choose a file larger than 0 bytes and no larger than 30 MB.";
+    }
+    setImportFile(error ? null : file);
+    if (error) event.target.value = "";
+    setPdfImportRange(emptyPdfImportRange);
+    clearImportReview();
+    setImportMessage(error);
+    setImportMessageType(error ? "error" : "");
+  };
+
   const analyzeImportFile =
     async () => {
+      if (importInFlightRef.current) return;
       if (!importFile) {
         setImportMessage(
           "Please choose a PDF, DOCX or TXT file."
@@ -2785,17 +2831,27 @@ export default function AdminNavtaTest() {
         return;
       }
 
-      setImportLoading(true);
-      setImportMessage("");
-      setImportMessageType("");
-      setAcceptedQuestions([]);
-      setDroppedQuestions([]);
+      let startPage = null;
+      let endPage = null;
+      if (isPdfImport) {
+        try {
+          startPage = parsePdfImportPage(pdfImportRange.startPage);
+          endPage = parsePdfImportPage(pdfImportRange.endPage);
+          if (startPage !== null && endPage !== null && startPage > endPage) {
+            throw new Error("The last page must be on or after the first page.");
+          }
+        } catch (error) {
+          setImportMessage(error.message);
+          setImportMessageType("error");
+          return;
+        }
+      }
 
-      setImportSummary({
-        detected: 0,
-        accepted: 0,
-        dropped: 0,
-      });
+      importInFlightRef.current = true;
+      setImportLoading(true);
+      setImportMessage("Uploading your file…");
+      setImportMessageType("success");
+      clearImportReview();
 
       const wait = (milliseconds) =>
         new Promise((resolve) =>
@@ -2813,9 +2869,10 @@ export default function AdminNavtaTest() {
             : [];
 
         const accepted =
-          acceptedRaw.map(
-            normaliseAcceptedImportQuestion
-          );
+          acceptedRaw.map((question, index) => ({
+            ...normaliseAcceptedImportQuestion(question),
+            _importReviewId: index
+          }));
 
         const dropped =
           Array.isArray(
@@ -2853,6 +2910,11 @@ export default function AdminNavtaTest() {
 
         setDroppedQuestions(
           dropped
+        );
+        setImportDocumentInfo(
+          isPdfImport && data.documentInfo
+            ? { ...data.documentInfo, selectedRange: startPage !== null || endPage !== null }
+            : null
         );
 
         setImportSummary({
@@ -2897,6 +2959,8 @@ export default function AdminNavtaTest() {
           "file",
           importFile
         );
+        if (startPage !== null) formData.append("startPage", String(startPage));
+        if (endPage !== null) formData.append("endPage", String(endPage));
 
         if (
           importHints.subject
@@ -2966,15 +3030,14 @@ export default function AdminNavtaTest() {
         };
 
         const response =
-          await fetchWithNetworkRetry(
+          await fetch(
             "/api/navta-test/import",
             {
               method: "POST",
               credentials: "include",
               headers: buildAdminHeaders(),
               body: formData,
-            },
-            { retries: 2, retryDelay: 2000 }
+            }
           );
 
         let data = {};
@@ -3032,10 +3095,11 @@ export default function AdminNavtaTest() {
 
         // Poll every 2 seconds for up to ~15 minutes.
         const maxPolls = 450;
+        const pollDeadline = Date.now() + 15 * 60 * 1000;
 
         for (
           let pollIndex = 0;
-          pollIndex < maxPolls;
+          pollIndex < maxPolls && Date.now() < pollDeadline;
           pollIndex += 1
         ) {
           await wait(2000);
@@ -3133,8 +3197,9 @@ export default function AdminNavtaTest() {
             status === "failed"
           ) {
             throw new Error(
-              jobData.error ||
+              jobData.error?.message ||
                 jobData.message ||
+                (typeof jobData.error === "string" ? jobData.error : "") ||
                 "NAVTA AI analysis failed."
             );
           }
@@ -3145,27 +3210,14 @@ export default function AdminNavtaTest() {
             status ===
               "processing"
           ) {
-            const progress =
-              Number(
-                jobData.progress
-              );
-
-            setImportMessage(
-              Number.isFinite(
-                progress
-              ) &&
-                progress > 0
-                ? `NAVTA AI is analysing your file... ${Math.min(
-                    100,
-                    Math.max(
-                      0,
-                      Math.round(
-                        progress
-                      )
-                    )
-                  )}%`
-                : "NAVTA AI is analysing your file. Please keep this page open..."
-            );
+            const progress = jobData.progress;
+            const detail = progress?.message || jobData.message || "NAVTA AI is analysing your file.";
+            const completed = progress?.completedPages;
+            const total = progress?.totalPages;
+            const pageProgress = Number.isInteger(completed) && Number.isInteger(total) && total > 0
+              ? ` Pages processed: ${completed} of ${total}.`
+              : "";
+            setImportMessage(detail + pageProgress);
 
             setImportMessageType(
               "success"
@@ -3201,14 +3253,16 @@ export default function AdminNavtaTest() {
         );
 
         setImportMessage(
-          error.message ||
-            "Unable to analyse the uploaded file."
+          error instanceof TypeError
+            ? "Could not confirm that the file was uploaded. Check your connection before trying again."
+            : error.message || "Unable to analyse the uploaded file."
         );
 
         setImportMessageType(
           "error"
         );
       } finally {
+        importInFlightRef.current = false;
         setImportLoading(
           false
         );
@@ -3401,6 +3455,7 @@ export default function AdminNavtaTest() {
 
   const approveAcceptedQuestions =
     async (workflowStatus) => {
+      if (importInFlightRef.current) return;
       if (
         acceptedQuestions.length ===
         0
@@ -3416,6 +3471,7 @@ export default function AdminNavtaTest() {
         return;
       }
 
+      importInFlightRef.current = true;
       setApproveLoading(
         true
       );
@@ -3444,8 +3500,7 @@ export default function AdminNavtaTest() {
               body:
                 JSON.stringify({
                   workflowStatus,
-                  questions:
-                    acceptedQuestions,
+                  questions: acceptedQuestions.map(({ _importReviewId, ...question }) => question),
                 }),
             }
           );
@@ -3538,6 +3593,7 @@ export default function AdminNavtaTest() {
           "error"
         );
       } finally {
+        importInFlightRef.current = false;
         setApproveLoading(
           false
         );
@@ -3549,6 +3605,8 @@ export default function AdminNavtaTest() {
   // ===================================================
 
   const resetAIImport = () => {
+    if (importInFlightRef.current) return;
+    if (importFileInputRef.current) importFileInputRef.current.value = "";
     setImportFile(
       null
     );
@@ -3557,19 +3615,8 @@ export default function AdminNavtaTest() {
       emptyImportHints
     );
 
-    setAcceptedQuestions(
-      []
-    );
-
-    setDroppedQuestions(
-      []
-    );
-
-    setImportSummary({
-      detected: 0,
-      accepted: 0,
-      dropped: 0,
-    });
+    setPdfImportRange(emptyPdfImportRange);
+    clearImportReview();
 
     setImportMessage(
       ""
@@ -3579,9 +3626,6 @@ export default function AdminNavtaTest() {
       ""
     );
 
-    setActiveImportTab(
-      "accepted"
-    );
   };
 
   // ===================================================
@@ -5254,19 +5298,9 @@ export default function AdminNavtaTest() {
                   type="file"
                   accept=".pdf,.docx,.txt"
                   className="admin-navta-file-input"
-                  onChange={(event) => {
-                    const file =
-                      event.target.files?.[0] ||
-                      null;
-
-                    setImportFile(
-                      file
-                    );
-
-                    setImportMessage(
-                      ""
-                    );
-                  }}
+                  ref={importFileInputRef}
+                  disabled={importBusy}
+                  onChange={chooseImportFile}
                 />
 
                 <span className="admin-navta-upload-file-status">
@@ -5283,6 +5317,43 @@ export default function AdminNavtaTest() {
               )}
             </div>
 
+            {isPdfImport && (
+              <fieldset className="mt-4">
+                <legend className="admin-navta-label">PDF pages to scan</legend>
+                <p id="navta-import-range-help" className="mb-2 text-sm">
+                  Leave the first or last page blank to start at the beginning or continue to the end.
+                </p>
+                <div className="admin-navta-grid">
+                  <div className="admin-navta-field">
+                    <label htmlFor="navta-import-start-page" className="admin-navta-label">First page</label>
+                    <input
+                      id="navta-import-start-page"
+                      className="admin-navta-input"
+                      inputMode="numeric"
+                      value={pdfImportRange.startPage}
+                      placeholder="Beginning of PDF"
+                      aria-describedby="navta-import-range-help"
+                      disabled={importBusy}
+                      onChange={(event) => setPdfImportRange({ ...pdfImportRange, startPage: event.target.value })}
+                    />
+                  </div>
+                  <div className="admin-navta-field">
+                    <label htmlFor="navta-import-end-page" className="admin-navta-label">Last page</label>
+                    <input
+                      id="navta-import-end-page"
+                      className="admin-navta-input"
+                      inputMode="numeric"
+                      value={pdfImportRange.endPage}
+                      placeholder="End of PDF"
+                      aria-describedby="navta-import-range-help"
+                      disabled={importBusy}
+                      onChange={(event) => setPdfImportRange({ ...pdfImportRange, endPage: event.target.value })}
+                    />
+                  </div>
+                </div>
+              </fieldset>
+            )}
+
             <div
               className="admin-navta-grid four"
               style={{
@@ -5297,6 +5368,7 @@ export default function AdminNavtaTest() {
 
                 <select
                   className="admin-navta-select"
+                  disabled={importBusy}
                   value={
                     importHints.subject
                   }
@@ -5343,7 +5415,7 @@ export default function AdminNavtaTest() {
                     )
                   }
                   disabled={
-                    !importHints.subject
+                    importBusy || !importHints.subject
                   }
                 >
                   <option value="">
@@ -5380,7 +5452,7 @@ export default function AdminNavtaTest() {
                     )
                   }
                   disabled={
-                    !importHints.subject
+                    importBusy || !importHints.subject
                   }
                 >
                   <option value="">
@@ -5417,7 +5489,7 @@ export default function AdminNavtaTest() {
                     )
                   }
                   disabled={
-                    !importHints.subject ||
+                    importBusy || !importHints.subject ||
                     !importHints.classLevel
                   }
                 >
@@ -5449,7 +5521,7 @@ export default function AdminNavtaTest() {
                   analyzeImportFile
                 }
                 disabled={
-                  importLoading ||
+                  importBusy ||
                   !importFile
                 }
               >
@@ -5464,6 +5536,7 @@ export default function AdminNavtaTest() {
                 onClick={
                   resetAIImport
                 }
+                disabled={importBusy}
               >
                 Reset Import
               </button>
@@ -5473,8 +5546,28 @@ export default function AdminNavtaTest() {
             {importMessage && (
               <div
                 className={`admin-navta-message ${importMessageType}`}
+                role={importMessageType === "error" ? "alert" : "status"}
               >
                 {importMessage}
+              </div>
+            )}
+
+            {importDocumentInfo && (
+              <div className="admin-navta-info">
+                <p>Scanned {importDocumentInfo.scannedPages ?? importDocumentInfo.renderedPages} of {importDocumentInfo.totalPages} PDF pages.</p>
+                {(importDocumentInfo.selectedRange || importDocumentInfo.truncated) &&
+                  importDocumentInfo.startPage && importDocumentInfo.endPage && (
+                  <p>
+                    {importDocumentInfo.truncated ? "Page range attempted" : "Selected page range"}:{" "}
+                    {importDocumentInfo.startPage}–{importDocumentInfo.endPage}.
+                  </p>
+                )}
+                {importDocumentInfo.truncated && (
+                  <p>This scan reached its page limit. Select another page range to scan the remaining pages.</p>
+                )}
+                {Array.isArray(importDocumentInfo.failedPages) && importDocumentInfo.failedPages.length > 0 && (
+                  <p>Pages that could not be scanned: {importDocumentInfo.failedPages.join(", ")}.</p>
+                )}
               </div>
             )}
 
@@ -5583,7 +5676,7 @@ export default function AdminNavtaTest() {
                         No accepted questions are waiting for approval.
                       </div>
                     ) : (
-                      <div className="admin-navta-review-list">
+                      <fieldset className="admin-navta-review-list" disabled={approveLoading} aria-label="Edit accepted questions">
 
                         {acceptedQuestions.map(
                           (
@@ -5613,9 +5706,7 @@ export default function AdminNavtaTest() {
 
                             return (
                               <div
-                                key={
-                                  `${question.question}-${index}`
-                                }
+                                key={question._importReviewId}
                                 className="admin-navta-review-question"
                               >
 
@@ -6313,7 +6404,7 @@ export default function AdminNavtaTest() {
                           }
                         )}
 
-                      </div>
+                      </fieldset>
                     )}
 
                     <button
@@ -6321,7 +6412,7 @@ export default function AdminNavtaTest() {
                       className="admin-navta-approve"
                       onClick={() => approveAcceptedQuestions("published")}
                       disabled={
-                        approveLoading ||
+                        importBusy ||
                         acceptedQuestions.length ===
                           0
                       }
@@ -6334,7 +6425,7 @@ export default function AdminNavtaTest() {
                       type="button"
                       className="admin-navta-secondary-button ml-2"
                       onClick={() => approveAcceptedQuestions("draft")}
-                      disabled={approveLoading || acceptedQuestions.length === 0}
+                      disabled={importBusy || acceptedQuestions.length === 0}
                     >
                       Save as drafts
                     </button>
