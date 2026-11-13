@@ -7,6 +7,7 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 import "katex/contrib/mhchem";
 import StructuredAnswerInput from "../components/StructuredAnswerInput";
+import { getQuestionAttachments } from "../components/QuestionAttachments";
 import {
   getObjectiveAnswerMode,
   getObjectivePartialFraction,
@@ -812,21 +813,6 @@ function renderNavtaContent(
 }
 
 
-const NAVTA_VISUAL_MARKER =
-  "[[NAVTA_VISUAL]]";
-
-function isPdfCropQuestion(question) {
-  return (
-    String(
-      question?.imageCropSource || ""
-    ).trim() === "admin-pdf-crop" ||
-    Boolean(
-      question?.sourceDocument?.fileName &&
-      question?.questionImage?.url
-    )
-  );
-}
-
 function cleanNavtaVisualText(input = "") {
   let value = String(input ?? "");
 
@@ -845,62 +831,9 @@ function cleanNavtaVisualText(input = "") {
   return value.trim();
 }
 
-function getNavtaQuestionImage(question) {
-  const primaryUrl = String(
-    question?.questionImage?.url || ""
-  ).trim();
-
-  if (primaryUrl) {
-    return {
-      url: primaryUrl,
-      altText:
-        String(
-          question?.questionImage?.altText ||
-            question?.visualDescription ||
-            question?.questionNumber ||
-            "NAVTA question visual"
-        ).trim() ||
-        "NAVTA question visual",
-      visualType:
-        String(
-          question?.visualType || "image"
-        ).trim() || "image",
-    };
-  }
-
-  const firstImage =
-    Array.isArray(question?.questionImages)
-      ? question.questionImages.find(
-          (item) =>
-            item &&
-            typeof item === "object" &&
-            String(item.url || "").trim()
-        )
-      : null;
-
-  if (firstImage) {
-    return {
-      url: String(firstImage.url || "").trim(),
-      altText:
-        String(
-          firstImage.altText ||
-            question?.visualDescription ||
-            question?.questionNumber ||
-            "NAVTA question visual"
-        ).trim() ||
-        "NAVTA question visual",
-      visualType:
-        String(
-          question?.visualType || "image"
-        ).trim() || "image",
-    };
-  }
-
-  return null;
-}
-
 function NavtaVisual({
-  question,
+  image,
+  altText,
   className = "",
   shellClassName = "",
 }) {
@@ -908,9 +841,6 @@ function NavtaVisual({
     useState(false);
   const [zoom, setZoom] =
     useState(1);
-
-  const image =
-    getNavtaQuestionImage(question);
 
   const closeViewer = () => {
     setIsEnlarged(false);
@@ -996,10 +926,6 @@ function NavtaVisual({
     };
   }, [isEnlarged]);
 
-  if (!image?.url) {
-    return null;
-  }
-
   return (
     <>
       <div
@@ -1015,7 +941,7 @@ function NavtaVisual({
       >
         <img
           src={image.url}
-          alt={image.altText}
+          alt={altText}
           className={className}
           loading="eager"
           decoding="async"
@@ -1037,7 +963,7 @@ function NavtaVisual({
         <button
           type="button"
           onClick={openViewer}
-          aria-label="Open question image zoom"
+          aria-label={`Zoom image: ${altText}`}
           title="Zoom image"
           style={{
             position: "absolute",
@@ -1310,7 +1236,7 @@ function NavtaVisual({
             >
               <img
                 src={image.url}
-                alt={image.altText}
+                alt={altText}
                 draggable="false"
                 style={{
                   display: "block",
@@ -1336,55 +1262,21 @@ function NavtaQuestionContent({
   visualClassName = "",
   visualShellClassName = "",
 }) {
-  const image =
-    getNavtaQuestionImage(question);
-
-  const rawText =
-    String(
-      question?.question || ""
-    );
-
-  if (
-    image?.url &&
-    isPdfCropQuestion(question)
-  ) {
-    return (
-      <NavtaVisual
-        question={question}
-        className={visualClassName}
-        shellClassName={
-          visualShellClassName
-        }
-      />
-    );
-  }
-
-  const cleanedText =
-    cleanNavtaVisualText(rawText);
-
-  if (!image?.url) {
-    return (
-      <>
-        {renderNavtaContent(
-          cleanedText
-        )}
-      </>
-    );
-  }
-
+  const images = getQuestionAttachments(question);
+  const imageOnly = images.length > 0 && question.imageCropSource === "admin-pdf-crop";
+  const text = cleanNavtaVisualText(question?.question);
   return (
     <>
-      {renderNavtaContent(
-        cleanedText
-      )}
-
-      <NavtaVisual
-        question={question}
-        className={visualClassName}
-        shellClassName={
-          visualShellClassName
-        }
-      />
+      {!imageOnly && renderNavtaContent(text)}
+      {images.map((image, index) => (
+        <NavtaVisual
+          key={image.url}
+          image={image}
+          altText={image.altText || question.visualDescription || `Question image ${index + 1}`}
+          className={visualClassName}
+          shellClassName={visualShellClassName}
+        />
+      ))}
     </>
   );
 }
@@ -1392,7 +1284,7 @@ function NavtaQuestionContent({
 
 
 function shouldUseNavtaQuestionScreenshot(question) {
-  return Boolean(getNavtaQuestionImage(question));
+  return getQuestionAttachments(question).length > 0;
 }
 
 function NavtaQuestionBody({ question }) {
