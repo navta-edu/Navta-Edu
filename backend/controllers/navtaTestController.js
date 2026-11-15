@@ -3452,14 +3452,9 @@ exports.confirmAIImport = async (req, res) => {
         payload.evaluationInstructions =
           "";
 
-        payload.maxMarks =
-          Number(
-            rawQuestion.maxMarks
-          ) > 0
-            ? Number(
-                rawQuestion.maxMarks
-              )
-            : 1;
+        const maxMarks = Number(rawQuestion.maxMarks ?? 1);
+        if (!Number.isFinite(maxMarks) || maxMarks < 1) reasons.push("Maximum marks must be at least 1.");
+        payload.maxMarks = maxMarks;
       }
 
       // ======================================
@@ -3503,15 +3498,13 @@ exports.confirmAIImport = async (req, res) => {
             rawQuestion.maxMarks
           );
 
-        if (!modelAnswer) {
+        if (workflow.workflowStatus !== "draft" && !modelAnswer) {
           reasons.push(
             "Model answer is required for written questions."
           );
         }
 
-        if (
-          keyPoints.length === 0
-        ) {
+        if (workflow.workflowStatus !== "draft" && keyPoints.length === 0) {
           reasons.push(
             "At least one key point is required for written questions."
           );

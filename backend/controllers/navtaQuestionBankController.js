@@ -197,7 +197,10 @@ async function transitionQuestion(req, res) {
       if (workflowStatus !== current && !workflowTransitions[current].includes(workflowStatus)) {
         throw requestError(400, "This workflow action is unavailable for the current status.");
       }
-      if (workflowStatus === "published") await validateQuestion(candidate);
+      if (workflowStatus === "published" || workflowStatus === "review") {
+        candidate.workflowStatus = workflowStatus;
+        await validateQuestion(candidate);
+      }
     };
 
     let saved;

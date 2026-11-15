@@ -1106,6 +1106,13 @@ mcq
 short
 long
 
+WRITTEN / THEORY QUESTIONS:
+- Extract complete questions that ask students to explain, describe, derive, prove, calculate, label, or draw without selecting an answer. Use Boards, even on a mixed paper. Use short for brief responses and long for extended or multi-part responses.
+- Keep all subparts in order and preserve their line breaks. Leave options empty and correctAnswer null.
+- Copy the printed total for the question into maxMarks when visible. Leave it null if it is unclear. Do not copy the paper's total marks.
+- Capture a supplied figure, graph, circuit, or photograph in visualBoundingBox. Include its labels and scale. If the question only asks students to draw their own figure, there is no source figure to crop.
+- When a matching answer or marking scheme is visible, transcribe it into modelAnswer and keyPoints. Otherwise, give a concise draft model answer and marking points only when supported by the stem and any supplied figure. If the answer is uncertain, leave these fields empty. Set needsReview=true for written questions.
+
 YOUR JOB:
 Detect every COMPLETE and READABLE academic question on the supplied page images.
 
@@ -1664,7 +1671,7 @@ Return JSON ONLY.
 
 Do not return Markdown.
 
-Do NOT generate explanations, solutions, derivations, hints, or reasoning during import.
+Do not generate MCQ explanations, solutions, derivations, hints, or reasoning during import. Use modelAnswer and keyPoints for written questions only.
 The explanation field MUST always be an empty string.
 Use the output budget for exact question/options transcription, correct answer,
 classification, LaTeX/scientific notation, match-column structure, and visuals.
@@ -2571,9 +2578,9 @@ const mergeVerifiedQuestion = (
       verified.difficulty ||
       original.difficulty,
 
-    questionType:
-      verified.questionType ||
-      original.questionType,
+    questionType: ["short", "long"].includes(original.questionType)
+      ? original.questionType
+      : verified.questionType || original.questionType,
 
     options:
       shouldUseVerifiedOptions
@@ -2743,7 +2750,7 @@ You are NAVTA AI acting as a SECOND-PASS VERIFIER.
 IMPORTANT EFFICIENCY RULE:
 - Do NOT generate an explanation, solution, derivation, hint, or reasoning.
 - explanation must remain an empty string.
-- Verify only transcription/classification/options/correctAnswer/confidence/drop status.
+- Verify transcription, classification, answers, confidence and visuals. Preserve any supported written model answer and key points.
 
 
 Verify only the uncertain questions listed below against the supplied original PDF page images.
@@ -2857,6 +2864,7 @@ Return the same questions only, with corrected:
 Rules:
 
 - Confidence values must be from 0 to 1.
+- Keep the extracted written question type and its original marks. For a written item, verify the crop and any supplied draft model answer against the page without turning it into an MCQ.
 - If the answer is uncertain, correctAnswer=null and needsReview=true.
 - If Selected Chapter is provided, do not silently change to another chapter.
 - If a question clearly does not belong to Selected Chapter, set drop=true and explain.
@@ -2915,8 +2923,9 @@ ${JSON.stringify(
       correctAnswer:
         question.correctAnswer,
 
-      sourcePage:
-        question.sourcePage,
+      modelAnswer: question.modelAnswer,
+      keyPoints: question.keyPoints,
+      maxMarks: question.maxMarks,
 
       chapterConfidence:
         question.chapterConfidence,
@@ -3904,6 +3913,10 @@ For MCQs:
 - D=3
 - if uncertain use null
 
+For written questions:
+- Use Boards, short for a brief response or long for an extended response. Preserve subparts, return empty options and copy the printed question marks when present.
+- Supply a concise modelAnswer and keyPoints from the source or draft them only if the question supplies enough information. Set needsReview=true.
+
 FORMATTING RULES:
 
 - For simple chemical subscripts, ionic charges and numeric powers, prefer Unicode:
@@ -3959,7 +3972,7 @@ RULES:
 - Return chapterConfidence, answerConfidence, classificationConfidence and difficultyConfidence from 0 to 1.
 - If unsure of the MCQ answer, use correctAnswer=null and set needsReview=true.
 - Do not guess missing options or missing text.
-- Do NOT generate explanations, solutions, derivations, hints, or reasoning.
+- Do not generate MCQ explanations or reasoning. Written answers belong in modelAnswer and keyPoints.
 - explanation must always be an empty string.
 
 RETURN:

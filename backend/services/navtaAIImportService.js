@@ -1218,6 +1218,18 @@ const validateDetectedQuestion = (
   const reasons =
     [];
 
+  if (question.questionType === "short" || question.questionType === "long") {
+    question.exam = "Boards";
+    question.options = [];
+    question.correctAnswer = null;
+    question.needsReview = true;
+    const marks = Number(question.maxMarks);
+    if (!Number.isFinite(marks) || marks < 1) {
+      question.maxMarks = question.questionType === "long" ? 5 : 3;
+      question.marksEstimated = true;
+    }
+  }
+
   if (
     question.drop
   ) {
@@ -1323,21 +1335,6 @@ const validateDetectedQuestion = (
   ) {
     reasons.push(
       "Question type could not be identified."
-    );
-  }
-
-  if (
-    [
-      "JEE",
-      "NEET",
-    ].includes(
-      question.exam
-    ) &&
-    question.questionType !==
-      "mcq"
-  ) {
-    reasons.push(
-      `${question.exam} questions must be MCQ.`
     );
   }
 
@@ -1851,21 +1848,12 @@ const buildImportQuestion = ({
     result.keyPoints =
       question.keyPoints ||
       [];
+    result.marksEstimated = Boolean(question.marksEstimated);
+  }
 
-    const marks =
-      Number(
-        question.maxMarks
-      );
-
-    if (
-      Number.isFinite(
-        marks
-      ) &&
-      marks > 0
-    ) {
-      result.maxMarks =
-        marks;
-    }
+  const marks = Number(question.maxMarks);
+  if (Number.isFinite(marks) && marks >= 1) {
+    result.maxMarks = marks;
   }
 
   // ===================================================
