@@ -460,10 +460,8 @@ const navtaQuestionSchema = new mongoose.Schema(
       trim: true,
 
       required: function () {
-        return (
-          this.questionType === "short" ||
-          this.questionType === "long"
-        );
+        return this.workflowStatus !== "draft" &&
+          (this.questionType === "short" || this.questionType === "long");
       },
 
       default: "",
@@ -476,7 +474,7 @@ const navtaQuestionSchema = new mongoose.Schema(
 
       validate: {
         validator: function (value) {
-          if (this.questionType === "mcq") {
+          if (this.questionType === "mcq" || this.workflowStatus === "draft") {
             return true;
           }
 
@@ -722,7 +720,7 @@ navtaQuestionSchema.pre(
       this.correctAnswer = undefined;
       this.answerMode = "single";
 
-      if (!this.modelAnswer?.trim()) {
+      if (this.workflowStatus !== "draft" && !this.modelAnswer?.trim()) {
         return next(
           new Error(
             "A model answer is required for written questions."
@@ -730,10 +728,7 @@ navtaQuestionSchema.pre(
         );
       }
 
-      if (
-        !Array.isArray(this.keyPoints) ||
-        this.keyPoints.length === 0
-      ) {
+      if (this.workflowStatus !== "draft" && !this.keyPoints?.length) {
         return next(
           new Error(
             "At least one key point is required for written questions."
