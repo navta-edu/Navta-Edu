@@ -30,6 +30,7 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import 'katex/contrib/mhchem';
 import { getAuthenticatedHeaders } from '../utils/portalTest';
+import { getQuestionAttachments } from '../components/QuestionAttachments';
 
 // =====================================================
 // FILTER VALUES
@@ -379,18 +380,23 @@ function stripVisualMarker(value) {
 }
 
 function getQuestionDisplay(question) {
-  const rawText = String(question.question ?? '').trim();
+  const rawText = String(question.paperQuestion ?? question.question ?? '').trim();
   const text = stripVisualMarker(rawText);
-  const image = getQuestionImage(question);
   const isCrop = question.imageCropSource === 'admin-pdf-crop' || (!text && rawText !== '');
+  const images = getQuestionAttachments(question);
+  if (!images.length) {
+    const url = getQuestionImage(question);
+    if (url) images.push({ url, altText: isCrop ? 'Cropped question' : 'Question diagram' });
+  }
+  const imageOnly = isCrop && images.length > 0;
   const options = Array.isArray(question.options) ? question.options : [];
   const hasPrintedOptions = isCrop && options.length === 4 &&
     options.every((option, index) => option === 'ABCD'[index]);
 
   return {
-    text: text || (image ? '' : 'Question image unavailable.'),
-    image,
-    imageAlt: isCrop ? 'Cropped question' : 'Question diagram',
+    text: imageOnly ? '' : text || (images.length ? '' : 'Question image unavailable.'),
+    images,
+    imageOnly,
     options: hasPrintedOptions ? [] : options
   };
 }
@@ -408,11 +414,11 @@ function QuestionImage({ src, alt }) {
 }
 
 function SelectedQuestionPreview({ question }) {
-  const { text, image, imageAlt } = getQuestionDisplay(question);
+  const { text, images } = getQuestionDisplay(question);
   return (
     <div className="min-w-0 flex-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
       <PaperMathText value={text} />
-      <QuestionImage src={image} alt={imageAlt} />
+      {images.map(image => <QuestionImage key={image.url} src={image.url} alt={image.altText || 'Question diagram'} />)}
     </div>
   );
 }
@@ -489,7 +495,7 @@ const PaperMathText = memo(function PaperMathText({ value, preserveLineBreaks = 
 });
 
 function renderPaperText(value = '') {
-  return escapeHtml(preparePaperMath(value)).replace(/\r?\n/g, '<br />');
+  return escapeHtml(preparePaperMath(value));
 }
 
 // =====================================================
@@ -920,12 +926,6 @@ export default function QuestionPaperBuilder() {
     id,
     value
   ) => {
-    const marks =
-      Math.max(
-        0,
-        Number(value) || 0
-      );
-
     setSelectedQuestions(
       (previous) =>
         previous.map(
@@ -933,18 +933,23 @@ export default function QuestionPaperBuilder() {
             question._id === id
               ? {
                   ...question,
-                  paperMarks:
-                    marks
+                  paperMarks: value
                 }
               : question
         )
     );
   };
 
+  const updatePaperQuestion = (id, text) => {
+    setSelectedQuestions(current => current.map(question => question._id === id
+      ? { ...question, paperQuestion: text }
+      : question));
+  };
+
   const totalMarks =
     useMemo(
       () =>
-        selectedQuestions.reduce(
+        Number(selectedQuestions.reduce(
           (
             total,
             question
@@ -956,7 +961,7 @@ export default function QuestionPaperBuilder() {
               ) || 0
             ),
           0
-        ),
+        ).toFixed(2)),
       [selectedQuestions]
     );
 
@@ -1015,6 +1020,20 @@ export default function QuestionPaperBuilder() {
         return;
       }
 
+      const invalid = selectedQuestions.findIndex(question =>
+        question.paperMarks === '' || !Number.isFinite(Number(question.paperMarks)) || Number(question.paperMarks) < 0 ||
+        Number(question.paperMarks) !== Number(Number(question.paperMarks).toFixed(2)) ||
+        (question.paperQuestion !== undefined && !question.paperQuestion.trim()));
+      if (invalid !== -1) {
+        window.alert(`Question ${invalid + 1} needs question text and valid marks with up to two decimal places.`);
+        return;
+      }
+      const hasMath = selectedQuestions.some(question => [
+        getQuestionDisplay(question).text,
+        ...getQuestionDisplay(question).options,
+        question.caseStudy?.passage,
+      ].some(value => preparePaperMath(value).split(paperMathSegments).length > 1));
+
       const printWindow =
         window.open(
           '',
@@ -1041,7 +1060,7 @@ export default function QuestionPaperBuilder() {
                 normalizeQuestionType(
                   question.questionType
                 );
-              const { text, image, imageAlt, options } = getQuestionDisplay(question);
+              const { text, images, imageOnly, options } = getQuestionDisplay(question);
               const passage = question.caseStudy?.passage &&
                 selectedQuestions[index - 1]?.caseStudy?.id !== question.caseStudy.id
                 ? `<p class="case-passage"><strong>Case study</strong><br>${renderPaperText(question.caseStudy.passage)}</p>`
@@ -1055,8 +1074,8 @@ export default function QuestionPaperBuilder() {
                 options.length > 0
               ) {
                 optionsHtml = `
-                  <div class="options">
-                    ${question.answerMode === 'multiple' ? '<p>Select all correct choices.</p>' : ''}
+                  ${question.answerMode === 'multiple' ? '<p class="answer-note">Select all correct choices.</p>' : ''}
+                  <div class="options${options.some(option => option.length > 75 || /[\r\n]|\$\$|\\\[/.test(option)) ? ' options-wide' : ''}">
 
                     ${options
                       .map(
@@ -1064,18 +1083,7 @@ export default function QuestionPaperBuilder() {
                           option,
                           optionIndex
                         ) => `
-                          <div class="option">
-
-                            <strong>
-                              ${String.fromCharCode(
-                                65 +
-                                  optionIndex
-                              )}.
-                            </strong>
-
-                            ${renderPaperText(option)}
-
-                          </div>
+                          <div class="option"><strong>${String.fromCharCode(65 + optionIndex)}.</strong> ${renderPaperText(option)}</div>
                         `
                       )
                       .join('')}
@@ -1093,15 +1101,7 @@ export default function QuestionPaperBuilder() {
 
                   <div class="question-row">
 
-                    <div class="question-text">
-
-                      <strong>
-                        ${index + 1}.
-                      </strong>
-
-                      ${renderPaperText(text)}
-
-                    </div>
+                    <div class="question-text"><strong>${index + 1}.</strong> ${renderPaperText(text)}</div>
 
                     <div class="marks">
 
@@ -1119,7 +1119,7 @@ export default function QuestionPaperBuilder() {
 
                   </div>
 
-                  ${image ? `<div class="question-image-wrap"><img class="question-image" src="${escapeHtml(image)}" alt="${imageAlt}" /></div>` : ''}
+                  ${images.map((image, imageIndex) => `<div class="question-image-wrap${imageOnly && imageIndex === 0 ? ' question-crop' : ''}"><img class="question-image" src="${escapeHtml(image.url)}" alt="${escapeHtml(image.altText || 'Question diagram')}" /></div>`).join('')}
 
                   ${optionsHtml}
 
@@ -1162,7 +1162,7 @@ export default function QuestionPaperBuilder() {
 
             @page {
               size: A4;
-              margin: 16mm;
+              margin: 14mm;
             }
 
             * {
@@ -1170,7 +1170,8 @@ export default function QuestionPaperBuilder() {
             }
 
             body {
-              margin: 0;
+              margin: 0 auto;
+              max-width: 182mm;
 
               font-family:
                 Arial,
@@ -1181,9 +1182,8 @@ export default function QuestionPaperBuilder() {
 
               background: white;
 
-              font-size: 14px;
-
-              line-height: 1.55;
+              font-size: 10.5pt;
+              line-height: 1.35;
             }
 
             .brand {
@@ -1238,40 +1238,31 @@ export default function QuestionPaperBuilder() {
             }
 
             .instructions {
-              margin-top: 15px;
-
-              padding-bottom:
-                14px;
-
-              border-bottom:
-                1px solid #d1d5db;
+              margin-top: 9px;
+              padding-bottom: 6px;
+              border-bottom: 1px solid #d1d5db;
             }
 
+            .instructions p, .case-passage, .answer-note {
+              margin: 4px 0;
+              orphans: 2;
+              widows: 2;
+            }
             .questions {
-              margin-top: 22px;
+              margin-top: 10px;
             }
 
             .question {
-              margin-bottom: 22px;
-
-              page-break-inside:
-                avoid;
+              margin: 0 0 10px;
+              break-inside: avoid;
             }
 
             .question-row {
-              display: flex;
-
-              gap: 20px;
-
-              justify-content:
-                space-between;
-
-              align-items:
-                flex-start;
-            }
-
-            .question-text {
-              flex: 1;
+              display: grid;
+              grid-template-columns: minmax(0, 1fr) auto;
+              align-items: start;
+              gap: 9px;
+              break-after: avoid;
             }
 
             .marks {
@@ -1283,63 +1274,44 @@ export default function QuestionPaperBuilder() {
 
             .options {
               display: grid;
-
-              grid-template-columns:
-                1fr 1fr;
-
-              gap:
-                8px 20px;
-
-              margin:
-                10px 0 0 25px;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 3px 12px;
+              margin: 4px 0 0 16px;
             }
 
-            /* Keep question diagrams large enough to read on the printed paper.
-               Imported NAVTA visuals can be very wide, low-height crops; relying
-               only on max-width leaves them at their tiny intrinsic size. */
+            .options-wide { grid-template-columns: minmax(0, 1fr); }
+            .option { break-inside: avoid; }
+            .case-passage { break-after: avoid; }
+
+            /* Standalone diagrams keep their natural aspect ratio. Full-question
+               crops get more width to preserve the size of printed lettering. */
             .question-image-wrap {
-              display: block;
-              box-sizing: border-box;
-              width: calc(100% - 25px);
-              max-width: 100%;
-              margin: 12px 0 14px 25px;
+              margin: 4px 0 5px 16px;
               break-inside: avoid;
-              page-break-inside: avoid;
             }
 
             .question-image {
               display: block;
-              box-sizing: border-box;
-              width: 100%;
-              max-width: 7.1in;
-              max-height: 3.5in;
+              width: auto;
               height: auto;
+              max-width: min(100%, 118mm);
+              max-height: 72mm;
               object-fit: contain;
               object-position: left center;
-              image-rendering: auto;
               print-color-adjust: exact;
               -webkit-print-color-adjust: exact;
             }
 
-            @media print {
-              .question-image-wrap {
-                width: calc(100% - 25px) !important;
-                max-width: 100% !important;
-                margin-top: 12px !important;
-                margin-bottom: 14px !important;
-              }
-
-              .question-image {
-                width: 100% !important;
-                max-width: 7.1in !important;
-                max-height: 3.5in !important;
-                height: auto !important;
-              }
+            .question-crop .question-image {
+              max-width: min(100%, 165mm);
+              max-height: 185mm;
             }
 
-            .question-text, .option {
+            .question-text, .option, .case-passage {
               overflow-wrap: anywhere;
-              white-space: normal;
+              white-space: pre-line;
+              orphans: 2;
+              widows: 2;
             }
 
             mjx-container {
@@ -1348,8 +1320,10 @@ export default function QuestionPaperBuilder() {
               overflow-y: hidden;
             }
 
+            .print-error { color: #991b1b; font-weight: 700; }
+
             .footer {
-              margin-top: 40px;
+              margin-top: 16px;
 
               text-align: center;
 
@@ -1478,11 +1452,7 @@ export default function QuestionPaperBuilder() {
                     General Instructions
                   </strong>
 
-                  <p>
-                    ${escapeHtml(
-                      paperDetails.instructions
-                    )}
-                  </p>
+                  <p>${escapeHtml(paperDetails.instructions)}</p>
 
                 </div>
               `
@@ -1495,36 +1465,44 @@ export default function QuestionPaperBuilder() {
 
           </div>
 
+          <p id="print-error" class="print-error" role="alert" hidden></p>
           <div class="footer">
             Generated using NAVTA Paper Builder
           </div>
 
           <script>
             (function () {
-              let printed = false;
-              function printWhenReady() {
-                if (printed) return;
-                printed = true;
-                const images = Array.from(document.images || []);
-                Promise.all(images.map((img) => img.complete ? Promise.resolve() : new Promise((resolve) => {
-                  img.onload = resolve;
-                  img.onerror = resolve;
-                  setTimeout(resolve, 2500);
-                }))).then(() => {
-                  const typeset = window.MathJax && window.MathJax.typesetPromise
-                    ? window.MathJax.typesetPromise().catch(() => {})
-                    : Promise.resolve();
-                  return typeset;
-                }).then(() => setTimeout(() => window.print(), 250));
-              }
-              window.addEventListener('load', () => {
-                if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
-                  window.MathJax.startup.promise.then(printWhenReady).catch(printWhenReady);
-                } else {
-                  setTimeout(printWhenReady, 1200);
+              window.addEventListener('load', async () => {
+                const error = document.getElementById('print-error');
+                const images = Array.from(document.querySelectorAll('.question-image'));
+                if (images.some(image => !image.naturalWidth)) {
+                  error.textContent = 'A question image could not be loaded. Check the question images and generate the paper again.';
+                  error.hidden = false;
+                  return;
                 }
-              });
-              setTimeout(printWhenReady, 5000);
+                try {
+                  const sections = Array.from(document.querySelectorAll('.question-text, .option, .case-passage'));
+                  if (${hasMath}) {
+                    if (!window.MathJax?.startup?.promise) throw Error('MathJax unavailable');
+                    await window.MathJax.startup.promise;
+                    await window.MathJax.typesetPromise(sections);
+                    if (document.querySelector('mjx-merror')) throw Error('Invalid equation');
+                    for (const equation of document.querySelectorAll('mjx-container')) {
+                      const math = equation.firstElementChild;
+                      const width = equation.parentElement.clientWidth;
+                      if (math && width && math.scrollWidth > width) {
+                        math.style.fontSize = Math.max(55, Math.floor(100 * width / math.scrollWidth)) + '%';
+                        if (math.getBoundingClientRect().width > width + 1) throw Error('Equation wider than the page');
+                      }
+                    }
+                  }
+                  await document.fonts.ready;
+                  window.print();
+                } catch {
+                  error.textContent = 'An equation could not be rendered. Review the equations or try generating the paper again.';
+                  error.hidden = false;
+                }
+              }, { once: true });
             })();
           </script>
 
@@ -2180,7 +2158,7 @@ export default function QuestionPaperBuilder() {
                         isSelected(
                           question._id
                         );
-                      const { text, image, imageAlt, options } = getQuestionDisplay(question);
+                      const { text, images, options } = getQuestionDisplay(question);
 
                       return (
                         <button
@@ -2312,7 +2290,7 @@ export default function QuestionPaperBuilder() {
                                 <PaperMathText value={text} />
                               </p>
 
-                              <QuestionImage src={image} alt={imageAlt} />
+                              {images.map(image => <QuestionImage key={image.url} src={image.url} alt={image.altText || 'Question diagram'} />)}
 
                               {normalizeQuestionType(
                                 question.questionType
@@ -2815,6 +2793,8 @@ export default function QuestionPaperBuilder() {
                         <input
                           type="number"
                           min="0"
+                          step="0.01"
+                          aria-label={`Marks for question ${index + 1}`}
                           value={
                             question.paperMarks
                           }
@@ -2842,6 +2822,12 @@ export default function QuestionPaperBuilder() {
                         />
                       </div>
                     </div>
+                    {!getQuestionDisplay(question).imageOnly && (
+                      <details className="mt-2 text-sm">
+                        <summary className="cursor-pointer">Edit text for this paper</summary>
+                        <textarea aria-label={`Question ${index + 1} text on this paper`} className="mt-2 w-full rounded-lg border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-900" rows={3} value={question.paperQuestion ?? stripVisualMarker(question.question)} onChange={event => updatePaperQuestion(question._id, event.target.value)} />
+                      </details>
+                    )}
                   </div>
                 )
               )}

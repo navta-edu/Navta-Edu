@@ -2597,10 +2597,9 @@ export default function AdminNavtaTest() {
       question.subject ||
       "";
 
-    const exam =
-      importHints.exam ||
-      question.exam ||
-      "";
+    const exam = ["short", "long"].includes(question.questionType)
+      ? "Boards"
+      : importHints.exam || question.exam || "";
 
     const classLevel =
       importHints.classLevel ||
@@ -3442,10 +3441,8 @@ export default function AdminNavtaTest() {
         }
 
         if (!response.ok) {
-          throw new Error(
-            data.message ||
-              "Failed to import approved questions."
-          );
+          const reason = data.rejectedQuestions?.[0]?.reasons?.join(" ");
+          throw new Error(reason || data.message || "Failed to import approved questions.");
         }
 
         const rejected =
@@ -3455,43 +3452,19 @@ export default function AdminNavtaTest() {
             ? data.rejectedQuestions
             : [];
 
-        if (
-          rejected.length > 0
-        ) {
-          setDroppedQuestions(
-            (previous) => [
-              ...previous,
-              ...rejected.map(
-                (item) => ({
-                  question:
-                    item.question ||
-                    "",
-
-                  drop: true,
-
-                  dropReason:
-                    item.reason ||
-                    "Rejected during final validation.",
-                })
-              ),
-            ]
-          );
-        }
-
-        setAcceptedQuestions(
-          []
-        );
+        const remaining = rejected.flatMap(item => {
+          const question = acceptedQuestions[item.index];
+          if (!question) return [];
+          return [{ ...question, importValidationError: item.reasons?.join(" ") || item.reason || "Check this question before saving again." }];
+        });
+        setAcceptedQuestions(remaining);
 
         setImportSummary(
           (previous) => ({
             detected:
               previous.detected,
 
-            accepted: 0,
-
-            dropped:
-              previous.dropped +
-              rejected.length,
+            accepted: remaining.length,
           })
         );
 
@@ -5667,6 +5640,12 @@ export default function AdminNavtaTest() {
 
                                 </div>
 
+                                {(question.importValidationError || question.visualWarning || question.visualReviewReason) && (
+                                  <p className="mb-2 text-sm font-medium text-amber-700 dark:text-amber-300">
+                                    {question.importValidationError || question.visualWarning || question.visualReviewReason}
+                                  </p>
+                                )}
+
                                 {getEditableQuestionImage(question)?.url && (
                                   <div className="admin-navta-image-actions">
                                     <button
@@ -6148,69 +6127,34 @@ export default function AdminNavtaTest() {
 
                                       <textarea
                                         className="admin-navta-textarea"
-                                        value={
-                                          Array.isArray(
-                                            question.keyPoints
-                                          )
-                                            ? question.keyPoints.join(
-                                                "\n"
-                                              )
-                                            : ""
-                                        }
+                                        value={question.keyPoints?.join("\n") || ""}
                                         onChange={(event) =>
                                           updateAcceptedQuestion(
                                             index,
                                             "keyPoints",
-                                            event.target.value
-                                              .split(
-                                                "\n"
-                                              )
-                                              .map(
-                                                (
-                                                  item
-                                                ) =>
-                                                  item.trim()
-                                              )
-                                              .filter(
-                                                Boolean
-                                              )
+                                            event.target.value.split("\n")
                                           )
                                         }
                                       />
                                     </div>
 
-                                    <div
-                                      className="admin-navta-field"
-                                      style={{
-                                        marginTop:
-                                          "14px",
-                                      }}
-                                    >
-                                      <label className="admin-navta-label">
-                                        Maximum Marks
-                                      </label>
-
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        className="admin-navta-input"
-                                        value={
-                                          question.maxMarks ||
-                                          ""
-                                        }
-                                        onChange={(event) =>
-                                          updateAcceptedQuestion(
-                                            index,
-                                            "maxMarks",
-                                            Number(
-                                              event.target.value
-                                            )
-                                          )
-                                        }
-                                      />
-                                    </div>
+                                    <label className="admin-navta-field mt-3.5">
+                                      <span className="admin-navta-label">Marking instructions (optional)</span>
+                                      <textarea className="admin-navta-textarea" value={question.evaluationInstructions || ""} onChange={event => updateAcceptedQuestion(index, "evaluationInstructions", event.target.value)} />
+                                    </label>
+                                    {(!question.modelAnswer?.trim() || !question.keyPoints?.some(point => point.trim())) && (
+                                      <p className="mt-2 text-sm">You can save this as a draft. Add a model answer and key points before publishing.</p>
+                                    )}
                                   </>
                                 )}
+
+                                <label className="admin-navta-field mt-3.5">
+                                  <span className="admin-navta-label">Maximum marks</span>
+                                  <input className="admin-navta-input" type="number" min="1" step="any" value={question.maxMarks ?? (type === "mcq" ? 1 : "")} onChange={event => updateAcceptedQuestion(index, "maxMarks", event.target.value)} />
+                                  {question.marksEstimated && typeof question.maxMarks === "number" && (
+                                    <span className="text-sm">Suggested marks. Review against the original paper.</span>
+                                  )}
+                                </label>
 
                                 <div
                                   className="admin-navta-field"
