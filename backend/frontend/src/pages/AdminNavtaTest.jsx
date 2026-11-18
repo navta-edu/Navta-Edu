@@ -1487,6 +1487,7 @@ function NavtaQuestionContent({
 // =====================================================
 
 export default function AdminNavtaTest() {
+  const bookImport = new URLSearchParams(window.location.search).get("bookImport") || "";
   const [adminNavtaIsDarkMode, setAdminNavtaIsDarkMode] =
     useState(() => {
       if (typeof document === "undefined") return true;
@@ -1695,8 +1696,9 @@ export default function AdminNavtaTest() {
     chapter: "",
     difficulty: "",
     questionType: "",
-    workflowStatus: "",
+    workflowStatus: bookImport ? "draft" : "",
     search: "",
+    bookImport,
   });
 
   // ===================================================

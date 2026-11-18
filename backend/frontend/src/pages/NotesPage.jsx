@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { Link, useLocation } from "react-router-dom";
 import Card from "../components/Card";
 import Button from "../components/Button";
+import BookNotes from "../components/BookNotes";
 import { Document, Page, pdfjs } from "react-pdf";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -1296,6 +1297,8 @@ return (
     </div>
 
   </div>
+
+  <BookNotes />
 
   {panicState && (
     <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-4 dark:border-rose-500/20 dark:bg-rose-500/10">
