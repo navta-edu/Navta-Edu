@@ -19,6 +19,7 @@ const teacherRoutes = require("./routes/teacherRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const curriculumRoutes = require("./routes/curriculumRoutes");
 const navtaTestRoutes = require("./routes/navtaTestRoutes");
+const tochoRoutes = require("./routes/tochoRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 
 const mistakeNotebookRoutes = require(
@@ -219,6 +220,8 @@ app.use(
   "/api/navta-test",
   navtaTestRoutes
 );
+app.use("/api/tocho", tochoRoutes.admin);
+app.use("/api/content/book-notes", tochoRoutes.notes);
 
 // ============================================
 // NAVTA AI QUESTION SEPARATOR
