@@ -94,6 +94,7 @@ const AdminDashboard = lazy(() =>
 const AdminNavtaTest = lazy(() =>
   import('./pages/AdminNavtaTest')
 );
+const Tocho = lazy(() => import('./pages/Tocho'));
 
 const PDFQuestionCropper = lazy(() =>
   import('./pages/PDFQuestionCropper')
@@ -590,6 +591,7 @@ export default function App() {
                     <AdminNavtaTest />
                   }
                 />
+                <Route path="/admin/tocho" element={<Tocho />} />
 
                 <Route
                   path="/admin/pdf-question-cropper"
