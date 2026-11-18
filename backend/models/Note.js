@@ -4,8 +4,10 @@ const NoteSchema = new mongoose.Schema({
   chapter: {
     type: mongoose.Schema.ObjectId,
     ref: 'Chapter',
-    required: true
+    required: function () { return !this.tochoBook; }
   },
+
+  tochoBook: { type: Boolean, default: false },
 
   title: {
     type: String,

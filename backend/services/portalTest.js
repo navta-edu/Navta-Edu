@@ -10,6 +10,7 @@ const portalTestEmailDomain = 'portal-test.example.net';
 // Protected preview routes must be approved explicitly, including their method.
 const sharedRoutes = [
   ['GET', '/api/auth/me'],
+  ['GET', /^\/api\/content\/book-notes(?:\/[0-9a-fA-F]{24}(?:\/download)?)?$/],
   ['GET', /^\/api\/content\/tests\/[0-9a-fA-F]{24}$/]
 ];
 const teacherRoutes = [

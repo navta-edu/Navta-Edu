@@ -63,7 +63,7 @@ export default function QuestionBankEditor({ question, mode, onClose, onSave, re
     } else {
       changes.options = draft.options;
       if (answerMode === "multiple") changes.correctAnswers = draft.correctAnswers;
-      else changes.correctAnswer = Number(draft.correctAnswer);
+      else if (draft.correctAnswer !== "") changes.correctAnswer = Number(draft.correctAnswer);
     }
 
     try {
