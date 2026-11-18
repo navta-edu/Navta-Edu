@@ -269,6 +269,8 @@ const renderSelectedPdfPages = async ({
 };
 
 module.exports = {
+  openPdf,
+  closePdf,
   renderPdfPageToPng,
   renderPdfPages,
   renderSelectedPdfPages,

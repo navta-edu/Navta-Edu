@@ -24,6 +24,12 @@ function initialWorkflowFields(requestedStatus = "published") {
 
 function buildQuestionBankFilter(query = {}) {
   const filter = {};
+  if (query.bookImport) {
+    if (typeof query.bookImport !== "string" || !/^[0-9a-f]{24}$/i.test(query.bookImport)) {
+      throw Object.assign(new Error("Invalid Tocho book ID."), { statusCode: 400 });
+    }
+    filter["sourceDocument.bookImport"] = query.bookImport;
+  }
   for (const key of ["subject", "exam", "classLevel", "chapter", "difficulty", "questionType", "answerMode"]) {
     if (typeof query[key] === "string" && query[key].trim()) {
       filter[key] = query[key].trim();

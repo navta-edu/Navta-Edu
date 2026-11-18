@@ -4192,6 +4192,9 @@ const checkGeminiConnection =
 // =====================================================
 
 module.exports = {
+  async requestNavtaJson(parts, maxOutputTokens) {
+    return parseJsonObject(await callGemini({ parts, maxOutputTokens }));
+  },
   analyseNavtaPage,
 
   analyseRenderedPages,
