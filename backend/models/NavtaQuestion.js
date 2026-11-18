@@ -377,6 +377,8 @@ const navtaQuestionSchema = new mongoose.Schema(
     // =====================================================
 
     sourceDocument: {
+      bookImport: mongoose.Schema.Types.ObjectId,
+      solutionUnit: Number,
       fileName: {
         type: String,
         trim: true,
@@ -444,7 +446,8 @@ const navtaQuestionSchema = new mongoose.Schema(
       max: 3,
 
       required: function () {
-        return this.questionType === "mcq" && this.answerMode === "single";
+        return this.questionType === "mcq" && this.answerMode === "single" &&
+          !(this.workflowStatus === "draft" && this.sourceDocument?.bookImport);
       },
 
       default: undefined,
@@ -695,7 +698,8 @@ navtaQuestionSchema.pre(
         }
       }
 
-      if (this.answerMode === "single" && !Number.isInteger(this.correctAnswer)) {
+      if (this.answerMode === "single" && !Number.isInteger(this.correctAnswer) &&
+          !(this.workflowStatus === "draft" && this.sourceDocument?.bookImport)) {
         return next(new Error("MCQ questions require a correct answer."));
       }
     }
@@ -771,6 +775,7 @@ navtaQuestionSchema.index({
 });
 
 navtaQuestionSchema.index({ workflowStatus: 1, createdAt: -1 });
+navtaQuestionSchema.index({ "sourceDocument.bookImport": 1 }, { sparse: true });
 navtaQuestionSchema.index({ imageContentHash: 1 }, { sparse: true });
 
 // =====================================================
